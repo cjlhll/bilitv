@@ -1,5 +1,7 @@
 package com.bili.bilitv
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -9,6 +11,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
@@ -59,7 +63,7 @@ private fun TabRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp),
+            .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -70,7 +74,7 @@ private fun TabRow(
                 onClick = { onTabSelected(tab) }
             )
             if (tab != TabType.entries.last()) {
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(12.dp))
             }
         }
     }
@@ -86,6 +90,9 @@ private fun TabButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (isFocused) 1.1f else 1.0f, label = "scale")
+
     Button(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(
@@ -94,11 +101,18 @@ private fun TabButton(
             contentColor = if (selected) MaterialTheme.colorScheme.onPrimary 
                           else MaterialTheme.colorScheme.onSurfaceVariant
         ),
+        border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null,
         modifier = modifier
-            .width(100.dp)
-            .height(40.dp)
+            .width(80.dp)
+            .height(32.dp)
+            .onFocusChanged { isFocused = it.isFocused }
+            .scale(scale),
+        contentPadding = PaddingValues(0.dp)
     ) {
-        Text(text = text)
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium
+        )
     }
 }
 
@@ -118,11 +132,15 @@ private fun VideoGrid(
     LazyVerticalGrid(
         columns = GridCells.Fixed(4),
         modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(bottom = 16.dp)
+            .fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+        contentPadding = PaddingValues(
+            start = 24.dp,
+            end = 24.dp,
+            top = 32.dp,
+            bottom = 32.dp
+        )
     ) {
         items(videos) { video ->
             VideoItem(
