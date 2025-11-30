@@ -88,10 +88,20 @@ fun HomeScreen(modifier: Modifier = Modifier) {
             Log.d("BiliTV", "Fetching popular videos for Hot tab...")
             try {
                 val url = "https://api.bilibili.com/x/web-interface/popular?pn=1&ps=20"
-                val request = Request.Builder()
+                val requestBuilder = Request.Builder()
                     .url(url)
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
-                    .build()
+                
+                // 添加Cookie信息（如果已登录）
+                val cookieString = SessionManager.getCookieString()
+                if (cookieString != null) {
+                    requestBuilder.header("Cookie", cookieString)
+                    Log.d("BiliTV", "Added Cookie to request: $cookieString")
+                } else {
+                    Log.d("BiliTV", "No session found, requesting without Cookie")
+                }
+                
+                val request = requestBuilder.build()
                 val response = withContext(Dispatchers.IO) { httpClient.newCall(request).execute() }
 
                 if (response.isSuccessful) {

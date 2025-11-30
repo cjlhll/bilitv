@@ -74,7 +74,32 @@ data class LoggedInSession(
     val expires: Long, // Unix timestamp
     val refreshToken: String,
     val crossDomainUrl: String
-)
+) {
+    /**
+     * 生成Cookie字符串，用于HTTP请求头
+     */
+    fun toCookieString(): String {
+        return "DedeUserID=$dedeUserID; DedeUserID__ckMd5=$dedeUserIDCkMd5; SESSDATA=$sessdata; bili_jct=$biliJct"
+    }
+}
+
+/**
+ * 全局登录会话管理器
+ */
+object SessionManager {
+    private var currentSession: LoggedInSession? = null
+    
+    fun setSession(session: LoggedInSession?) {
+        currentSession = session
+        Log.d("BiliTV", "Session updated: ${session?.dedeUserID ?: "null"}")
+    }
+    
+    fun getSession(): LoggedInSession? = currentSession
+    
+    fun getCookieString(): String? = currentSession?.toCookieString()
+    
+    fun isLoggedIn(): Boolean = currentSession != null
+}
 
 private val httpClient = OkHttpClient()
 private val json = Json { ignoreUnknownKeys = true }
@@ -214,6 +239,8 @@ fun UserLoginScreen() {
                                         refreshToken = refreshToken,
                                         crossDomainUrl = crossDomainUrl
                                     )
+                                    // 保存到全局会话管理器
+                                    SessionManager.setSession(loggedInSession)
                                     isPollingActive = false // Stop polling on success
                                     qrCodeBitmap = null // Hide QR code
                                     error = null // Clear any errors
