@@ -1,5 +1,7 @@
 package com.bili.bilitv
 
+import java.text.SimpleDateFormat
+import java.util.Date
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -33,7 +35,8 @@ data class Video(
     val title: String,
     val coverUrl: String,
     val author: String = "",
-    val playCount: String = ""
+    val playCount: String = "",
+    val pubDate: Long? = null // Add pubDate field
 )
 
 /**
@@ -85,12 +88,45 @@ fun VideoItem(
             Text(
                 text = video.title,
                 style = MaterialTheme.typography.bodyMedium,
+                minLines = 2, // Ensure consistent height
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(8.dp)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
             )
+
+            // 作者和时间
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = video.author,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                video.pubDate?.let {
+                    Text(
+                        text = " · ${formatUnixTimestamp(it)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
+}
+
+// Utility function to format Unix timestamp
+private fun formatUnixTimestamp(timestamp: Long): String {
+    val date = Date(timestamp * 1000L) // Convert seconds to milliseconds
+    val formatter = SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+    return formatter.format(date)
 }

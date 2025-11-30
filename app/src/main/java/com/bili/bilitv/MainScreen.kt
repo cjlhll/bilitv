@@ -1,0 +1,402 @@
+package com.bili.bilitv
+
+import android.graphics.Bitmap
+import android.net.Uri
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import com.bili.bilitv.utils.QRCodeGenerator
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import android.util.Log
+
+@Serializable
+data class QrCodeResponse(
+    val code: Int,
+    val message: String,
+    val ttl: Int,
+    val data: QrCodeData
+)
+
+@Serializable
+data class QrCodeData(
+    val url: String,
+    val qrcode_key: String
+)
+
+@Serializable
+data class QrCodePollResponse(
+    val code: Int,
+    val message: String,
+    val data: QrCodePollData? // Nullable if data might not be present on all status codes
+)
+
+@Serializable
+data class QrCodePollData(
+    val url: String? = null, // May not always be present
+    val refresh_token: String? = null,
+    val timestamp: Long? = null, // Timestamp might be nullable if poll fails
+    val code: Int? = null // This 'code' is the status code, e.g., 0 for success, 86038 for expired
+)
+
+data class LoggedInSession(
+    val dedeUserID: String,
+    val dedeUserIDCkMd5: String,
+    val sessdata: String,
+    val biliJct: String,
+    val expires: Long, // Unix timestamp
+    val refreshToken: String,
+    val crossDomainUrl: String
+)
+
+private val httpClient = OkHttpClient()
+private val json = Json { ignoreUnknownKeys = true }
+
+fun parseSessionDataFromUrl(url: String): Map<String, String> {
+    val uri = Uri.parse(url)
+    val params = mutableMapOf<String, String>()
+    uri.queryParameterNames.forEach { name ->
+        uri.getQueryParameter(name)?.let { value ->
+            params[name] = value
+        }
+    }
+    return params
+}
+
+enum class NavRoute(val title: String, val icon: ImageVector) {
+    HOME("首页", Icons.Default.Home),
+    CATEGORY("分类", Icons.Default.List),
+    DYNAMIC("动态", Icons.Default.Star),
+    LIVE("直播", Icons.Default.PlayArrow),
+    USER("用户", Icons.Default.AccountCircle),
+    SETTINGS("设置", Icons.Default.Settings)
+}
+
+@Composable
+fun MainScreen() {
+    var currentRoute by remember { mutableStateOf(NavRoute.HOME) }
+
+    Row(modifier = Modifier.fillMaxSize()) {
+        // Left Side Navigation
+        NavigationRail(
+            currentRoute = currentRoute,
+            onNavigate = { currentRoute = it }
+        )
+
+        // Right Side Content
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            when (currentRoute) {
+                NavRoute.HOME -> HomeScreen()
+                NavRoute.USER -> UserLoginScreen()
+                NavRoute.SETTINGS -> PlaceholderScreen(NavRoute.SETTINGS.title)
+                else -> PlaceholderScreen(currentRoute.title)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalSerializationApi::class)
+@Composable
+fun UserLoginScreen() {
+    var qrCodeBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var qrCodeKey by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var loggedInSession by remember { mutableStateOf<LoggedInSession?>(null) } // New state for logged-in user
+    var isPollingActive by remember { mutableStateOf(true) } // Control polling loop
+
+    val coroutineScope = rememberCoroutineScope()
+
+    // LaunchedEffect to trigger API call when screen becomes active
+    LaunchedEffect(Unit) { // Unit means it runs once
+        isLoading = true
+        error = null
+        coroutineScope.launch {
+            try {
+                val response = withContext(Dispatchers.IO) { // Network call on IO dispatcher
+                    val request = Request.Builder()
+                        .url("https://passport.bilibili.com/x/passport-login/web/qrcode/generate")
+                        .build()
+                    httpClient.newCall(request).execute()
+                }
+
+                if (response.isSuccessful) {
+                    response.body?.string()?.let { responseBody ->
+                        val qrCodeResponse = json.decodeFromString<QrCodeResponse>(responseBody)
+                        if (qrCodeResponse.code == 0) {
+                            qrCodeKey = qrCodeResponse.data.qrcode_key
+                            val qrUrl = qrCodeResponse.data.url
+                            qrCodeBitmap = withContext(Dispatchers.Default) { // QR code generation on Default dispatcher
+                                QRCodeGenerator.generateQRCodeBitmap(qrUrl)
+                            }
+                        } else {
+                            error = "API error: ${qrCodeResponse.message}"
+                        }
+                    }
+                } else {
+                    error = "HTTP error: ${response.code}"
+                }
+            } catch (e: Exception) {
+                error = "Network error: ${e.localizedMessage}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    // Polling LaunchedEffect
+    LaunchedEffect(qrCodeKey, isPollingActive) { // Depend on qrCodeKey and isPollingActive
+        if (qrCodeKey != null && isPollingActive) {
+            while (isActive && isPollingActive) {
+                delay(5000L) // Poll every 5 seconds
+                coroutineScope.launch {
+                    try {
+                        val pollUrl = "https://passport.bilibili.com/x/passport-login/web/qrcode/poll?qrcode_key=$qrCodeKey"
+                        val request = Request.Builder()
+                            .url(pollUrl)
+                            .build()
+                        val response = withContext(Dispatchers.IO) { httpClient.newCall(request).execute() }
+
+                        if (response.isSuccessful) {
+                            response.body?.string()?.let { responseBody ->
+                                Log.d("BiliTV", "Poll Response: $responseBody")
+                                val pollResponse = json.decodeFromString<QrCodePollResponse>(responseBody)
+
+                                // Check for login success code (0 in data.code)
+                                if (pollResponse.data?.code == 0) {
+                                    val sessionData = parseSessionDataFromUrl(pollResponse.data.url ?: "")
+                                    val dedeUserID = sessionData["DedeUserID"] ?: ""
+                                    val dedeUserIDCkMd5 = sessionData["DedeUserID__ckMd5"] ?: ""
+                                    val sessdata = sessionData["SESSDATA"] ?: ""
+                                    val biliJct = sessionData["bili_jct"] ?: ""
+                                    val expires = sessionData["Expires"]?.toLongOrNull() ?: 0L
+                                    val refreshToken = pollResponse.data.refresh_token ?: ""
+                                    val crossDomainUrl = pollResponse.data.url ?: ""
+
+                                    loggedInSession = LoggedInSession(
+                                        dedeUserID = dedeUserID,
+                                        dedeUserIDCkMd5 = dedeUserIDCkMd5,
+                                        sessdata = sessdata,
+                                        biliJct = biliJct,
+                                        expires = expires,
+                                        refreshToken = refreshToken,
+                                        crossDomainUrl = crossDomainUrl
+                                    )
+                                    isPollingActive = false // Stop polling on success
+                                    qrCodeBitmap = null // Hide QR code
+                                    error = null // Clear any errors
+                                    Log.d("BiliTV", "Login successful! Session: $loggedInSession")
+                                } else if (pollResponse.data?.code == 86038) { // Expired
+                                    error = "QR Code expired. Please refresh."
+                                    isPollingActive = false
+                                    qrCodeBitmap = null
+                                }
+                                // Other codes might mean "scanned, waiting for confirmation" - continue polling
+                            }
+                        } else {
+                            Log.e("BiliTV", "Poll HTTP error: ${response.code}")
+                        }
+                    } catch (e: Exception) {
+                        Log.e("BiliTV", "Poll Network error: ${e.localizedMessage}")
+                        error = "Polling error: ${e.localizedMessage}" // Display polling errors
+                    }
+                }
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            isLoading -> CircularProgressIndicator()
+            loggedInSession != null -> { // Login successful
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("登录成功!", style = MaterialTheme.typography.displaySmall)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("用户ID: ${loggedInSession?.dedeUserID}", style = MaterialTheme.typography.bodyLarge)
+                    Text("SESSDATA: ${loggedInSession?.sessdata?.take(10)}...", style = MaterialTheme.typography.bodySmall)
+                    // Display other session info as needed
+                }
+            }
+            error != null -> Text("Error: $error", color = MaterialTheme.colorScheme.error)
+            qrCodeBitmap != null -> {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Image(
+                        bitmap = qrCodeBitmap!!.asImageBitmap(),
+                        contentDescription = "QR Code for Login",
+                        modifier = Modifier.size(256.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("请使用B站App扫码登录", style = MaterialTheme.typography.bodyLarge)
+                    qrCodeKey?.let {
+                        Text("QR Code Key: $it", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            else -> Text("无法加载登录二维码")
+        }
+    }
+}
+
+@Composable
+private fun NavigationRail(
+    currentRoute: NavRoute,
+    onNavigate: (NavRoute) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(80.dp) // Fixed width for the side menu
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Top // Allow content to be pushed to bottom
+    ) {
+        // Top navigation items
+        Column(
+            modifier = Modifier.weight(1f), // This pushes the following content to bottom
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            NavButton(
+                icon = NavRoute.HOME.icon,
+                label = NavRoute.HOME.title,
+                selected = currentRoute == NavRoute.HOME,
+                onClick = { onNavigate(NavRoute.HOME) }
+            )
+            NavButton(
+                icon = NavRoute.CATEGORY.icon,
+                label = NavRoute.CATEGORY.title,
+                selected = currentRoute == NavRoute.CATEGORY,
+                onClick = { onNavigate(NavRoute.CATEGORY) }
+            )
+            NavButton(
+                icon = NavRoute.DYNAMIC.icon,
+                label = NavRoute.DYNAMIC.title,
+                selected = currentRoute == NavRoute.DYNAMIC,
+                onClick = { onNavigate(NavRoute.DYNAMIC) }
+            )
+            NavButton(
+                icon = NavRoute.LIVE.icon,
+                label = NavRoute.LIVE.title,
+                selected = currentRoute == NavRoute.LIVE,
+                onClick = { onNavigate(NavRoute.LIVE) }
+            )
+        }
+
+        // Bottom navigation items
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(24.dp) // Spacing between bottom items
+        ) {
+            NavButton(
+                icon = NavRoute.USER.icon,
+                label = NavRoute.USER.title,
+                selected = currentRoute == NavRoute.USER,
+                onClick = { onNavigate(NavRoute.USER) }
+            )
+            NavButton(
+                icon = NavRoute.SETTINGS.icon,
+                label = NavRoute.SETTINGS.title,
+                selected = currentRoute == NavRoute.SETTINGS,
+                onClick = { onNavigate(NavRoute.SETTINGS) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun NavButton(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (isFocused) 1.2f else 1.0f, label = "scale")
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .onFocusChanged { isFocused = it.isFocused }
+            .scale(scale)
+    ) {
+        Button(
+            onClick = onClick,
+            modifier = Modifier.size(48.dp),
+            shape = MaterialTheme.shapes.medium,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (selected) MaterialTheme.colorScheme.primary 
+                                else Color.Transparent,
+                contentColor = if (selected) MaterialTheme.colorScheme.onPrimary 
+                              else MaterialTheme.colorScheme.onSurface
+            ),
+            contentPadding = PaddingValues(0.dp),
+            border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        
+        if (isFocused) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlaceholderScreen(title: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.displayMedium,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+    }
+}

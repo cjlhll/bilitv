@@ -1,5 +1,6 @@
 package com.bili.bilitv
 
+import android.util.Log
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -15,6 +16,53 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
+import okhttp3.Request
+
+private val httpClient = OkHttpClient()
+private val json = Json { ignoreUnknownKeys = true }
+
+@Serializable
+data class PopularVideoResponse(
+    val code: Int,
+    val message: String,
+    val ttl: Int,
+    val data: PopularVideoData? = null
+)
+
+@Serializable
+data class PopularVideoData(
+    val list: List<VideoItemData>
+)
+
+@Serializable
+data class VideoItemData(
+    val bvid: String,
+    val cid: Long,
+    val title: String,
+    val pic: String, // cover image URL
+    val owner: Owner,
+    val stat: Stat,
+    val pubdate: Long
+)
+
+@Serializable
+data class Owner(
+    val mid: Long,
+    val name: String
+)
+
+@Serializable
+data class Stat(
+    val view: Int,
+    val like: Int,
+    val danmaku: Int
+)
 
 /**
  * Tab页类型
@@ -29,9 +77,44 @@ enum class TabType(val title: String) {
  * 首页屏幕
  * 包含三个Tab和视频列表
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Composable
 fun HomeScreen(modifier: Modifier = Modifier) {
     var selectedTab by remember { mutableStateOf(TabType.RECOMMEND) }
+    var hotVideos by remember { mutableStateOf<List<VideoItemData>>(emptyList()) }
+
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == TabType.HOT) {
+            Log.d("BiliTV", "Fetching popular videos for Hot tab...")
+            try {
+                val url = "https://api.bilibili.com/x/web-interface/popular?pn=1&ps=20"
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
+                    .build()
+                val response = withContext(Dispatchers.IO) { httpClient.newCall(request).execute() }
+
+                if (response.isSuccessful) {
+                    response.body?.string()?.let { responseBody ->
+                        Log.d("BiliTV", "Popular Videos API Response: $responseBody")
+                        val popularResponse = withContext(Dispatchers.Default) {
+                            json.decodeFromString<PopularVideoResponse>(responseBody)
+                        }
+                        if (popularResponse.code == 0 && popularResponse.data != null) {
+                            hotVideos = popularResponse.data.list
+                            Log.d("BiliTV", "Fetched ${hotVideos.size} popular videos.")
+                        } else {
+                            Log.e("BiliTV", "Popular Videos API error: ${popularResponse.message}")
+                        }
+                    }
+                } else {
+                    Log.e("BiliTV", "Popular Videos HTTP error: ${response.code}")
+                }
+            } catch (e: Exception) {
+                Log.e("BiliTV", "Popular Videos Network error: ${e.localizedMessage}")
+            }
+        }
+    }
     
     Column(
         modifier = modifier
@@ -47,7 +130,13 @@ fun HomeScreen(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.height(16.dp))
         
         // 视频列表
-        VideoGrid(selectedTab)
+        val videosToDisplay = remember(selectedTab, hotVideos) {
+            when (selectedTab) {
+                TabType.HOT -> hotVideos.map { mapVideoItemDataToVideo(it) }
+                else -> getVideosForTab(selectedTab)
+            }
+        }
+        VideoGrid(videos = videosToDisplay)
     }
 }
 
@@ -121,14 +210,9 @@ private fun TabButton(
  */
 @Composable
 private fun VideoGrid(
-    tabType: TabType,
+    videos: List<Video>, // Accept List<Video> directly
     modifier: Modifier = Modifier
 ) {
-    // 模拟数据
-    val videos = remember(tabType) {
-        getVideosForTab(tabType)
-    }
-    
     LazyVerticalGrid(
         columns = GridCells.Fixed(4),
         modifier = modifier
@@ -170,4 +254,15 @@ private fun getVideosForTab(tabType: TabType): List<Video> {
             playCount = "${(index + 1) * 1000}次观看"
         )
     }
+}
+
+private fun mapVideoItemDataToVideo(videoItemData: VideoItemData): Video {
+    return Video(
+        id = videoItemData.bvid,
+        title = videoItemData.title,
+        coverUrl = videoItemData.pic,
+        author = videoItemData.owner.name,
+        playCount = "${videoItemData.stat.view}次观看", // Format play count
+        pubDate = videoItemData.pubdate
+    )
 }
