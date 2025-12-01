@@ -5,6 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -84,17 +87,57 @@ fun DynamicScreen(
             contentAlignment = Alignment.TopStart
         ) {
             if (viewModel.selectedUser != null) {
-                Column {
-                    Text(
-                        text = viewModel.selectedUser!!.uname,
-                        style = MaterialTheme.typography.displaySmall
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = viewModel.selectedUser!!.sign,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // User Header
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AsyncImage(
+                            model = viewModel.selectedUser!!.face,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp).clip(CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text(
+                                text = viewModel.selectedUser!!.uname,
+                                style = MaterialTheme.typography.headlineMedium
+                            )
+                            if (viewModel.selectedUser!!.sign.isNotEmpty()) {
+                                Text(
+                                    text = viewModel.selectedUser!!.sign,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    if (viewModel.isVideoLoading) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    } else if (viewModel.userVideos.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("暂无视频")
+                        }
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 200.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(bottom = 16.dp)
+                        ) {
+                            items(viewModel.userVideos) { video ->
+                                VideoItem(
+                                    video = video,
+                                    onClick = { /* TODO: Navigate to player */ }
+                                )
+                            }
+                        }
+                    }
                 }
             } else {
                 Text(
