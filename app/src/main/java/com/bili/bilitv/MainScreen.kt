@@ -41,6 +41,24 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import android.util.Log
+import coil.compose.AsyncImage
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+
+@Serializable
+data class UserInfoResponse(
+    val code: Int,
+    val message: String,
+    val data: UserInfoData? = null
+)
+
+@Serializable
+data class UserInfoData(
+    val mid: Long,
+    val uname: String,
+    val face: String,
+    val isLogin: Boolean = false
+)
 
 @Serializable
 data class QrCodeResponse(
@@ -188,6 +206,42 @@ fun MainScreen() {
     // 使用 ViewModel 保存首页状态
     val homeViewModel: HomeViewModel = viewModel()
 
+    var loggedInSession by remember { mutableStateOf(SessionManager.getSession()) }
+    var userInfo by remember { mutableStateOf<UserInfoData?>(null) }
+
+    // 获取用户信息
+    LaunchedEffect(loggedInSession) {
+        if (loggedInSession != null && userInfo == null) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val request = Request.Builder()
+                        .url("https://api.bilibili.com/x/web-interface/nav")
+                        .addHeader("Cookie", loggedInSession!!.toCookieString())
+                        .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                        .build()
+                    val response = httpClient.newCall(request).execute()
+                    if (response.isSuccessful) {
+                        val body = response.body?.string()
+                        if (body != null) {
+                            try {
+                                val apiResp = json.decodeFromString<UserInfoResponse>(body)
+                                if (apiResp.code == 0 && apiResp.data?.isLogin == true) {
+                                    userInfo = apiResp.data
+                                } else {
+                                    Log.e("BiliTV", "Failed to get user info: ${apiResp.message}")
+                                }
+                            } catch (e: Exception) {
+                                Log.e("BiliTV", "Failed to parse user info", e)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("BiliTV", "Error fetching user info", e)
+                }
+            }
+        }
+    }
+
     // 处理返回按钮逻辑
     BackHandler(enabled = isFullScreenPlayer) {
         // 当在全屏播放器时，返回按钮只退出播放器
@@ -213,7 +267,8 @@ fun MainScreen() {
             // Left Side Navigation
             NavigationRail(
                 currentRoute = currentRoute,
-                onNavigate = { currentRoute = it }
+                onNavigate = { currentRoute = it },
+                userAvatarUrl = userInfo?.face
             )
 
             // Right Side Content
@@ -232,7 +287,14 @@ fun MainScreen() {
                             fullScreenVideoTitle = title
                         }
                     )
-                    NavRoute.USER -> UserLoginScreen()
+                    NavRoute.USER -> UserLoginScreen(
+                        loggedInSession = loggedInSession,
+                        userInfo = userInfo,
+                        onLoginSuccess = { session ->
+                            loggedInSession = session
+                            // 登录成功后，userInfo 会通过 LaunchedEffect 自动获取
+                        }
+                    )
                     NavRoute.SETTINGS -> PlaceholderScreen(NavRoute.SETTINGS.title)
                     else -> PlaceholderScreen(currentRoute.title)
                 }
@@ -243,28 +305,27 @@ fun MainScreen() {
 
 @OptIn(ExperimentalSerializationApi::class)
 @Composable
-fun UserLoginScreen() {
+fun UserLoginScreen(
+    loggedInSession: LoggedInSession?,
+    userInfo: UserInfoData?,
+    onLoginSuccess: (LoggedInSession) -> Unit
+) {
     val context = LocalContext.current
     var qrCodeBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var qrCodeKey by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var loggedInSession by remember { mutableStateOf<LoggedInSession?>(null) } // New state for logged-in user
     var isPollingActive by remember { mutableStateOf(true) } // Control polling loop
 
     val coroutineScope = rememberCoroutineScope()
 
     // LaunchedEffect to trigger API call when screen becomes active
     LaunchedEffect(Unit) { // Unit means it runs once
-        // 首先检查是否有已保存的登录状态
-        val savedSession = SessionManager.getSession()
-        if (savedSession != null) {
+        if (loggedInSession != null) {
             // 如果已登录，直接显示登录状态，不再获取二维码
-            loggedInSession = savedSession
             isPollingActive = false
             qrCodeBitmap = null
             isLoading = false
-            Log.d("BiliTV", "Using saved session: ${savedSession.dedeUserID}")
         } else {
             // 如果未登录，获取二维码
             isLoading = true
@@ -332,7 +393,7 @@ fun UserLoginScreen() {
                                     val refreshToken = pollResponse.data.refresh_token ?: ""
                                     val crossDomainUrl = pollResponse.data.url ?: ""
 
-                                    loggedInSession = LoggedInSession(
+                                    val session = LoggedInSession(
                                         dedeUserID = dedeUserID,
                                         dedeUserIDCkMd5 = dedeUserIDCkMd5,
                                         sessdata = sessdata,
@@ -342,11 +403,12 @@ fun UserLoginScreen() {
                                         crossDomainUrl = crossDomainUrl
                                     )
                                     // 保存到全局会话管理器
-                                    SessionManager.setSession(loggedInSession)
+                                    SessionManager.setSession(session)
+                                    onLoginSuccess(session) // 通知 MainScreen
                                     isPollingActive = false // Stop polling on success
                                     qrCodeBitmap = null // Hide QR code
                                     error = null // Clear any errors
-                                    Log.d("BiliTV", "Login successful! Session: $loggedInSession")
+                                    Log.d("BiliTV", "Login successful! Session: $session")
                                 } else if (pollResponse.data?.code == 86038) { // Expired
                                     error = "QR Code expired. Please refresh."
                                     isPollingActive = false
@@ -365,6 +427,8 @@ fun UserLoginScreen() {
             }
         }
     }
+    
+    // 移除原来的 LaunchedEffect(loggedInSession) 获取用户信息逻辑
 
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -374,11 +438,23 @@ fun UserLoginScreen() {
             isLoading -> CircularProgressIndicator()
             loggedInSession != null -> { // Login successful
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("登录成功!", style = MaterialTheme.typography.displaySmall)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("用户ID: ${loggedInSession?.dedeUserID}", style = MaterialTheme.typography.bodyLarge)
-                    Text("SESSDATA: ${loggedInSession?.sessdata?.take(10)}...", style = MaterialTheme.typography.bodySmall)
-                    // Display other session info as needed
+                    if (userInfo != null) {
+                        AsyncImage(
+                            model = userInfo!!.face,
+                            contentDescription = "Avatar",
+                            modifier = Modifier
+                                .size(120.dp)
+                                .clip(CircleShape)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(userInfo!!.uname, style = MaterialTheme.typography.displaySmall)
+                    } else {
+                        CircularProgressIndicator()
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text("登录成功!", style = MaterialTheme.typography.titleMedium)
+                    Text("UID: ${loggedInSession?.dedeUserID}", style = MaterialTheme.typography.bodySmall)
                 }
             }
             error != null -> Text("Error: $error", color = MaterialTheme.colorScheme.error)
@@ -405,7 +481,8 @@ fun UserLoginScreen() {
 private fun NavigationRail(
     currentRoute: NavRoute,
     onNavigate: (NavRoute) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    userAvatarUrl: String? = null
 ) {
     Column(
         modifier = modifier
@@ -457,7 +534,8 @@ private fun NavigationRail(
                 icon = NavRoute.USER.icon,
                 label = NavRoute.USER.title,
                 selected = currentRoute == NavRoute.USER,
-                onClick = { onNavigate(NavRoute.USER) }
+                onClick = { onNavigate(NavRoute.USER) },
+                avatarUrl = userAvatarUrl
             )
             NavButton(
                 icon = NavRoute.SETTINGS.icon,
@@ -474,7 +552,8 @@ private fun NavButton(
     icon: ImageVector,
     label: String,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    avatarUrl: String? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isFocused) 1.2f else 1.0f, label = "scale")
@@ -498,11 +577,21 @@ private fun NavButton(
             contentPadding = PaddingValues(0.dp),
             border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                modifier = Modifier.size(24.dp)
-            )
+            if (avatarUrl != null) {
+                AsyncImage(
+                    model = avatarUrl,
+                    contentDescription = label,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
         
         if (isFocused) {
