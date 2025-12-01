@@ -1,5 +1,6 @@
 package com.bili.bilitv
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.animation.core.animateFloatAsState
@@ -23,7 +24,10 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.BackHandler
 import com.bili.bilitv.utils.QRCodeGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -66,6 +70,7 @@ data class QrCodePollData(
     val code: Int? = null // This 'code' is the status code, e.g., 0 for success, 86038 for expired
 )
 
+@Serializable
 data class LoggedInSession(
     val dedeUserID: String,
     val dedeUserIDCkMd5: String,
@@ -84,14 +89,29 @@ data class LoggedInSession(
 }
 
 /**
- * 全局登录会话管理器
+ * 全局登录会话管理器 - 支持内存和本地存储
  */
 object SessionManager {
     private var currentSession: LoggedInSession? = null
+    private var context: Context? = null
+    private const val PREFS_NAME = "bili_session"
+    private const val SESSION_KEY = "logged_in_session"
+    
+    fun init(context: Context) {
+        this.context = context
+        // 应用启动时从SharedPreferences恢复登录状态
+        loadSessionFromStorage()
+    }
     
     fun setSession(session: LoggedInSession?) {
         currentSession = session
         Log.d("BiliTV", "Session updated: ${session?.dedeUserID ?: "null"}")
+        // 保存到SharedPreferences
+        if (session != null) {
+            saveSessionToStorage(session)
+        } else {
+            clearSessionFromStorage()
+        }
     }
     
     fun getSession(): LoggedInSession? = currentSession
@@ -99,6 +119,39 @@ object SessionManager {
     fun getCookieString(): String? = currentSession?.toCookieString()
     
     fun isLoggedIn(): Boolean = currentSession != null
+    
+    private fun saveSessionToStorage(session: LoggedInSession) {
+        context?.let {
+            val sharedPref = it.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = Json.encodeToString(LoggedInSession.serializer(), session)
+            sharedPref.edit().putString(SESSION_KEY, json).apply()
+            Log.d("BiliTV", "Session saved to storage")
+        }
+    }
+    
+    private fun loadSessionFromStorage() {
+        context?.let {
+            val sharedPref = it.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = sharedPref.getString(SESSION_KEY, null)
+            if (json != null) {
+                try {
+                    currentSession = Json.decodeFromString(LoggedInSession.serializer(), json)
+                    Log.d("BiliTV", "Session loaded from storage: ${currentSession?.dedeUserID}")
+                } catch (e: Exception) {
+                    Log.e("BiliTV", "Failed to load session from storage", e)
+                    currentSession = null
+                }
+            }
+        }
+    }
+    
+    private fun clearSessionFromStorage() {
+        context?.let {
+            val sharedPref = it.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            sharedPref.edit().remove(SESSION_KEY).apply()
+            Log.d("BiliTV", "Session cleared from storage")
+        }
+    }
 }
 
 private val httpClient = OkHttpClient()
@@ -127,26 +180,57 @@ enum class NavRoute(val title: String, val icon: ImageVector) {
 @Composable
 fun MainScreen() {
     var currentRoute by remember { mutableStateOf(NavRoute.HOME) }
+    var isFullScreenPlayer by remember { mutableStateOf(false) }
+    var fullScreenPlayInfo by remember { mutableStateOf<VideoPlayInfo?>(null) }
+    var fullScreenVideoTitle by remember { mutableStateOf("") }
 
-    Row(modifier = Modifier.fillMaxSize()) {
-        // Left Side Navigation
-        NavigationRail(
-            currentRoute = currentRoute,
-            onNavigate = { currentRoute = it }
+    // 处理返回按钮逻辑
+    BackHandler(enabled = isFullScreenPlayer) {
+        // 当在全屏播放器时，返回按钮只退出播放器
+        isFullScreenPlayer = false
+        fullScreenPlayInfo = null
+        fullScreenVideoTitle = ""
+    }
+
+    // 全屏播放器
+    if (isFullScreenPlayer && fullScreenPlayInfo != null) {
+        VideoPlayerScreen(
+            videoPlayInfo = fullScreenPlayInfo!!,
+            videoTitle = fullScreenVideoTitle,
+            onBackClick = {
+                isFullScreenPlayer = false
+                fullScreenPlayInfo = null
+                fullScreenVideoTitle = ""
+            }
         )
+    } else {
+        // 普通界面（带导航栏）
+        Row(modifier = Modifier.fillMaxSize()) {
+            // Left Side Navigation
+            NavigationRail(
+                currentRoute = currentRoute,
+                onNavigate = { currentRoute = it }
+            )
 
-        // Right Side Content
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            when (currentRoute) {
-                NavRoute.HOME -> HomeScreen()
-                NavRoute.USER -> UserLoginScreen()
-                NavRoute.SETTINGS -> PlaceholderScreen(NavRoute.SETTINGS.title)
-                else -> PlaceholderScreen(currentRoute.title)
+            // Right Side Content
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                when (currentRoute) {
+                    NavRoute.HOME -> HomeScreen(
+                        onEnterFullScreen = { playInfo, title ->
+                            isFullScreenPlayer = true
+                            fullScreenPlayInfo = playInfo
+                            fullScreenVideoTitle = title
+                        }
+                    )
+                    NavRoute.USER -> UserLoginScreen()
+                    NavRoute.SETTINGS -> PlaceholderScreen(NavRoute.SETTINGS.title)
+                    else -> PlaceholderScreen(currentRoute.title)
+                }
             }
         }
     }
@@ -155,6 +239,7 @@ fun MainScreen() {
 @OptIn(ExperimentalSerializationApi::class)
 @Composable
 fun UserLoginScreen() {
+    val context = LocalContext.current
     var qrCodeBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var qrCodeKey by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
@@ -166,37 +251,49 @@ fun UserLoginScreen() {
 
     // LaunchedEffect to trigger API call when screen becomes active
     LaunchedEffect(Unit) { // Unit means it runs once
-        isLoading = true
-        error = null
-        coroutineScope.launch {
-            try {
-                val response = withContext(Dispatchers.IO) { // Network call on IO dispatcher
-                    val request = Request.Builder()
-                        .url("https://passport.bilibili.com/x/passport-login/web/qrcode/generate")
-                        .build()
-                    httpClient.newCall(request).execute()
-                }
-
-                if (response.isSuccessful) {
-                    response.body?.string()?.let { responseBody ->
-                        val qrCodeResponse = json.decodeFromString<QrCodeResponse>(responseBody)
-                        if (qrCodeResponse.code == 0) {
-                            qrCodeKey = qrCodeResponse.data.qrcode_key
-                            val qrUrl = qrCodeResponse.data.url
-                            qrCodeBitmap = withContext(Dispatchers.Default) { // QR code generation on Default dispatcher
-                                QRCodeGenerator.generateQRCodeBitmap(qrUrl)
-                            }
-                        } else {
-                            error = "API error: ${qrCodeResponse.message}"
-                        }
+        // 首先检查是否有已保存的登录状态
+        val savedSession = SessionManager.getSession()
+        if (savedSession != null) {
+            // 如果已登录，直接显示登录状态，不再获取二维码
+            loggedInSession = savedSession
+            isPollingActive = false
+            qrCodeBitmap = null
+            isLoading = false
+            Log.d("BiliTV", "Using saved session: ${savedSession.dedeUserID}")
+        } else {
+            // 如果未登录，获取二维码
+            isLoading = true
+            error = null
+            coroutineScope.launch {
+                try {
+                    val response = withContext(Dispatchers.IO) { // Network call on IO dispatcher
+                        val request = Request.Builder()
+                            .url("https://passport.bilibili.com/x/passport-login/web/qrcode/generate")
+                            .build()
+                        httpClient.newCall(request).execute()
                     }
-                } else {
-                    error = "HTTP error: ${response.code}"
+
+                    if (response.isSuccessful) {
+                        response.body?.string()?.let { responseBody ->
+                            val qrCodeResponse = json.decodeFromString<QrCodeResponse>(responseBody)
+                            if (qrCodeResponse.code == 0) {
+                                qrCodeKey = qrCodeResponse.data.qrcode_key
+                                val qrUrl = qrCodeResponse.data.url
+                                qrCodeBitmap = withContext(Dispatchers.Default) { // QR code generation on Default dispatcher
+                                    QRCodeGenerator.generateQRCodeBitmap(qrUrl)
+                                }
+                            } else {
+                                error = "API error: ${qrCodeResponse.message}"
+                            }
+                        }
+                    } else {
+                        error = "HTTP error: ${response.code}"
+                    }
+                } catch (e: Exception) {
+                    error = "Network error: ${e.localizedMessage}"
+                } finally {
+                    isLoading = false
                 }
-            } catch (e: Exception) {
-                error = "Network error: ${e.localizedMessage}"
-            } finally {
-                isLoading = false
             }
         }
     }

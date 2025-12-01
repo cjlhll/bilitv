@@ -17,6 +17,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
@@ -79,9 +80,49 @@ enum class TabType(val title: String) {
  */
 @OptIn(ExperimentalSerializationApi::class)
 @Composable
-fun HomeScreen(modifier: Modifier = Modifier) {
+fun HomeScreen(
+    modifier: Modifier = Modifier,
+    onEnterFullScreen: (VideoPlayInfo, String) -> Unit = { _, _ -> }
+) {
     var selectedTab by remember { mutableStateOf(TabType.RECOMMEND) }
     var hotVideos by remember { mutableStateOf<List<VideoItemData>>(emptyList()) }
+    val coroutineScope = rememberCoroutineScope()
+    
+    // 播放状态
+    var currentPlayInfo by remember { mutableStateOf<VideoPlayInfo?>(null) }
+    var currentVideoTitle by remember { mutableStateOf("") }
+
+    // 处理视频点击
+    val handleVideoClick: (Video) -> Unit = { video ->
+        if (video.bvid.isNotEmpty() && video.cid != 0L) {
+            Log.d("BiliTV", "Video clicked: ${video.title} (bvid=${video.bvid}, cid=${video.cid})")
+            coroutineScope.launch {
+                val playInfo = VideoPlayUrlFetcher.fetchPlayUrl(
+                    bvid = video.bvid,
+                    cid = video.cid,
+                    qn = 80, // 1080P - 非大会员最高清晰度
+                    fnval = 4048 // DASH格式
+                )
+                
+                if (playInfo != null) {
+                    Log.d("BiliTV", "Play URL fetched successfully:")
+                    Log.d("BiliTV", "  Format: ${playInfo.format}")
+                    Log.d("BiliTV", "  Quality: ${playInfo.quality}")
+                    Log.d("BiliTV", "  Duration: ${playInfo.duration}s")
+                    Log.d("BiliTV", "  Video URL: ${playInfo.videoUrl.take(100)}...")
+                    if (playInfo.audioUrl != null) {
+                        Log.d("BiliTV", "  Audio URL: ${playInfo.audioUrl.take(100)}...")
+                    }
+                    // 进入全屏播放
+                    onEnterFullScreen(playInfo, video.title)
+                } else {
+                    Log.e("BiliTV", "Failed to fetch play URL")
+                }
+            }
+        } else {
+            Log.w("BiliTV", "Video missing bvid or cid: ${video.title}")
+        }
+    }
 
     LaunchedEffect(selectedTab) {
         if (selectedTab == TabType.HOT) {
@@ -126,29 +167,33 @@ fun HomeScreen(modifier: Modifier = Modifier) {
         }
     }
     
+    // 显示视频列表
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        // Tab栏
-        TabRow(
-            selectedTab = selectedTab,
-            onTabSelected = { selectedTab = it }
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        // 视频列表
-        val videosToDisplay = remember(selectedTab, hotVideos) {
-            when (selectedTab) {
-                TabType.HOT -> hotVideos.map { mapVideoItemDataToVideo(it) }
-                else -> getVideosForTab(selectedTab)
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            // Tab栏
+            TabRow(
+                selectedTab = selectedTab,
+                onTabSelected = { selectedTab = it }
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // 视频列表
+            val videosToDisplay = remember(selectedTab, hotVideos) {
+                when (selectedTab) {
+                    TabType.HOT -> hotVideos.map { mapVideoItemDataToVideo(it) }
+                    else -> getVideosForTab(selectedTab)
+                }
             }
+            VideoGrid(
+                videos = videosToDisplay,
+                onVideoClick = handleVideoClick
+            )
         }
-        VideoGrid(videos = videosToDisplay)
     }
-}
 
 /**
  * Tab切换栏
@@ -220,7 +265,8 @@ private fun TabButton(
  */
 @Composable
 private fun VideoGrid(
-    videos: List<Video>, // Accept List<Video> directly
+    videos: List<Video>,
+    onVideoClick: (Video) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     LazyVerticalGrid(
@@ -239,7 +285,7 @@ private fun VideoGrid(
         items(videos) { video ->
             VideoItem(
                 video = video,
-                onClick = { /* TODO: 处理视频点击 */ }
+                onClick = onVideoClick
             )
         }
     }
@@ -269,6 +315,8 @@ private fun getVideosForTab(tabType: TabType): List<Video> {
 private fun mapVideoItemDataToVideo(videoItemData: VideoItemData): Video {
     return Video(
         id = videoItemData.bvid,
+        bvid = videoItemData.bvid,
+        cid = videoItemData.cid,
         title = videoItemData.title,
         coverUrl = videoItemData.pic,
         author = videoItemData.owner.name,

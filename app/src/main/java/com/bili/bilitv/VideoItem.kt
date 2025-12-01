@@ -32,6 +32,8 @@ import coil.compose.AsyncImage
  */
 data class Video(
     val id: String,
+    val bvid: String = "", // B站视频BV号
+    val cid: Long = 0, // 视频CID
     val title: String,
     val coverUrl: String,
     val author: String = "",

@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 初始化SessionManager，从本地存储恢复登录状态
+        SessionManager.init(this)
         setContent {
             BiliTVTheme {
                 Surface(
