@@ -296,7 +296,12 @@ fun MainScreen() {
                         }
                     )
                     NavRoute.DYNAMIC -> DynamicScreen(
-                        loggedInSession = loggedInSession
+                        loggedInSession = loggedInSession,
+                        onEnterFullScreen = { playInfo, title ->
+                            isFullScreenPlayer = true
+                            fullScreenPlayInfo = playInfo
+                            fullScreenVideoTitle = title
+                        }
                     )
                     NavRoute.SETTINGS -> PlaceholderScreen(NavRoute.SETTINGS.title)
                     else -> PlaceholderScreen(currentRoute.title)

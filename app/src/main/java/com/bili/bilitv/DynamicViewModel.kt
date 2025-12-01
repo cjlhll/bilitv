@@ -94,6 +94,10 @@ class DynamicViewModel : ViewModel() {
     
     var userVideos by mutableStateOf<List<Video>>(emptyList())
     var isVideoLoading by mutableStateOf(false)
+    
+    // Pagination state
+    private var currentPage = 1
+    var hasMoreVideos by mutableStateOf(true)
 
     private var currentCookie: String = ""
     private var cachedImgKey: String? = null
@@ -203,14 +207,23 @@ class DynamicViewModel : ViewModel() {
     
     fun selectUser(user: FollowingUser) {
         selectedUser = user
-        fetchUserVideos(user.mid)
+        // Reset pagination
+        currentPage = 1
+        hasMoreVideos = true
+        userVideos = emptyList()
+        fetchUserVideos(user.mid, 1)
     }
 
-    private fun fetchUserVideos(mid: Long) {
+    fun loadMoreVideos() {
+        if (isVideoLoading || !hasMoreVideos || selectedUser == null) return
+        currentPage++
+        fetchUserVideos(selectedUser!!.mid, currentPage)
+    }
+
+    private fun fetchUserVideos(mid: Long, page: Int) {
         if (isVideoLoading) return
         isVideoLoading = true
-        userVideos = emptyList() // Clear previous videos
-
+        
         viewModelScope.launch {
             try {
                 // Ensure we have Wbi keys
@@ -225,7 +238,7 @@ class DynamicViewModel : ViewModel() {
                     "mid" to mid.toString(),
                     "ps" to "30",
                     "tid" to "0",
-                    "pn" to "1",
+                    "pn" to page.toString(),
                     "keyword" to "",
                     "order" to "pubdate"
                 )
@@ -257,8 +270,18 @@ class DynamicViewModel : ViewModel() {
                         val apiResp = json.decodeFromString<SpaceSearchResponse>(body)
                         if (apiResp.code == 0) {
                             val vlist = apiResp.data?.list?.vlist ?: emptyList()
-                            userVideos = vlist.map { it.toVideo() }
-                            Log.d("BiliTV", "Parsed ${userVideos.size} videos for user $mid")
+                            val newVideos = vlist.map { it.toVideo() }
+                            
+                            if (newVideos.isEmpty()) {
+                                hasMoreVideos = false
+                            } else {
+                                if (page == 1) {
+                                    userVideos = newVideos
+                                } else {
+                                    userVideos = userVideos + newVideos
+                                }
+                            }
+                            Log.d("BiliTV", "Parsed ${newVideos.size} videos for user $mid page $page")
                         } else {
                             Log.e("BiliTV", "Space API Error: ${apiResp.message}")
                         }

@@ -9,6 +9,23 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 
 /**
+ * 视频详情响应
+ */
+@Serializable
+data class VideoViewResponse(
+    val code: Int,
+    val message: String,
+    val data: VideoViewData? = null
+)
+
+@Serializable
+data class VideoViewData(
+    val bvid: String,
+    val cid: Long,
+    val title: String
+)
+
+/**
  * 视频播放地址响应
  */
 @Serializable
@@ -118,6 +135,40 @@ object VideoPlayUrlFetcher {
     private val httpClient = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
     
+    /**
+     * 获取视频详情（用于获取CID）
+     */
+    suspend fun fetchVideoDetails(bvid: String): VideoViewData? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = "https://api.bilibili.com/x/web-interface/view?bvid=$bvid"
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .build()
+                
+                val response = httpClient.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (body != null) {
+                         val viewResp = json.decodeFromString<VideoViewResponse>(body)
+                         if (viewResp.code == 0) {
+                             return@withContext viewResp.data
+                         } else {
+                             Log.e("BiliTV", "Video view API error: ${viewResp.message}")
+                         }
+                    }
+                } else {
+                    Log.e("BiliTV", "Video view HTTP error: ${response.code}")
+                }
+                null
+            } catch (e: Exception) {
+                Log.e("BiliTV", "Error fetching video details", e)
+                null
+            }
+        }
+    }
+
     /**
      * 获取视频播放地址
      * @param bvid 视频BV号

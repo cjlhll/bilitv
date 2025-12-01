@@ -7,27 +7,36 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
 
 import android.util.Log
 
 @Composable
 fun DynamicScreen(
     viewModel: DynamicViewModel = viewModel(),
-    loggedInSession: LoggedInSession?
+    loggedInSession: LoggedInSession?,
+    onEnterFullScreen: (VideoPlayInfo, String) -> Unit = { _, _ -> }
 ) {
+    val coroutineScope = rememberCoroutineScope()
+
     LaunchedEffect(loggedInSession) {
         Log.d("BiliTV", "DynamicScreen: loggedInSession is ${if (loggedInSession == null) "null" else "not null"}")
         if (loggedInSession != null) {
@@ -42,13 +51,29 @@ fun DynamicScreen(
         return
     }
 
+    // Focus handling for the "Left Side" container to prevent focus skipping
+    val itemFocusRequesters = remember { mutableMapOf<Long, FocusRequester>() }
+    val containerRequester = remember { FocusRequester() }
+
     Row(modifier = Modifier.fillMaxSize()) {
         // Left Side: Following List
         Box(
             modifier = Modifier
-                .width(250.dp)
+                .width(200.dp)
                 .fillMaxHeight()
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .focusRequester(containerRequester)
+                .onFocusChanged { state ->
+                    if (state.isFocused) {
+                        // When the container itself gets focus (e.g. from geometric search hitting empty space),
+                        // redirect focus to the selected user or the first user.
+                        val targetUser = viewModel.selectedUser ?: viewModel.followingList.firstOrNull()
+                        targetUser?.let { user ->
+                            itemFocusRequesters[user.mid]?.requestFocus()
+                        }
+                    }
+                }
+                .focusable()
         ) {
             if (viewModel.isLoading && viewModel.followingList.isEmpty()) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
@@ -67,11 +92,18 @@ fun DynamicScreen(
                 LazyColumn(
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    items(viewModel.followingList) { user ->
+                    items(
+                        items = viewModel.followingList,
+                        key = { it.mid }
+                    ) { user ->
+                        val requester = remember(user.mid) {
+                            itemFocusRequesters.getOrPut(user.mid) { FocusRequester() }
+                        }
                         FollowingItem(
                             user = user,
                             isSelected = viewModel.selectedUser?.mid == user.mid,
-                            onClick = { viewModel.selectUser(user) }
+                            onClick = { viewModel.selectUser(user) },
+                            modifier = Modifier.focusRequester(requester)
                         )
                     }
                 }
@@ -82,14 +114,16 @@ fun DynamicScreen(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight()
-                .padding(24.dp),
+                .fillMaxHeight(),
             contentAlignment = Alignment.TopStart
         ) {
             if (viewModel.selectedUser != null) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // User Header
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(start = 24.dp, top = 24.dp, end = 24.dp)
+                    ) {
                         AsyncImage(
                             model = viewModel.selectedUser!!.face,
                             contentDescription = null,
@@ -115,7 +149,7 @@ fun DynamicScreen(
                     
                     Spacer(modifier = Modifier.height(24.dp))
                     
-                    if (viewModel.isVideoLoading) {
+                    if (viewModel.isVideoLoading && viewModel.userVideos.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
                         }
@@ -124,17 +158,68 @@ fun DynamicScreen(
                             Text("暂无视频")
                         }
                     } else {
+                        val listState = rememberLazyGridState()
+                        
+                        // Load more detection
+                        LaunchedEffect(listState) {
+                            snapshotFlow {
+                                val layoutInfo = listState.layoutInfo
+                                val totalItems = layoutInfo.totalItemsCount
+                                val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                                totalItems > 0 && lastVisibleItem >= totalItems - 6 // Trigger when 2 rows left
+                            }.collect { shouldLoad ->
+                                if (shouldLoad) {
+                                    viewModel.loadMoreVideos()
+                                }
+                            }
+                        }
+
                         LazyVerticalGrid(
-                            columns = GridCells.Adaptive(minSize = 200.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                            contentPadding = PaddingValues(bottom = 16.dp)
+                            state = listState,
+                            columns = GridCells.Fixed(3),
+                            horizontalArrangement = Arrangement.spacedBy(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(20.dp),
+                            contentPadding = PaddingValues(top = 24.dp, bottom = 56.dp, start = 48.dp, end = 48.dp)
                         ) {
-                            items(viewModel.userVideos) { video ->
+                            items(
+                                items = viewModel.userVideos,
+                                key = { video -> video.id }
+                            ) { video ->
                                 VideoItem(
                                     video = video,
-                                    onClick = { /* TODO: Navigate to player */ }
+                                    onClick = { clickedVideo ->
+                                        coroutineScope.launch {
+                                            var cid = clickedVideo.cid
+                                            if (cid == 0L && clickedVideo.bvid.isNotEmpty()) {
+                                                val details = VideoPlayUrlFetcher.fetchVideoDetails(clickedVideo.bvid)
+                                                if (details != null) {
+                                                    cid = details.cid
+                                                }
+                                            }
+                                            
+                                            if (cid != 0L && clickedVideo.bvid.isNotEmpty()) {
+                                                 val playInfo = VideoPlayUrlFetcher.fetchPlayUrl(
+                                                    bvid = clickedVideo.bvid,
+                                                    cid = cid
+                                                )
+                                                if (playInfo != null) {
+                                                    onEnterFullScreen(playInfo, clickedVideo.title)
+                                                }
+                                            }
+                                        }
+                                    }
                                 )
+                            }
+                            
+                            if (viewModel.isVideoLoading) {
+                                item(span = { GridItemSpan(3) }) {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator()
+                                    }
+                                }
                             }
                         }
                     }
@@ -155,30 +240,31 @@ fun DynamicScreen(
 fun FollowingItem(
     user: FollowingUser,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .background(
                 if (isSelected) MaterialTheme.colorScheme.primaryContainer
                 else Color.Transparent
             )
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         AsyncImage(
             model = user.face,
             contentDescription = user.uname,
             modifier = Modifier
-                .size(40.dp)
+                .size(32.dp)
                 .clip(CircleShape)
         )
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = user.uname,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
