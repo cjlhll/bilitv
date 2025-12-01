@@ -295,6 +295,9 @@ fun MainScreen() {
                             // 登录成功后，userInfo 会通过 LaunchedEffect 自动获取
                         }
                     )
+                    NavRoute.DYNAMIC -> DynamicScreen(
+                        loggedInSession = loggedInSession
+                    )
                     NavRoute.SETTINGS -> PlaceholderScreen(NavRoute.SETTINGS.title)
                     else -> PlaceholderScreen(currentRoute.title)
                 }
