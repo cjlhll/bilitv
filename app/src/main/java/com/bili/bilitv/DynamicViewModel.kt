@@ -86,17 +86,73 @@ data class SpaceVideoItem(
     }
 }
 
+@Serializable
+data class DynamicAllResponse(val code: Int, val data: DynamicAllData? = null, val message: String = "")
+
+@Serializable
+data class DynamicAllData(
+    val items: List<DynamicItem>? = null,
+    val offset: String = ""
+)
+
+@Serializable
+data class DynamicItem(
+    val id_str: String,
+    val type: String,
+    val modules: DynamicModules
+)
+
+@Serializable
+data class DynamicModules(
+    val module_author: ModuleAuthor,
+    val module_dynamic: ModuleDynamic
+)
+
+@Serializable
+data class ModuleAuthor(
+    val name: String,
+    val pub_ts: Long
+)
+
+@Serializable
+data class ModuleDynamic(
+    val major: ModuleMajor? = null
+)
+
+@Serializable
+data class ModuleMajor(
+    val archive: DynamicArchive? = null,
+    val type: String // "MAJOR_TYPE_ARCHIVE"
+)
+
+@Serializable
+data class DynamicArchive(
+    val aid: String,
+    val bvid: String,
+    val title: String,
+    val cover: String,
+    val stat: DynamicStat
+)
+
+@Serializable
+data class DynamicStat(
+    val play: String,
+    val danmaku: String
+)
+
 class DynamicViewModel : ViewModel() {
     var followingList by mutableStateOf<List<FollowingUser>>(emptyList())
     var isLoading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     var selectedUser by mutableStateOf<FollowingUser?>(null)
+    var isAllDynamicsSelected by mutableStateOf(false)
     
     var userVideos by mutableStateOf<List<Video>>(emptyList())
     var isVideoLoading by mutableStateOf(false)
     
     // Pagination state
     private var currentPage = 1
+    private var dynamicOffset: String = ""
     var hasMoreVideos by mutableStateOf(true)
 
     private var currentCookie: String = ""
@@ -185,9 +241,9 @@ class DynamicViewModel : ViewModel() {
                     if (apiResp.code == 0) {
                         followingList = apiResp.data?.list ?: emptyList()
                         Log.d("BiliTV", "Parsed ${followingList.size} followings")
-                        // Select first user by default if list is not empty and no user selected
-                        if (selectedUser == null && followingList.isNotEmpty()) {
-                            selectUser(followingList[0])
+                        // If no user selected and not showing all dynamics, select all dynamics
+                        if (selectedUser == null && !isAllDynamicsSelected) {
+                            selectAllDynamics()
                         }
                         return true
                     } else {
@@ -207,6 +263,7 @@ class DynamicViewModel : ViewModel() {
     
     fun selectUser(user: FollowingUser) {
         selectedUser = user
+        isAllDynamicsSelected = false
         // Reset pagination
         currentPage = 1
         hasMoreVideos = true
@@ -214,10 +271,93 @@ class DynamicViewModel : ViewModel() {
         fetchUserVideos(user.mid, 1)
     }
 
+    fun selectAllDynamics() {
+        isAllDynamicsSelected = true
+        selectedUser = null
+        currentPage = 1
+        hasMoreVideos = true
+        userVideos = emptyList()
+        dynamicOffset = ""
+        fetchAllDynamics()
+    }
+
     fun loadMoreVideos() {
-        if (isVideoLoading || !hasMoreVideos || selectedUser == null) return
-        currentPage++
-        fetchUserVideos(selectedUser!!.mid, currentPage)
+        if (isVideoLoading || !hasMoreVideos) return
+        if (isAllDynamicsSelected) {
+            fetchAllDynamics()
+        } else if (selectedUser != null) {
+            currentPage++
+            fetchUserVideos(selectedUser!!.mid, currentPage)
+        }
+    }
+
+    private fun fetchAllDynamics() {
+        if (isVideoLoading) return
+        isVideoLoading = true
+
+        viewModelScope.launch {
+            try {
+                val urlBuilder = StringBuilder("https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all?timezone_offset=-480&type=all")
+                if (dynamicOffset.isNotEmpty()) {
+                    urlBuilder.append("&offset=").append(dynamicOffset)
+                }
+                val url = urlBuilder.toString()
+
+                Log.d("BiliTV", "Requesting all dynamics: $url")
+
+                val response = withContext(Dispatchers.IO) {
+                    val request = Request.Builder()
+                        .url(url)
+                        .addHeader("Cookie", currentCookie)
+                        .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                        .build()
+                    httpClient.newCall(request).execute()
+                }
+
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (body != null) {
+                        val apiResp = json.decodeFromString<DynamicAllResponse>(body)
+                        if (apiResp.code == 0) {
+                            val items = apiResp.data?.items ?: emptyList()
+                            dynamicOffset = apiResp.data?.offset ?: ""
+                            
+                            val newVideos = items.mapNotNull { item ->
+                                if (item.type == "DYNAMIC_TYPE_AV" && item.modules.module_dynamic.major?.type == "MAJOR_TYPE_ARCHIVE") {
+                                    val archive = item.modules.module_dynamic.major.archive
+                                    if (archive != null) {
+                                        Video(
+                                            id = archive.aid,
+                                            bvid = archive.bvid,
+                                            title = archive.title,
+                                            coverUrl = archive.cover,
+                                            author = item.modules.module_author.name,
+                                            pubDate = item.modules.module_author.pub_ts,
+                                            playCount = archive.stat.play
+                                        )
+                                    } else null
+                                } else null
+                            }
+
+                            if (apiResp.data?.items.isNullOrEmpty()) {
+                                hasMoreVideos = false
+                            } else {
+                                userVideos = userVideos + newVideos
+                            }
+                            Log.d("BiliTV", "Parsed ${newVideos.size} videos from dynamics")
+                        } else {
+                            Log.e("BiliTV", "All Dynamics API Error: ${apiResp.message}")
+                        }
+                    }
+                } else {
+                    Log.e("BiliTV", "All Dynamics HTTP Error: ${response.code}")
+                }
+            } catch (e: Exception) {
+                Log.e("BiliTV", "Error fetching all dynamics", e)
+            } finally {
+                isVideoLoading = false
+            }
+        }
     }
 
     private fun fetchUserVideos(mid: Long, page: Int) {
