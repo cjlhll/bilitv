@@ -16,6 +16,11 @@ class HomeViewModel : ViewModel() {
     // Focused index
     private val _tabFocusStates = mutableStateMapOf<TabType, Int>()
 
+    // Flag to control focus restoration logic
+    // When switching tabs explicitly, we want focus to stay on the tab bar (false)
+    // When returning from player or other screens, we want focus to restore to the list (true)
+    var shouldRestoreFocusToGrid by mutableStateOf(false)
+
     fun updateScrollState(tab: TabType, index: Int, offset: Int) {
         _tabScrollStates[tab] = index to offset
     }
@@ -30,5 +35,16 @@ class HomeViewModel : ViewModel() {
     
     fun getFocusedIndex(tab: TabType): Int {
         return _tabFocusStates[tab] ?: -1
+    }
+    
+    fun onTabChanged(newTab: TabType) {
+        selectedTab = newTab
+        // Switch tab -> Don't restore focus to grid immediately (keep on tab)
+        shouldRestoreFocusToGrid = false
+    }
+    
+    fun onEnterFullScreen() {
+        // Prepare to restore focus when coming back
+        shouldRestoreFocusToGrid = true
     }
 }

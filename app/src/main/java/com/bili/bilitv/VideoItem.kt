@@ -55,71 +55,76 @@ fun VideoItem(
     var isFocused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isFocused) 1.1f else 1.0f, label = "scale")
 
-    Card(
+    // 使用 Box 作为布局容器，保持占位大小不变
+    Box(
         modifier = modifier
-            .width(200.dp)
             .onFocusChanged { isFocused = it.isFocused }
-            .zIndex(if (isFocused) 1f else 0f)
-            .scale(scale)
-            .clickable { onClick(video) },
-        shape = RoundedCornerShape(8.dp),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isFocused) 8.dp else 2.dp
-        ),
-        border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null
+            .clickable { onClick(video) }
     ) {
-        Column {
-            // 视频封面
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(112.dp)
-                    .background(Color.LightGray)
-            ) {
-                AsyncImage(
-                    model = video.coverUrl,
-                    contentDescription = video.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    placeholder = painterResource(id = android.R.drawable.ic_menu_gallery),
-                    error = painterResource(id = android.R.drawable.ic_menu_gallery)
-                )
-            }
-            
-            // 视频标题
-            Text(
-                text = video.title,
-                style = MaterialTheme.typography.bodyMedium,
-                minLines = 2, // Ensure consistent height
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            )
-
-            // 作者和时间
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth() // 填满父容器（Grid Cell）
+                .zIndex(if (isFocused) 1f else 0f) // 聚焦时层级提高
+                .scale(scale), // 仅缩放视觉内容
+            shape = RoundedCornerShape(8.dp),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = if (isFocused) 8.dp else 2.dp
+            ),
+            border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null
+        ) {
+            Column {
+                // 视频封面
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(112.dp)
+                        .background(Color.LightGray)
+                ) {
+                    AsyncImage(
+                        model = video.coverUrl,
+                        contentDescription = video.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        placeholder = painterResource(id = android.R.drawable.ic_menu_gallery),
+                        error = painterResource(id = android.R.drawable.ic_menu_gallery)
+                    )
+                }
+                
+                // 视频标题
                 Text(
-                    text = video.author,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    text = video.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    minLines = 2, // Ensure consistent height
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 )
-                video.pubDate?.let {
+
+                // 作者和时间
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = " · ${formatUnixTimestamp(it)}",
+                        text = video.author,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    video.pubDate?.let {
+                        Text(
+                            text = " · ${formatUnixTimestamp(it)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }

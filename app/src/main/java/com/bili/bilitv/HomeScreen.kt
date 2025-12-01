@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -115,6 +116,8 @@ fun HomeScreen(
                     if (playInfo.audioUrl != null) {
                         Log.d("BiliTV", "  Audio URL: ${playInfo.audioUrl.take(100)}...")
                     }
+                    // 记录进入全屏状态，以便返回时恢复焦点
+                    viewModel.onEnterFullScreen()
                     // 进入全屏播放
                     onEnterFullScreen(playInfo, video.title)
                 } else {
@@ -178,7 +181,7 @@ fun HomeScreen(
             // Tab栏
             TabRow(
                 selectedTab = viewModel.selectedTab,
-                onTabSelected = { viewModel.selectedTab = it }
+                onTabSelected = { viewModel.onTabChanged(it) }
             )
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -280,6 +283,7 @@ private fun VideoGrid(
     val currentTab = viewModel.selectedTab
     val (initialIndex, initialOffset) = remember(currentTab) { viewModel.getScrollState(currentTab) }
     val initialFocusIndex = remember(currentTab) { viewModel.getFocusedIndex(currentTab) }
+    val shouldRestoreFocus = viewModel.shouldRestoreFocusToGrid
 
     val listState = rememberLazyGridState(
         initialFirstVisibleItemIndex = initialIndex,
@@ -312,9 +316,11 @@ private fun VideoGrid(
             val focusRequester = remember { FocusRequester() }
             
             // 恢复焦点
-            LaunchedEffect(Unit) {
-                if (index == initialFocusIndex) {
-                    focusRequester.requestFocus()
+            LaunchedEffect(shouldRestoreFocus) {
+                if (shouldRestoreFocus) {
+                    if (index == initialFocusIndex || (initialFocusIndex == -1 && index == 0)) {
+                        focusRequester.requestFocus()
+                    }
                 }
             }
 
