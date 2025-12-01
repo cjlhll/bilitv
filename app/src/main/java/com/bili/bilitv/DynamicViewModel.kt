@@ -150,6 +150,11 @@ class DynamicViewModel : ViewModel() {
     var userVideos by mutableStateOf<List<Video>>(emptyList())
     var isVideoLoading by mutableStateOf(false)
     
+    // Scroll and Focus State Persistence
+    var videoListScrollIndex by mutableStateOf(0)
+    var videoListScrollOffset by mutableStateOf(0)
+    var lastFocusedVideoId by mutableStateOf<String?>(null)
+    
     // Pagination state
     private var currentPage = 1
     private var dynamicOffset: String = ""
@@ -264,10 +269,13 @@ class DynamicViewModel : ViewModel() {
     fun selectUser(user: FollowingUser) {
         selectedUser = user
         isAllDynamicsSelected = false
-        // Reset pagination
+        // Reset pagination and scroll state
         currentPage = 1
         hasMoreVideos = true
         userVideos = emptyList()
+        videoListScrollIndex = 0
+        videoListScrollOffset = 0
+        lastFocusedVideoId = null
         fetchUserVideos(user.mid, 1)
     }
 
@@ -278,6 +286,9 @@ class DynamicViewModel : ViewModel() {
         hasMoreVideos = true
         userVideos = emptyList()
         dynamicOffset = ""
+        videoListScrollIndex = 0
+        videoListScrollOffset = 0
+        lastFocusedVideoId = null
         fetchAllDynamics()
     }
 

@@ -3,10 +3,13 @@ package com.bili.bilitv
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
+
+import com.bili.bilitv.utils.WbiUtil
 
 /**
  * 视频详情响应
@@ -76,17 +79,17 @@ data class DashData(
 data class DashVideo(
     val id: Int, // 清晰度代码
     val baseUrl: String, // 视频流URL
-    val base_url: String? = null,
+    @SerialName("base_url") val base_url: String? = null,
     val backupUrl: List<String>? = null,
-    val backup_url: List<String>? = null,
+    @SerialName("backup_url") val backup_url: List<String>? = null,
     val bandwidth: Long, // 所需带宽
     val mimeType: String,
-    val mime_type: String? = null,
+    @SerialName("mime_type") val mime_type: String? = null,
     val codecs: String, // 编码格式
     val width: Int,
     val height: Int,
     val frameRate: String,
-    val frame_rate: String? = null,
+    @SerialName("frame_rate") val frame_rate: String? = null,
     val codecid: Int // 编码ID
 )
 
@@ -94,12 +97,12 @@ data class DashVideo(
 data class DashAudio(
     val id: Int, // 音质代码
     val baseUrl: String,
-    val base_url: String? = null,
+    @SerialName("base_url") val base_url: String? = null,
     val backupUrl: List<String>? = null,
-    val backup_url: List<String>? = null,
+    @SerialName("backup_url") val backup_url: List<String>? = null,
     val bandwidth: Long,
     val mimeType: String,
-    val mime_type: String? = null,
+    @SerialName("mime_type") val mime_type: String? = null,
     val codecs: String
 )
 
@@ -121,20 +124,176 @@ data class FlacData(
 data class VideoPlayInfo(
     val bvid: String,
     val cid: Long,
-    val videoUrl: String, // 视频流URL
-    val audioUrl: String? = null, // 音频流URL（DASH格式需要）
-    val quality: Int, // 当前清晰度
-    val format: String, // 格式（mp4/dash）
-    val duration: Long // 时长（秒）
+    val quality: Int,
+    val format: String,
+    val duration: Long,
+    val videoUrl: String,
+    val audioUrl: String? = null
 )
 
 /**
- * 视频播放地址获取器
+ * 缩略图响应
  */
+@Serializable
+data class VideoshotResponse(
+    val code: Int,
+    val message: String,
+    val data: VideoshotData? = null
+)
+
+@Serializable
+data class VideoshotData(
+    val image: List<String>? = null, // 缩略图拼图URL列表
+    val img_x_len: Int = 10, // 每张拼图横向图片数量
+    val img_y_len: Int = 10, // 每张拼图纵向图片数量
+    val img_x_size: Int = 160, // 单张缩略图宽度
+    val img_y_size: Int = 90  // 单张缩略图高度
+)
+
 object VideoPlayUrlFetcher {
-    private val httpClient = OkHttpClient()
-    private val json = Json { ignoreUnknownKeys = true }
+    private val client = OkHttpClient()
+    private val json = Json { 
+        ignoreUnknownKeys = true 
+        coerceInputValues = true
+    }
     
+    // 缓存WBI keys
+    private var imgKey: String? = null
+    private var subKey: String? = null
+    
+    /**
+     * 获取视频播放地址
+     * @param bvid 视频BV号
+     * @param cid 视频CID
+     * @param qn 清晰度 (80: 1080P, 64: 720P, 32: 480P, 16: 360P)
+     * @param fnval 格式标记 (1: MP4, 16: DASH, 4048: DASH + 4K)
+     */
+    suspend fun fetchPlayUrl(bvid: String, cid: Long, qn: Int = 64, fnval: Int = 4048): VideoPlayInfo? {
+        return withContext(Dispatchers.IO) {
+            try {
+                // 确保有WBI keys
+                if (imgKey == null || subKey == null) {
+                    fetchNavInfo()
+                }
+                
+                if (imgKey == null || subKey == null) {
+                    Log.e("BiliTV", "Failed to get WBI keys")
+                    return@withContext null
+                }
+
+                // 构造请求参数
+                val params = mutableMapOf<String, String>(
+                    "bvid" to bvid,
+                    "cid" to cid.toString(),
+                    "qn" to qn.toString(),
+                    "fnval" to fnval.toString(),
+                    "fnver" to "0",
+                    "fourk" to "1"
+                )
+                
+                // 计算WBI签名
+                val signedParams = WbiUtil.sign(params, imgKey!!, subKey!!)
+                val query = signedParams.entries.joinToString("&") { "${it.key}=${it.value}" }
+                
+                val url = "https://api.bilibili.com/x/player/wbi/playurl?$query"
+                
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("Referer", "https://www.bilibili.com")
+                    .build()
+
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (body != null) {
+                        val playUrlResponse = json.decodeFromString<PlayUrlResponse>(body)
+                        
+                        if (playUrlResponse.code == 0 && playUrlResponse.data != null) {
+                            val data = playUrlResponse.data
+                            
+                            // 优先使用DASH
+                            if (data.dash != null) {
+                                val video = data.dash.video.firstOrNull { it.id == data.quality } 
+                                    ?: data.dash.video.firstOrNull()
+                                val audio = data.dash.audio?.firstOrNull()
+                                
+                                if (video != null) {
+                                    return@withContext VideoPlayInfo(
+                                        bvid = bvid,
+                                        cid = cid,
+                                        quality = video.id,
+                                        format = "dash",
+                                        duration = data.timelength / 1000,
+                                        videoUrl = video.baseUrl.ifEmpty { video.base_url ?: "" },
+                                        audioUrl = audio?.baseUrl?.ifEmpty { audio.base_url ?: "" }
+                                    )
+                                }
+                            }
+                            
+                            // 降级到MP4 (durl)
+                            if (data.durl != null && data.durl.isNotEmpty()) {
+                                val item = data.durl[0]
+                                return@withContext VideoPlayInfo(
+                                    bvid = bvid,
+                                    cid = cid,
+                                    quality = data.quality,
+                                    format = "mp4",
+                                    duration = data.timelength / 1000,
+                                    videoUrl = item.url
+                                )
+                            }
+                        } else {
+                            Log.e("BiliTV", "API error: ${playUrlResponse.message}")
+                        }
+                    }
+                } else {
+                    Log.e("BiliTV", "HTTP error: ${response.code}")
+                }
+                null
+            } catch (e: Exception) {
+                Log.e("BiliTV", "Error fetching play URL", e)
+                null
+            }
+        }
+    }
+    
+    /**
+     * 获取WBI keys
+     */
+    private fun fetchNavInfo() {
+        try {
+            val request = Request.Builder()
+                .url("https://api.bilibili.com/x/web-interface/nav")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .build()
+                
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val body = response.body?.string()
+                if (body != null) {
+                    // 简单解析JSON获取wbi_img信息
+                    // 注意：这里为了简化没有定义完整的NavResponse类，而是使用字符串查找
+                    // 实际项目中应该定义完整的数据模型
+                    val imgUrlStart = body.indexOf("\"img_url\":\"") + 11
+                    val imgUrlEnd = body.indexOf("\"", imgUrlStart)
+                    val subUrlStart = body.indexOf("\"sub_url\":\"") + 11
+                    val subUrlEnd = body.indexOf("\"", subUrlStart)
+                    
+                    if (imgUrlStart > 10 && subUrlStart > 10) {
+                        val imgUrl = body.substring(imgUrlStart, imgUrlEnd)
+                        val subUrl = body.substring(subUrlStart, subUrlEnd)
+                        
+                        imgKey = imgUrl.substringAfterLast("/").substringBefore(".")
+                        subKey = subUrl.substringAfterLast("/").substringBefore(".")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("BiliTV", "Error fetching Nav info for WBI", e)
+        }
+    }
+
     /**
      * 获取视频详情（用于获取CID）
      */
@@ -147,7 +306,7 @@ object VideoPlayUrlFetcher {
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .build()
                 
-                val response = httpClient.newCall(request).execute()
+                val response = client.newCall(request).execute()
                 if (response.isSuccessful) {
                     val body = response.body?.string()
                     if (body != null) {
@@ -170,112 +329,32 @@ object VideoPlayUrlFetcher {
     }
 
     /**
-     * 获取视频播放地址
-     * @param bvid 视频BV号
-     * @param cid 视频CID
-     * @param qn 清晰度 (默认80=1080P)
-     * @param fnval 格式标识 (默认4048=所有DASH)
-     * @return 视频播放信息，失败返回null
+     * 获取视频缩略图信息 (Videoshot)
      */
-    suspend fun fetchPlayUrl(
-        bvid: String,
-        cid: Long,
-        qn: Int = 80, // 默认1080P
-        fnval: Int = 4048 // 默认DASH格式，获取所有可用流
-    ): VideoPlayInfo? {
+    suspend fun fetchVideoshot(bvid: String, cid: Long): VideoshotData? {
         return withContext(Dispatchers.IO) {
             try {
-                val url = "https://api.bilibili.com/x/player/playurl?" +
-                        "bvid=$bvid&cid=$cid&qn=$qn&fnval=$fnval&fnver=0&fourk=1"
-                
-                val requestBuilder = Request.Builder()
+                val url = "https://api.bilibili.com/x/player/videoshot?bvid=$bvid&cid=$cid"
+                val request = Request.Builder()
                     .url(url)
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                    .header("Referer", "https://www.bilibili.com")
+                    .build()
                 
-                // 添加Cookie（如果已登录）
-                val cookieString = SessionManager.getCookieString()
-                if (cookieString != null) {
-                    requestBuilder.header("Cookie", cookieString)
-                    Log.d("BiliTV", "Fetching play URL with Cookie for bvid=$bvid, cid=$cid")
-                } else {
-                    Log.d("BiliTV", "Fetching play URL without Cookie for bvid=$bvid, cid=$cid")
-                }
-                
-                val request = requestBuilder.build()
-                val response = httpClient.newCall(request).execute()
-                
+                val response = client.newCall(request).execute()
                 if (response.isSuccessful) {
-                    response.body?.string()?.let { responseBody ->
-                        Log.d("BiliTV", "Play URL Response: ${responseBody.take(500)}...")
-                        val playUrlResponse = json.decodeFromString<PlayUrlResponse>(responseBody)
-                        
-                        if (playUrlResponse.code == 0 && playUrlResponse.data != null) {
-                            return@withContext parsePlayUrlData(bvid, cid, playUrlResponse.data)
-                        } else {
-                            Log.e("BiliTV", "Play URL API error: ${playUrlResponse.message}")
+                    val body = response.body?.string()
+                    if (body != null) {
+                        val resp = json.decodeFromString<VideoshotResponse>(body)
+                        if (resp.code == 0) {
+                            return@withContext resp.data
                         }
                     }
-                } else {
-                    Log.e("BiliTV", "Play URL HTTP error: ${response.code}")
                 }
+                null
             } catch (e: Exception) {
-                Log.e("BiliTV", "Play URL fetch error: ${e.message}", e)
-            }
-            null
-        }
-    }
-    
-    /**
-     * 解析播放地址数据
-     */
-    private fun parsePlayUrlData(bvid: String, cid: Long, data: PlayUrlData): VideoPlayInfo? {
-        Log.d("BiliTV", "Available qualities: ${data.accept_quality}")
-        Log.d("BiliTV", "Current quality: ${data.quality}")
-        
-        // 优先使用DASH格式
-        data.dash?.let { dash ->
-            Log.d("BiliTV", "DASH video streams: ${dash.video.map { "id=${it.id}, width=${it.width}x${it.height}" }}")
-            
-            // 选择最高清晰度的视频流（id值最大的）
-            val videoStream = dash.video.maxByOrNull { it.id } ?: dash.video.firstOrNull()
-            val audioStream = dash.audio?.firstOrNull() // 获取第一个音频流
-            
-            if (videoStream != null) {
-                val videoUrl = videoStream.base_url ?: videoStream.baseUrl
-                val audioUrl = audioStream?.let { it.base_url ?: it.baseUrl }
-                
-                Log.d("BiliTV", "Selected DASH video stream - Quality ID: ${videoStream.id}, Resolution: ${videoStream.width}x${videoStream.height}")
-                Log.d("BiliTV", "DASH format - Video: $videoUrl")
-                Log.d("BiliTV", "DASH format - Audio: $audioUrl")
-                
-                return VideoPlayInfo(
-                    bvid = bvid,
-                    cid = cid,
-                    videoUrl = videoUrl,
-                    audioUrl = audioUrl,
-                    quality = videoStream.id, // 使用实际视频流的清晰度ID
-                    format = "dash",
-                    duration = dash.duration.toLong()
-                )
+                Log.e("BiliTV", "Error fetching videoshot", e)
+                null
             }
         }
-        
-        // 降级到MP4格式
-        data.durl?.firstOrNull()?.let { durl ->
-            Log.d("BiliTV", "MP4 format - URL: ${durl.url}")
-            return VideoPlayInfo(
-                bvid = bvid,
-                cid = cid,
-                videoUrl = durl.url,
-                audioUrl = null,
-                quality = data.quality,
-                format = "mp4",
-                duration = data.timelength / 1000 // 转换为秒
-            )
-        }
-        
-        Log.e("BiliTV", "No valid play URL found in response")
-        return null
     }
 }

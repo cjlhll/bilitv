@@ -137,52 +137,6 @@ fun DynamicScreen(
         ) {
             if (viewModel.isAllDynamicsSelected || viewModel.selectedUser != null) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // User Header
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(start = 24.dp, top = 24.dp, end = 24.dp)
-                    ) {
-                        if (viewModel.isAllDynamicsSelected) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.List,
-                                contentDescription = null,
-                                modifier = Modifier.size(64.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.secondaryContainer)
-                                    .padding(12.dp),
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text(
-                                text = "全部动态",
-                                style = MaterialTheme.typography.headlineMedium
-                            )
-                        } else {
-                            AsyncImage(
-                                model = viewModel.selectedUser!!.face,
-                                contentDescription = null,
-                                modifier = Modifier.size(64.dp).clip(CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column {
-                                Text(
-                                    text = viewModel.selectedUser!!.uname,
-                                    style = MaterialTheme.typography.headlineMedium
-                                )
-                                if (viewModel.selectedUser!!.sign.isNotEmpty()) {
-                                    Text(
-                                        text = viewModel.selectedUser!!.sign,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
                     
                     if (viewModel.isVideoLoading && viewModel.userVideos.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -193,7 +147,20 @@ fun DynamicScreen(
                             Text("暂无视频")
                         }
                     } else {
-                        val listState = rememberLazyGridState()
+                        val listState = rememberLazyGridState(
+                            initialFirstVisibleItemIndex = viewModel.videoListScrollIndex,
+                            initialFirstVisibleItemScrollOffset = viewModel.videoListScrollOffset
+                        )
+
+                        // Save scroll state
+                        LaunchedEffect(listState) {
+                            snapshotFlow {
+                                listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+                            }.collect { (index, offset) ->
+                                viewModel.videoListScrollIndex = index
+                                viewModel.videoListScrollOffset = offset
+                            }
+                        }
                         
                         // Load more detection
                         LaunchedEffect(listState) {
@@ -214,14 +181,29 @@ fun DynamicScreen(
                             columns = GridCells.Fixed(3),
                             horizontalArrangement = Arrangement.spacedBy(20.dp),
                             verticalArrangement = Arrangement.spacedBy(20.dp),
-                            contentPadding = PaddingValues(top = 24.dp, bottom = 56.dp, start = 48.dp, end = 48.dp)
+                            contentPadding = PaddingValues(top = 24.dp, bottom = 56.dp, start = 24.dp, end = 24.dp)
                         ) {
                             items(
                                 items = viewModel.userVideos,
                                 key = { video -> video.id }
                             ) { video ->
+                                val requester = remember { FocusRequester() }
+                                
+                                LaunchedEffect(Unit) {
+                                    if (video.id == viewModel.lastFocusedVideoId) {
+                                        requester.requestFocus()
+                                    }
+                                }
+
                                 VideoItem(
                                     video = video,
+                                    modifier = Modifier
+                                        .focusRequester(requester)
+                                        .onFocusChanged { 
+                                            if (it.isFocused) {
+                                                viewModel.lastFocusedVideoId = video.id 
+                                            }
+                                        },
                                     onClick = { clickedVideo ->
                                         coroutineScope.launch {
                                             var cid = clickedVideo.cid
