@@ -9,9 +9,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.BackHandler
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bili.bilitv.utils.QRCodeGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -170,7 +171,7 @@ fun parseSessionDataFromUrl(url: String): Map<String, String> {
 
 enum class NavRoute(val title: String, val icon: ImageVector) {
     HOME("首页", Icons.Default.Home),
-    CATEGORY("分类", Icons.Default.List),
+    CATEGORY("分类", Icons.AutoMirrored.Filled.List),
     DYNAMIC("动态", Icons.Default.Star),
     LIVE("直播", Icons.Default.PlayArrow),
     USER("用户", Icons.Default.AccountCircle),
@@ -183,6 +184,9 @@ fun MainScreen() {
     var isFullScreenPlayer by remember { mutableStateOf(false) }
     var fullScreenPlayInfo by remember { mutableStateOf<VideoPlayInfo?>(null) }
     var fullScreenVideoTitle by remember { mutableStateOf("") }
+    
+    // 使用 ViewModel 保存首页状态
+    val homeViewModel: HomeViewModel = viewModel()
 
     // 处理返回按钮逻辑
     BackHandler(enabled = isFullScreenPlayer) {
@@ -221,6 +225,7 @@ fun MainScreen() {
             ) {
                 when (currentRoute) {
                     NavRoute.HOME -> HomeScreen(
+                        viewModel = homeViewModel,
                         onEnterFullScreen = { playInfo, title ->
                             isFullScreenPlayer = true
                             fullScreenPlayInfo = playInfo

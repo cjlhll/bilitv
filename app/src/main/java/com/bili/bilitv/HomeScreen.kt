@@ -7,12 +7,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -81,11 +84,10 @@ enum class TabType(val title: String) {
 @OptIn(ExperimentalSerializationApi::class)
 @Composable
 fun HomeScreen(
+    viewModel: HomeViewModel,
     modifier: Modifier = Modifier,
     onEnterFullScreen: (VideoPlayInfo, String) -> Unit = { _, _ -> }
 ) {
-    var selectedTab by remember { mutableStateOf(TabType.RECOMMEND) }
-    var hotVideos by remember { mutableStateOf<List<VideoItemData>>(emptyList()) }
     val coroutineScope = rememberCoroutineScope()
     
     // 播放状态
@@ -124,8 +126,8 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(selectedTab) {
-        if (selectedTab == TabType.HOT) {
+    LaunchedEffect(viewModel.selectedTab) {
+        if (viewModel.selectedTab == TabType.HOT && viewModel.hotVideos.isEmpty()) {
             Log.d("BiliTV", "Fetching popular videos for Hot tab...")
             try {
                 val url = "https://api.bilibili.com/x/web-interface/popular?pn=1&ps=20"
@@ -152,8 +154,8 @@ fun HomeScreen(
                             json.decodeFromString<PopularVideoResponse>(responseBody)
                         }
                         if (popularResponse.code == 0 && popularResponse.data != null) {
-                            hotVideos = popularResponse.data.list
-                            Log.d("BiliTV", "Fetched ${hotVideos.size} popular videos.")
+                            viewModel.hotVideos = popularResponse.data.list
+                            Log.d("BiliTV", "Fetched ${viewModel.hotVideos.size} popular videos.")
                         } else {
                             Log.e("BiliTV", "Popular Videos API error: ${popularResponse.message}")
                         }
@@ -175,23 +177,28 @@ fun HomeScreen(
         ) {
             // Tab栏
             TabRow(
-                selectedTab = selectedTab,
-                onTabSelected = { selectedTab = it }
+                selectedTab = viewModel.selectedTab,
+                onTabSelected = { viewModel.selectedTab = it }
             )
             
             Spacer(modifier = Modifier.height(16.dp))
             
             // 视频列表
-            val videosToDisplay = remember(selectedTab, hotVideos) {
-                when (selectedTab) {
-                    TabType.HOT -> hotVideos.map { mapVideoItemDataToVideo(it) }
-                    else -> getVideosForTab(selectedTab)
+            val videosToDisplay = remember(viewModel.selectedTab, viewModel.hotVideos) {
+                when (viewModel.selectedTab) {
+                    TabType.HOT -> viewModel.hotVideos.map { mapVideoItemDataToVideo(it) }
+                    else -> getVideosForTab(viewModel.selectedTab)
                 }
             }
-            VideoGrid(
-                videos = videosToDisplay,
-                onVideoClick = handleVideoClick
-            )
+            
+            // 使用 key 确保切换 Tab 时重新创建 Grid，从而应用新的初始滚动位置
+            key(viewModel.selectedTab) {
+                VideoGrid(
+                    videos = videosToDisplay,
+                    onVideoClick = handleVideoClick,
+                    viewModel = viewModel
+                )
+            }
         }
     }
 
@@ -267,9 +274,28 @@ private fun TabButton(
 private fun VideoGrid(
     videos: List<Video>,
     onVideoClick: (Video) -> Unit = {},
+    viewModel: HomeViewModel,
     modifier: Modifier = Modifier
 ) {
+    val currentTab = viewModel.selectedTab
+    val (initialIndex, initialOffset) = remember(currentTab) { viewModel.getScrollState(currentTab) }
+    val initialFocusIndex = remember(currentTab) { viewModel.getFocusedIndex(currentTab) }
+
+    val listState = rememberLazyGridState(
+        initialFirstVisibleItemIndex = initialIndex,
+        initialFirstVisibleItemScrollOffset = initialOffset
+    )
+
+    // 监听滚动位置并保存到 ViewModel
+    LaunchedEffect(listState, currentTab) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                viewModel.updateScrollState(currentTab, index, offset)
+            }
+    }
+
     LazyVerticalGrid(
+        state = listState,
         columns = GridCells.Fixed(4),
         modifier = modifier
             .fillMaxSize(),
@@ -282,10 +308,26 @@ private fun VideoGrid(
             bottom = 32.dp
         )
     ) {
-        items(videos) { video ->
+        itemsIndexed(videos) { index, video ->
+            val focusRequester = remember { FocusRequester() }
+            
+            // 恢复焦点
+            LaunchedEffect(Unit) {
+                if (index == initialFocusIndex) {
+                    focusRequester.requestFocus()
+                }
+            }
+
             VideoItem(
                 video = video,
-                onClick = onVideoClick
+                onClick = onVideoClick,
+                modifier = Modifier
+                    .focusRequester(focusRequester)
+                    .onFocusChanged {
+                        if (it.isFocused) {
+                            viewModel.updateFocusedIndex(currentTab, index)
+                        }
+                    }
             )
         }
     }
