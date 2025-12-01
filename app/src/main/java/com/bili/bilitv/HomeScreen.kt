@@ -74,7 +74,6 @@ data class Stat(
  */
 enum class TabType(val title: String) {
     RECOMMEND("推荐"),
-    TRENDING("动态"),
     HOT("热门")
 }
 
@@ -187,9 +186,10 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(16.dp))
             
             // 视频列表
-            val videosToDisplay = remember(viewModel.selectedTab, viewModel.hotVideos) {
+            val videosToDisplay = remember(viewModel.selectedTab, viewModel.hotVideos, viewModel.recommendVideos) {
                 when (viewModel.selectedTab) {
                     TabType.HOT -> viewModel.hotVideos.map { mapVideoItemDataToVideo(it) }
+                    TabType.RECOMMEND -> viewModel.recommendVideos.map { mapVideoItemDataToVideo(it) }
                     else -> getVideosForTab(viewModel.selectedTab)
                 }
             }
@@ -199,7 +199,12 @@ fun HomeScreen(
                 VideoGrid(
                     videos = videosToDisplay,
                     onVideoClick = handleVideoClick,
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    onLoadMore = {
+                        if (viewModel.selectedTab == TabType.RECOMMEND) {
+                            viewModel.loadMoreRecommend()
+                        }
+                    }
                 )
             }
         }
@@ -278,7 +283,8 @@ private fun VideoGrid(
     videos: List<Video>,
     onVideoClick: (Video) -> Unit = {},
     viewModel: HomeViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLoadMore: () -> Unit = {}
 ) {
     val currentTab = viewModel.selectedTab
     val (initialIndex, initialOffset) = remember(currentTab) { viewModel.getScrollState(currentTab) }
@@ -296,6 +302,23 @@ private fun VideoGrid(
             .collect { (index, offset) ->
                 viewModel.updateScrollState(currentTab, index, offset)
             }
+    }
+
+    // 监听滚动到底部
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+            val lastIndex = lastVisibleItem?.index ?: 0
+            
+            // 如果最后一个可见项接近总数（例如倒数第4个），则触发加载
+            totalItems > 0 && lastIndex >= totalItems - 4
+        }.collect { shouldLoad ->
+            if (shouldLoad) {
+                onLoadMore()
+            }
+        }
     }
 
     LazyVerticalGrid(
@@ -345,7 +368,6 @@ private fun VideoGrid(
 private fun getVideosForTab(tabType: TabType): List<Video> {
     val prefix = when (tabType) {
         TabType.RECOMMEND -> "推荐视频"
-        TabType.TRENDING -> "动态视频"
         TabType.HOT -> "热门视频"
     }
     
