@@ -303,6 +303,13 @@ fun MainScreen() {
                             fullScreenVideoTitle = title
                         }
                     )
+                    NavRoute.CATEGORY -> CategoryScreen(
+                        onEnterFullScreen = { playInfo, title ->
+                            isFullScreenPlayer = true
+                            fullScreenPlayInfo = playInfo
+                            fullScreenVideoTitle = title
+                        }
+                    )
                     NavRoute.SETTINGS -> PlaceholderScreen(NavRoute.SETTINGS.title)
                     else -> PlaceholderScreen(currentRoute.title)
                 }

@@ -1,0 +1,492 @@
+package com.bili.bilitv
+
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import android.util.Log
+
+data class MainZone(
+    val name: String,
+    val tid: Int
+)
+
+// --- Data Models ---
+
+@Serializable
+data class CategoryListResponse(
+    val code: Int,
+    val message: String,
+    val ttl: Int,
+    val data: CategoryListData? = null
+)
+
+@Serializable
+data class CategoryListData(
+    val type_list: List<CategoryItem>
+)
+
+@Serializable
+data class CategoryItem(
+    val id: Int,
+    val name: String
+)
+
+@Serializable
+data class CategoryVideoResponse(
+    val code: Int,
+    val message: String,
+    val ttl: Int,
+    val data: CategoryVideoData? = null
+)
+
+@Serializable
+data class CategoryVideoData(
+    val archives: List<ArchiveItem>
+)
+
+@Serializable
+data class ArchiveItem(
+    val aid: Long,
+    val bvid: String,
+    val cid: Long,
+    val title: String,
+    val cover: String,
+    val duration: Int,
+    val pubdate: Long,
+    val stat: ArchiveStat,
+    val author: ArchiveAuthor
+)
+
+@Serializable
+data class ArchiveStat(
+    val view: Int,
+    val like: Int,
+    val danmaku: Int
+)
+
+@Serializable
+data class ArchiveAuthor(
+    val mid: Long,
+    val name: String
+)
+
+// --- ViewModel ---
+
+class CategoryViewModel : ViewModel() {
+    private val _categories = MutableStateFlow<List<MainZone>>(emptyList())
+    val categories: StateFlow<List<MainZone>> = _categories.asStateFlow()
+
+    private val _selectedCategory = MutableStateFlow<MainZone?>(null)
+    val selectedCategory: StateFlow<MainZone?> = _selectedCategory.asStateFlow()
+
+    private val _videos = MutableStateFlow<List<Video>>(emptyList())
+    val videos: StateFlow<List<Video>> = _videos.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    // Scroll State Management
+    private val scrollStates = mutableMapOf<Int, Pair<Int, Int>>() // tid -> (index, offset)
+    private val focusedIndices = mutableMapOf<Int, Int>() // tid -> focusedIndex
+    var shouldRestoreFocusToGrid by mutableStateOf(false)
+
+    private var currentPage = 1
+    private val httpClient = OkHttpClient()
+    private val json = Json { ignoreUnknownKeys = true }
+
+    init {
+        fetchCategories()
+    }
+
+    private fun fetchCategories() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    val request = Request.Builder()
+                        .url("https://member.bilibili.com/x/vupre/web/archive/human/type2/list")
+                        .apply {
+                            // 尝试添加 Cookie，如果已登录
+                            SessionManager.getCookieString()?.let { cookie ->
+                                addHeader("Cookie", cookie)
+                            }
+                        }
+                        .build()
+                    httpClient.newCall(request).execute()
+                }
+
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (body != null) {
+                        val categoryListResponse = json.decodeFromString<CategoryListResponse>(body)
+                        if (categoryListResponse.code == 0 && categoryListResponse.data != null) {
+                            val zones = categoryListResponse.data.type_list.map {
+                                MainZone(it.name, it.id)
+                            }
+                            _categories.value = zones
+                            if (zones.isNotEmpty() && _selectedCategory.value == null) {
+                                selectCategory(zones.first())
+                            }
+                        } else {
+                             // API 返回非成功状态码 (e.g. -101 未登录) 或 data 为空，使用 fallback
+                             Log.w("CategoryViewModel", "API error: code=${categoryListResponse.code}, message=${categoryListResponse.message}")
+                             useFallbackCategories()
+                        }
+                    }
+                } else {
+                     Log.e("CategoryViewModel", "HTTP error: ${response.code}")
+                     useFallbackCategories()
+                }
+            } catch (e: Exception) {
+                Log.e("CategoryViewModel", "Error fetching categories", e)
+                useFallbackCategories()
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    private fun useFallbackCategories() {
+         val fallbackZones = listOf(
+            MainZone("动画", 1), MainZone("番剧", 13), MainZone("国创", 167),
+            MainZone("音乐", 3), MainZone("舞蹈", 129), MainZone("游戏", 4),
+            MainZone("知识", 36), MainZone("科技", 188), MainZone("运动", 234),
+            MainZone("汽车", 223), MainZone("生活", 160), MainZone("美食", 211),
+            MainZone("动物圈", 217), MainZone("鬼畜", 119), MainZone("时尚", 155),
+            MainZone("资讯", 5), MainZone("娱乐", 181), MainZone("影视", 181),
+            MainZone("纪录片", 177), MainZone("电影", 23), MainZone("电视剧", 11)
+        )
+        _categories.value = fallbackZones
+        if (_selectedCategory.value == null) {
+            selectCategory(fallbackZones.first())
+        }
+    }
+
+    fun selectCategory(zone: MainZone) {
+        _selectedCategory.value = zone
+        currentPage = 1 // Reset page logic. Note: The API uses `display_id` which increments.
+                        // For simplicity, we assume fetchVideos handles pagination start.
+        _videos.value = emptyList()
+        shouldRestoreFocusToGrid = false // Reset focus restore flag when changing category
+        fetchVideos(zone.tid, isRefresh = true)
+    }
+
+    fun loadMore() {
+        val currentZone = _selectedCategory.value ?: return
+        fetchVideos(currentZone.tid, isRefresh = false)
+    }
+
+    private fun fetchVideos(regionId: Int, isRefresh: Boolean) {
+        if (isRefresh) {
+            currentPage = 1
+        }
+
+        viewModelScope.launch {
+            // Don't show full screen loading for load more, maybe show bottom indicator?
+            // For now, just generic loading state for initial load
+            if (isRefresh) _isLoading.value = true
+
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    val url = "https://api.bilibili.com/x/web-interface/region/feed/rcmd?" +
+                            "display_id=$currentPage&request_cnt=15&from_region=$regionId&device=web&plat=30"
+                    val request = Request.Builder()
+                        .url(url)
+                        .apply {
+                            // 尝试添加 Cookie，如果已登录
+                            SessionManager.getCookieString()?.let { cookie ->
+                                addHeader("Cookie", cookie)
+                            }
+                            // 添加 Referer 防止被拦截
+                            addHeader("Referer", "https://www.bilibili.com/")
+                            addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                        }
+                        .build()
+                    httpClient.newCall(request).execute()
+                }
+
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (body != null) {
+                        val videoResponse = json.decodeFromString<CategoryVideoResponse>(body)
+                        if (videoResponse.code == 0 && videoResponse.data != null) {
+                            val newVideos = videoResponse.data.archives.map { archive ->
+                                Video(
+                                    id = archive.bvid,
+                                    bvid = archive.bvid,
+                                    cid = archive.cid,
+                                    title = archive.title,
+                                    coverUrl = archive.cover,
+                                    author = archive.author.name,
+                                    playCount = "${archive.stat.view}",
+                                    pubDate = archive.pubdate
+                                )
+                            }
+                            if (isRefresh) {
+                                _videos.value = newVideos
+                            } else {
+                                _videos.value += newVideos
+                            }
+                            currentPage++ 
+                        } else {
+                            Log.w("CategoryViewModel", "Video API returned error or empty data: code=${videoResponse.code}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("CategoryViewModel", "Error fetching videos", e)
+            } finally {
+                if (isRefresh) _isLoading.value = false
+            }
+        }
+    }
+
+    // --- Scroll & Focus State Management ---
+
+    fun updateScrollState(tid: Int, index: Int, offset: Int) {
+        scrollStates[tid] = index to offset
+    }
+
+    fun getScrollState(tid: Int): Pair<Int, Int> {
+        return scrollStates[tid] ?: (0 to 0)
+    }
+
+    fun updateFocusedIndex(tid: Int, index: Int) {
+        focusedIndices[tid] = index
+    }
+
+    fun getFocusedIndex(tid: Int): Int {
+        return focusedIndices[tid] ?: -1
+    }
+    
+    fun onEnterFullScreen() {
+        shouldRestoreFocusToGrid = true
+    }
+}
+
+// --- UI Components ---
+
+@Composable
+fun CategoryScreen(
+    viewModel: CategoryViewModel = viewModel(),
+    onEnterFullScreen: (VideoPlayInfo, String) -> Unit = { _, _ -> }
+) {
+    val categories by viewModel.categories.collectAsState()
+    val selectedCategory by viewModel.selectedCategory.collectAsState()
+    val videos by viewModel.videos.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // 处理视频点击
+    val handleVideoClick: (Video) -> Unit = { video ->
+        if (video.bvid.isNotEmpty() && video.cid != 0L) {
+            Log.d("BiliTV", "Video clicked: ${video.title} (bvid=${video.bvid}, cid=${video.cid})")
+            coroutineScope.launch {
+                val playInfo = VideoPlayUrlFetcher.fetchPlayUrl(
+                    bvid = video.bvid,
+                    cid = video.cid,
+                    qn = 80, // 1080P - 非大会员最高清晰度
+                    fnval = 4048 // DASH格式
+                )
+                
+                if (playInfo != null) {
+                    // 记录进入全屏状态，以便返回时恢复焦点
+                    viewModel.onEnterFullScreen()
+                    // 进入全屏播放
+                    onEnterFullScreen(playInfo, video.title)
+                } else {
+                    Log.e("BiliTV", "Failed to fetch play URL")
+                }
+            }
+        } else {
+            Log.w("BiliTV", "Video missing bvid or cid: ${video.title}")
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(start = 24.dp, top = 24.dp, end = 24.dp)
+    ) {
+        // 横向滚动Tabs
+        if (categories.isNotEmpty()) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 8.dp)
+            ) {
+                items(categories) { zone ->
+                    CategoryTabButton(
+                        text = zone.name,
+                        selected = selectedCategory == zone,
+                        onClick = { viewModel.selectCategory(zone) }
+                    )
+                }
+            }
+        }
+
+        // 内容区域
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .weight(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isLoading && videos.isEmpty()) {
+                CircularProgressIndicator()
+            } else {
+                // 使用 key 确保切换 Tab 时重新创建 Grid，从而应用新的初始滚动位置
+                key(selectedCategory?.tid) {
+                    VideoGrid(
+                        videos = videos,
+                        viewModel = viewModel,
+                        onVideoClick = handleVideoClick,
+                        onLoadMore = { viewModel.loadMore() }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryTabButton(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (isFocused) 1.1f else 1.0f, label = "scale")
+
+    Button(
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primary 
+                            else MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary 
+                          else MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null,
+        modifier = modifier
+            .height(40.dp)
+            .onFocusChanged { isFocused = it.isFocused }
+            .scale(scale),
+        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 0.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge
+        )
+    }
+}
+
+@Composable
+private fun VideoGrid(
+    videos: List<Video>,
+    viewModel: CategoryViewModel,
+    onVideoClick: (Video) -> Unit = {},
+    onLoadMore: () -> Unit = {}
+) {
+    val currentTid = viewModel.selectedCategory.collectAsState().value?.tid ?: 0
+    val (initialIndex, initialOffset) = remember(currentTid) { viewModel.getScrollState(currentTid) }
+    val initialFocusIndex = remember(currentTid) { viewModel.getFocusedIndex(currentTid) }
+    val shouldRestoreFocus = viewModel.shouldRestoreFocusToGrid
+
+    val listState = rememberLazyGridState(
+        initialFirstVisibleItemIndex = initialIndex,
+        initialFirstVisibleItemScrollOffset = initialOffset
+    )
+
+    // 监听滚动位置并保存到 ViewModel
+    LaunchedEffect(listState, currentTid) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                viewModel.updateScrollState(currentTid, index, offset)
+            }
+    }
+
+    // 监听滚动到底部
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+            val lastIndex = lastVisibleItem?.index ?: 0
+            
+            // 如果最后一个可见项接近总数（例如倒数第4个），则触发加载
+            totalItems > 0 && lastIndex >= totalItems - 4
+        }.collect { shouldLoad ->
+            if (shouldLoad) {
+                onLoadMore()
+            }
+        }
+    }
+
+    LazyVerticalGrid(
+        state = listState,
+        columns = GridCells.Fixed(4),
+        modifier = Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
+    ) {
+        itemsIndexed(videos) { index, video ->
+            val focusRequester = remember { FocusRequester() }
+            
+            // 恢复焦点
+            LaunchedEffect(shouldRestoreFocus) {
+                if (shouldRestoreFocus) {
+                    if (index == initialFocusIndex || (initialFocusIndex == -1 && index == 0)) {
+                        focusRequester.requestFocus()
+                    }
+                }
+            }
+
+            VideoItem(
+                video = video,
+                onClick = onVideoClick,
+                modifier = Modifier
+                    .focusRequester(focusRequester)
+                    .onFocusChanged {
+                        if (it.isFocused) {
+                            viewModel.updateFocusedIndex(currentTid, index)
+                        }
+                    }
+            )
+        }
+    }
+}
