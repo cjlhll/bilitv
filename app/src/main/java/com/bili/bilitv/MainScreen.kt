@@ -205,6 +205,7 @@ fun MainScreen() {
     var currentRoute by remember { mutableStateOf(NavRoute.HOME) }
     var isFullScreenPlayer by remember { mutableStateOf(false) }
     var fullScreenPlayInfo by remember { mutableStateOf<VideoPlayInfo?>(null) }
+    var fullScreenLivePlayInfo by remember { mutableStateOf<LivePlayInfo?>(null) }
     var fullScreenVideoTitle by remember { mutableStateOf("") }
     
     // 使用 ViewModel 保存首页状态
@@ -257,21 +258,34 @@ fun MainScreen() {
         // 当在全屏播放器时，返回按钮只退出播放器
         isFullScreenPlayer = false
         fullScreenPlayInfo = null
+        fullScreenLivePlayInfo = null
         fullScreenVideoTitle = ""
     }
 
-    // 全屏播放器
-    if (isFullScreenPlayer && fullScreenPlayInfo != null) {
-        VideoPlayerScreen(
-            videoPlayInfo = fullScreenPlayInfo!!,
-            videoTitle = fullScreenVideoTitle,
-            onBackClick = {
-                isFullScreenPlayer = false
-                fullScreenPlayInfo = null
-                fullScreenVideoTitle = ""
+    if (isFullScreenPlayer) {
+            if (fullScreenLivePlayInfo != null) {
+                // 直播播放
+                VideoPlayerScreen(
+                    videoPlayInfo = fullScreenLivePlayInfo!!.toVideoPlayInfo(),
+                    videoTitle = fullScreenVideoTitle,
+                    onBackClick = {
+                        isFullScreenPlayer = false
+                        fullScreenLivePlayInfo = null
+                    },
+                    isLiveStream = true
+                )
+            } else if (fullScreenPlayInfo != null) {
+                // 普通视频播放
+                VideoPlayerScreen(
+                    videoPlayInfo = fullScreenPlayInfo!!,
+                    videoTitle = fullScreenVideoTitle,
+                    onBackClick = {
+                        isFullScreenPlayer = false
+                        fullScreenPlayInfo = null
+                    }
+                )
             }
-        )
-    } else {
+        } else {
         // 普通界面（带导航栏）
         Row(modifier = Modifier.fillMaxSize()) {
             // Left Side Navigation
@@ -339,6 +353,11 @@ fun MainScreen() {
                                 onEnterFullScreen = { playInfo, title ->
                                     isFullScreenPlayer = true
                                     fullScreenPlayInfo = playInfo
+                                    fullScreenVideoTitle = title
+                                },
+                                onEnterLiveRoom = { livePlayInfo, title ->
+                                    isFullScreenPlayer = true
+                                    fullScreenLivePlayInfo = livePlayInfo
                                     fullScreenVideoTitle = title
                                 }
                             )

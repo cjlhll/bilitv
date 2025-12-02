@@ -57,6 +57,7 @@ fun VideoPlayerScreen(
     videoPlayInfo: VideoPlayInfo,
     videoTitle: String,
     onBackClick: () -> Unit,
+    isLiveStream: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -90,9 +91,11 @@ fun VideoPlayerScreen(
         focusRequester.requestFocus()
     }
     
-    // 获取预览图数据
+    // 获取预览图数据（仅限普通视频）
     LaunchedEffect(videoPlayInfo.bvid, videoPlayInfo.cid) {
-        videoshotData = VideoPlayUrlFetcher.fetchVideoshot(videoPlayInfo.bvid, videoPlayInfo.cid)
+        if (!isLiveStream) {
+            videoshotData = VideoPlayUrlFetcher.fetchVideoshot(videoPlayInfo.bvid, videoPlayInfo.cid)
+        }
     }
 
     // 3秒后自动隐藏
@@ -122,11 +125,11 @@ fun VideoPlayerScreen(
         )
     }
     
-    // 定时更新进度
+    // 定时更新进度（直播流不显示进度）
     LaunchedEffect(exoPlayer) {
         while (true) {
-            // 只有在不处于seeking状态时才更新currentTime
-            if (exoPlayer.isPlaying && !isSeeking && !isLongPressing) {
+            // 只有在不处于seeking状态且不是直播流时才更新currentTime
+            if (exoPlayer.isPlaying && !isSeeking && !isLongPressing && !isLiveStream) {
                 currentTime = exoPlayer.currentPosition
                 duration = exoPlayer.duration.coerceAtLeast(0)
             }
@@ -184,8 +187,8 @@ fun VideoPlayerScreen(
                                     isOverlayVisible = true
                                     if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || 
                                         event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER) {
-                                        if (isSeeking) {
-                                            // 确认seek
+                                        if (isSeeking && !isLiveStream) {
+                                            // 确认seek（仅限普通视频）
                                             exoPlayer.seekTo(previewTime)
                                             // 保持seek状态一小段时间，防止进度条跳变
                                             coroutineScope.launch {
@@ -201,6 +204,9 @@ fun VideoPlayerScreen(
                                     }
                                 }
                                 KeyEvent.KEYCODE_DPAD_LEFT -> {
+                                    // 直播流不支持快退
+                                    if (isLiveStream) return@onPreviewKeyEvent false
+                                    
                                     // 标记为seeking状态
                                     if (!isSeeking) {
                                         isSeeking = true
@@ -227,6 +233,9 @@ fun VideoPlayerScreen(
                                     }
                                 }
                                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                    // 直播流不支持快进
+                                    if (isLiveStream) return@onPreviewKeyEvent false
+                                    
                                     // 标记为seeking状态
                                     if (!isSeeking) {
                                         isSeeking = true
@@ -255,8 +264,8 @@ fun VideoPlayerScreen(
                             }
                         } else if (event.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
                             // 松开按键处理
-                            if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || 
-                                event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                            if ((event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || 
+                                event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) && !isLiveStream) {
                                 
                                 if (isLongPressing) {
                                     // 长按结束
@@ -358,8 +367,8 @@ fun VideoPlayerScreen(
                             )
                             .padding(start = 32.dp, end = 32.dp, bottom = 32.dp, top = 16.dp) // 增加边距，使其悬浮
                     ) {
-                        // 预览窗口
-                        if (isSeeking && previewTime >= 0 && videoshotData != null) {
+                        // 预览窗口（仅限普通视频）
+                        if (!isLiveStream && isSeeking && previewTime >= 0 && videoshotData != null) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -388,6 +397,7 @@ fun VideoPlayerScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
+                            if (!isLiveStream) {
                             Text(
                                 text = formatDuration(if (isSeeking) previewTime else currentTime),
                                 color = Color.White,
@@ -432,13 +442,23 @@ fun VideoPlayerScreen(
                                 color = Color.White,
                                 style = MaterialTheme.typography.bodyMedium
                             )
+                        } else {
+                            // 直播流显示"直播中"标识
+                            Text(
+                                text = "直播中",
+                                color = Color.Red,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                         }
                         
                         Spacer(modifier = Modifier.height(4.dp))
                         
                         // 视频信息
                         Text(
-                            text = "${videoPlayInfo.format.uppercase()} | ${getQualityName(videoPlayInfo.quality)}",
+                            text = if (isLiveStream) "直播流 | ${videoPlayInfo.format.uppercase()}" 
+                                  else "${videoPlayInfo.format.uppercase()} | ${getQualityName(videoPlayInfo.quality)}",
                             color = Color.White.copy(alpha = 0.7f),
                             style = MaterialTheme.typography.labelSmall
                         )
@@ -534,16 +554,17 @@ private fun createExoPlayer(
     // 配置请求头
     val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     val headers = mapOf(
-        "Referer" to "https://www.bilibili.com",
-        "User-Agent" to userAgent
+        "Referer" to if (videoPlayInfo.bvid.startsWith("live_")) "https://live.bilibili.com" else "https://www.bilibili.com",
+        "User-Agent" to userAgent,
+        "Origin" to if (videoPlayInfo.bvid.startsWith("live_")) "https://live.bilibili.com" else "https://www.bilibili.com"
     )
 
     val dataSourceFactory = DefaultHttpDataSource.Factory()
         .setUserAgent(userAgent)
         .setDefaultRequestProperties(headers)
 
-    val mediaSourceFactory = DefaultMediaSourceFactory(context)
-        .setDataSourceFactory(dataSourceFactory)
+    // 创建支持多种格式的MediaSourceFactory
+    val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
     val exoPlayer = ExoPlayer.Builder(context)
         .setMediaSourceFactory(mediaSourceFactory)
@@ -566,11 +587,8 @@ private fun createExoPlayer(
     // 根据格式创建不同的MediaSource
     if (videoPlayInfo.format == "dash" && !videoPlayInfo.audioUrl.isNullOrEmpty()) {
         // DASH格式：合并视频和音频流
-        val videoMediaItem = MediaItem.fromUri(videoPlayInfo.videoUrl)
-        val audioMediaItem = MediaItem.fromUri(videoPlayInfo.audioUrl)
-        
-        val videoMediaSource = mediaSourceFactory.createMediaSource(videoMediaItem)
-        val audioMediaSource = mediaSourceFactory.createMediaSource(audioMediaItem)
+        val videoMediaSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(videoPlayInfo.videoUrl))
+        val audioMediaSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(videoPlayInfo.audioUrl))
         
         // 合并音视频源
         val mergedMediaSource = androidx.media3.exoplayer.source.MergingMediaSource(
@@ -580,8 +598,17 @@ private fun createExoPlayer(
         
         exoPlayer.setMediaSource(mergedMediaSource)
     } else {
-        // MP4格式或其他情况：单一视频流
-        val mediaItem = MediaItem.fromUri(videoPlayInfo.videoUrl)
+        // HLS、FLV、MP4格式：单一视频流
+        // 为HLS流设置特殊的MediaItem
+        val mediaItemBuilder = MediaItem.Builder()
+            .setUri(videoPlayInfo.videoUrl)
+        
+        // 如果是HLS流，设置MIME类型
+        if (videoPlayInfo.videoUrl.endsWith(".m3u8")) {
+            mediaItemBuilder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+        }
+        
+        val mediaItem = mediaItemBuilder.build()
         exoPlayer.setMediaItem(mediaItem)
     }
     

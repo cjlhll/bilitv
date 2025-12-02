@@ -92,6 +92,20 @@ class LiveRoomListViewModel : ViewModel() {
     var scrollOffset = 0
     var focusedIndex = -1
 
+    /**
+     * 进入直播间
+     */
+    fun enterLiveRoom(roomId: Int, title: String, uname: String, onEnterLiveRoom: (LivePlayInfo, String) -> Unit) {
+        viewModelScope.launch {
+            val livePlayInfo = LiveStreamUrlFetcher.fetchLivePlayInfo(roomId, title, uname)
+            if (livePlayInfo != null) {
+                onEnterLiveRoom(livePlayInfo, title)
+            } else {
+                Log.e("LiveRoomListViewModel", "无法获取直播间播放信息")
+            }
+        }
+    }
+
     fun initialLoad(parentAreaId: String, areaId: String, force: Boolean = false) {
         if (!force && currentAreaId == areaId && _rooms.value.isNotEmpty()) {
             // Already loaded, don't reset
@@ -204,6 +218,7 @@ fun LiveRoomListScreen(
     enterTimestamp: Long,
     onBack: () -> Unit,
     onEnterFullScreen: (VideoPlayInfo, String) -> Unit,
+    onEnterLiveRoom: (LivePlayInfo, String) -> Unit,
     viewModel: LiveRoomListViewModel = viewModel()
 ) {
     val rooms by viewModel.rooms.collectAsState()
@@ -319,6 +334,8 @@ fun LiveRoomListScreen(
                             },
                         onClick = {
                             Log.d("LiveRoomList", "Clicked room: ${room.title}")
+                            // 获取直播流信息并跳转到播放页
+                            viewModel.enterLiveRoom(room.roomid, room.title, room.uname, onEnterLiveRoom)
                         }
                     )
                 }
