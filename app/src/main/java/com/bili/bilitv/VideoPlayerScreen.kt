@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.drawable.BitmapDrawable
 import android.util.Log
 import android.view.KeyEvent
+import android.view.WindowManager
+import android.view.View
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
@@ -63,6 +65,15 @@ fun VideoPlayerScreen(
     val context = LocalContext.current
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    
+    // 设置保持屏幕常亮
+    DisposableEffect(Unit) {
+        val window = (context as? android.app.Activity)?.window
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
     
     // 播放器状态
     var currentTime by remember { mutableLongStateOf(0L) }
