@@ -57,7 +57,8 @@ data class UserInfoData(
     val mid: Long,
     val uname: String,
     val face: String,
-    val isLogin: Boolean = false
+    val isLogin: Boolean = false,
+    val wbi_img: WbiImg? = null
 )
 
 @Serializable
@@ -115,6 +116,9 @@ object SessionManager {
     private var context: Context? = null
     private const val PREFS_NAME = "bili_session"
     private const val SESSION_KEY = "logged_in_session"
+
+    var wbiImgKey: String? = null
+    var wbiSubKey: String? = null
     
     fun init(context: Context) {
         this.context = context
@@ -225,8 +229,14 @@ fun MainScreen() {
                         if (body != null) {
                             try {
                                 val apiResp = json.decodeFromString<UserInfoResponse>(body)
-                                if (apiResp.code == 0 && apiResp.data?.isLogin == true) {
+                                if (apiResp.code == 0) {
                                     userInfo = apiResp.data
+                                    // Extract and store WBI keys
+                                    apiResp.data?.wbi_img?.let { wbi ->
+                                        SessionManager.wbiImgKey = wbi.img_url.substringAfterLast("/").substringBefore(".")
+                                        SessionManager.wbiSubKey = wbi.sub_url.substringAfterLast("/").substringBefore(".")
+                                        Log.d("BiliTV", "WBI Keys extracted: ${SessionManager.wbiImgKey}, ${SessionManager.wbiSubKey}")
+                                    }
                                 } else {
                                     Log.e("BiliTV", "Failed to get user info: ${apiResp.message}")
                                 }
@@ -310,7 +320,30 @@ fun MainScreen() {
                             fullScreenVideoTitle = title
                         }
                     )
-                    NavRoute.LIVE -> LiveAreaScreen()
+                    NavRoute.LIVE -> {
+                        var selectedArea by remember { mutableStateOf<LiveAreaItem?>(null) }
+                        var liveListEnterTimestamp by remember { mutableLongStateOf(0L) }
+
+                        if (selectedArea == null) {
+                            LiveAreaScreen(
+                                onAreaClick = { area -> 
+                                    selectedArea = area 
+                                    liveListEnterTimestamp = System.currentTimeMillis()
+                                }
+                            )
+                        } else {
+                            LiveRoomListScreen(
+                                area = selectedArea!!,
+                                enterTimestamp = liveListEnterTimestamp,
+                                onBack = { selectedArea = null },
+                                onEnterFullScreen = { playInfo, title ->
+                                    isFullScreenPlayer = true
+                                    fullScreenPlayInfo = playInfo
+                                    fullScreenVideoTitle = title
+                                }
+                            )
+                        }
+                    }
                     NavRoute.SETTINGS -> PlaceholderScreen(NavRoute.SETTINGS.title)
                     else -> PlaceholderScreen(currentRoute.title)
                 }

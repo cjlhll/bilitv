@@ -62,6 +62,11 @@ object WbiUtil {
             .replace("+", "%20")
             .replace("*", "%2A")
             .replace("%7E", "~")
+            .replace("%21", "!")
+            .replace("%27", "'")
+            .replace("%28", "(")
+            .replace("%29", ")")
+            .replace("%2A", "*")
     }
 
     private fun md5(s: String): String {

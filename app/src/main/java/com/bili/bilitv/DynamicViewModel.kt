@@ -52,9 +52,6 @@ data class NavResponse(val code: Int, val data: NavData? = null)
 data class NavData(val wbi_img: WbiImg? = null)
 
 @Serializable
-data class WbiImg(val img_url: String, val sub_url: String)
-
-@Serializable
 data class SpaceSearchResponse(val code: Int, val message: String, val data: SpaceSearchData? = null)
 
 @Serializable
