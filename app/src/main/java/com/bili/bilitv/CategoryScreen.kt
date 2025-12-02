@@ -105,7 +105,7 @@ data class ArchiveAuthor(
 
 // --- ViewModel ---
 
-class CategoryViewModel : ViewModel() {
+class CategoryViewModel : ViewModel(), VideoGridStateManager {
     private val _categories = MutableStateFlow<List<MainZone>>(emptyList())
     val categories: StateFlow<List<MainZone>> = _categories.asStateFlow()
 
@@ -121,7 +121,7 @@ class CategoryViewModel : ViewModel() {
     // Scroll State Management
     private val scrollStates = mutableMapOf<Int, Pair<Int, Int>>() // tid -> (index, offset)
     private val focusedIndices = mutableMapOf<Int, Int>() // tid -> focusedIndex
-    var shouldRestoreFocusToGrid by mutableStateOf(false)
+    override var shouldRestoreFocusToGrid by mutableStateOf(false)
 
     private var currentPage = 1
     private val httpClient = OkHttpClient()
@@ -274,22 +274,33 @@ class CategoryViewModel : ViewModel() {
         }
     }
 
-    // --- Scroll & Focus State Management ---
-
-    fun updateScrollState(tid: Int, index: Int, offset: Int) {
-        scrollStates[tid] = index to offset
+    // VideoGridStateManager 接口实现
+    override fun updateScrollState(key: Any, index: Int, offset: Int) {
+        if (key is Int) {
+            scrollStates[key] = index to offset
+        }
     }
 
-    fun getScrollState(tid: Int): Pair<Int, Int> {
-        return scrollStates[tid] ?: (0 to 0)
+    override fun getScrollState(key: Any): Pair<Int, Int> {
+        return if (key is Int) {
+            scrollStates[key] ?: (0 to 0)
+        } else {
+            (0 to 0)
+        }
     }
 
-    fun updateFocusedIndex(tid: Int, index: Int) {
-        focusedIndices[tid] = index
+    override fun updateFocusedIndex(key: Any, index: Int) {
+        if (key is Int) {
+            focusedIndices[key] = index
+        }
     }
 
-    fun getFocusedIndex(tid: Int): Int {
-        return focusedIndices[tid] ?: -1
+    override fun getFocusedIndex(key: Any): Int {
+        return if (key is Int) {
+            focusedIndices[key] ?: -1
+        } else {
+            -1
+        }
     }
     
     fun onEnterFullScreen() {
@@ -371,11 +382,16 @@ fun CategoryScreen(
             } else {
                 // 使用 key 确保切换 Tab 时重新创建 Grid，从而应用新的初始滚动位置
                 key(selectedCategory?.tid) {
-                    VideoGrid(
+                    CommonVideoGrid(
                         videos = videos,
-                        viewModel = viewModel,
+                        stateManager = viewModel,
+                        stateKey = selectedCategory?.tid ?: 0,
+                        columns = 4,
                         onVideoClick = handleVideoClick,
-                        onLoadMore = { viewModel.loadMore() }
+                        onLoadMore = { viewModel.loadMore() },
+                        horizontalSpacing = 20.dp,
+                        verticalSpacing = 20.dp,
+                        contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
                     )
                 }
             }
@@ -416,79 +432,4 @@ private fun CategoryTabButton(
     }
 }
 
-@Composable
-private fun VideoGrid(
-    videos: List<Video>,
-    viewModel: CategoryViewModel,
-    onVideoClick: (Video) -> Unit = {},
-    onLoadMore: () -> Unit = {}
-) {
-    val currentTid = viewModel.selectedCategory.collectAsState().value?.tid ?: 0
-    val (initialIndex, initialOffset) = remember(currentTid) { viewModel.getScrollState(currentTid) }
-    val initialFocusIndex = remember(currentTid) { viewModel.getFocusedIndex(currentTid) }
-    val shouldRestoreFocus = viewModel.shouldRestoreFocusToGrid
 
-    val listState = rememberLazyGridState(
-        initialFirstVisibleItemIndex = initialIndex,
-        initialFirstVisibleItemScrollOffset = initialOffset
-    )
-
-    // 监听滚动位置并保存到 ViewModel
-    LaunchedEffect(listState, currentTid) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .collect { (index, offset) ->
-                viewModel.updateScrollState(currentTid, index, offset)
-            }
-    }
-
-    // 监听滚动到底部
-    LaunchedEffect(listState) {
-        snapshotFlow {
-            val layoutInfo = listState.layoutInfo
-            val totalItems = layoutInfo.totalItemsCount
-            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-            val lastIndex = lastVisibleItem?.index ?: 0
-            
-            // 如果最后一个可见项接近总数（例如倒数第4个），则触发加载
-            totalItems > 0 && lastIndex >= totalItems - 4
-        }.collect { shouldLoad ->
-            if (shouldLoad) {
-                onLoadMore()
-            }
-        }
-    }
-
-    LazyVerticalGrid(
-        state = listState,
-        columns = GridCells.Fixed(4),
-        modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
-    ) {
-        itemsIndexed(videos) { index, video ->
-            val focusRequester = remember { FocusRequester() }
-            
-            // 恢复焦点
-            LaunchedEffect(shouldRestoreFocus) {
-                if (shouldRestoreFocus) {
-                    if (index == initialFocusIndex || (initialFocusIndex == -1 && index == 0)) {
-                        focusRequester.requestFocus()
-                    }
-                }
-            }
-
-            VideoItem(
-                video = video,
-                onClick = onVideoClick,
-                modifier = Modifier
-                    .focusRequester(focusRequester)
-                    .onFocusChanged {
-                        if (it.isFocused) {
-                            viewModel.updateFocusedIndex(currentTid, index)
-                        }
-                    }
-            )
-        }
-    }
-}

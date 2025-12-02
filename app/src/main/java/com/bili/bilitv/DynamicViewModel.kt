@@ -137,7 +137,7 @@ data class DynamicStat(
     val danmaku: String
 )
 
-class DynamicViewModel : ViewModel() {
+class DynamicViewModel : ViewModel(), VideoGridStateManager {
     var followingList by mutableStateOf<List<FollowingUser>>(emptyList())
     var isLoading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
@@ -160,6 +160,32 @@ class DynamicViewModel : ViewModel() {
     private var currentCookie: String = ""
     private var cachedImgKey: String? = null
     private var cachedSubKey: String? = null
+
+    // VideoGridStateManager 接口实现
+    override fun updateScrollState(key: Any, index: Int, offset: Int) {
+        videoListScrollIndex = index
+        videoListScrollOffset = offset
+    }
+
+    override fun getScrollState(key: Any): Pair<Int, Int> {
+        return videoListScrollIndex to videoListScrollOffset
+    }
+
+    override fun updateFocusedIndex(key: Any, index: Int) {
+        // For dynamic screen, we track focus by video ID
+        if (index >= 0 && index < userVideos.size) {
+            lastFocusedVideoId = userVideos[index].id
+        }
+    }
+
+    override fun getFocusedIndex(key: Any): Int {
+        // Find the index of the last focused video
+        val focusedId = lastFocusedVideoId ?: return -1
+        return userVideos.indexOfFirst { it.id == focusedId }
+    }
+
+    override val shouldRestoreFocusToGrid: Boolean
+        get() = true // Always restore focus for dynamic screen
 
     private val httpClient = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }

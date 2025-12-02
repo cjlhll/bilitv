@@ -159,16 +159,21 @@ fun HomeScreen(
             
             // 使用 key 确保切换 Tab 时重新创建 Grid，从而应用新的初始滚动位置
             key(viewModel.selectedTab) {
-                VideoGrid(
+                CommonVideoGrid(
                     videos = videosToDisplay,
+                    stateManager = viewModel,
+                    stateKey = viewModel.selectedTab,
+                    columns = 4,
                     onVideoClick = handleVideoClick,
-                    viewModel = viewModel,
                     onLoadMore = {
                         when (viewModel.selectedTab) {
                             TabType.RECOMMEND -> viewModel.loadMoreRecommend()
                             TabType.HOT -> viewModel.loadMoreHot()
                         }
-                    }
+                    },
+                    horizontalSpacing = 20.dp,
+                    verticalSpacing = 20.dp,
+                    contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
                 )
             }
         }
@@ -236,91 +241,6 @@ private fun TabButton(
             text = text,
             style = MaterialTheme.typography.labelMedium
         )
-    }
-}
-
-/**
- * 视频网格列表
- */
-@Composable
-private fun VideoGrid(
-    videos: List<Video>,
-    onVideoClick: (Video) -> Unit = {},
-    viewModel: HomeViewModel,
-    modifier: Modifier = Modifier,
-    onLoadMore: () -> Unit = {}
-) {
-    val currentTab = viewModel.selectedTab
-    val (initialIndex, initialOffset) = remember(currentTab) { viewModel.getScrollState(currentTab) }
-    val initialFocusIndex = remember(currentTab) { viewModel.getFocusedIndex(currentTab) }
-    val shouldRestoreFocus = viewModel.shouldRestoreFocusToGrid
-
-    val listState = rememberLazyGridState(
-        initialFirstVisibleItemIndex = initialIndex,
-        initialFirstVisibleItemScrollOffset = initialOffset
-    )
-
-    // 监听滚动位置并保存到 ViewModel
-    LaunchedEffect(listState, currentTab) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .collect { (index, offset) ->
-                viewModel.updateScrollState(currentTab, index, offset)
-            }
-    }
-
-    // 监听滚动到底部
-    LaunchedEffect(listState) {
-        snapshotFlow {
-            val layoutInfo = listState.layoutInfo
-            val totalItems = layoutInfo.totalItemsCount
-            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-            val lastIndex = lastVisibleItem?.index ?: 0
-            
-            // 如果最后一个可见项接近总数（例如倒数第4个），则触发加载
-            totalItems > 0 && lastIndex >= totalItems - 4
-        }.collect { shouldLoad ->
-            if (shouldLoad) {
-                onLoadMore()
-            }
-        }
-    }
-
-    LazyVerticalGrid(
-        state = listState,
-        columns = GridCells.Fixed(4),
-        modifier = modifier
-            .fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-        contentPadding = PaddingValues(
-            top = 16.dp,
-            bottom = 32.dp
-        )
-    ) {
-        itemsIndexed(videos) { index, video ->
-            val focusRequester = remember { FocusRequester() }
-            
-            // 恢复焦点
-            LaunchedEffect(shouldRestoreFocus) {
-                if (shouldRestoreFocus) {
-                    if (index == initialFocusIndex || (initialFocusIndex == -1 && index == 0)) {
-                        focusRequester.requestFocus()
-                    }
-                }
-            }
-
-            VideoItem(
-                video = video,
-                onClick = onVideoClick,
-                modifier = Modifier
-                    .focusRequester(focusRequester)
-                    .onFocusChanged {
-                        if (it.isFocused) {
-                            viewModel.updateFocusedIndex(currentTab, index)
-                        }
-                    }
-            )
-        }
     }
 }
 

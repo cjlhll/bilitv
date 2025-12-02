@@ -28,7 +28,7 @@ data class RecommendVideoData(
     val item: List<VideoItemData>? = null
 )
 
-class HomeViewModel : ViewModel() {
+class HomeViewModel : ViewModel(), VideoGridStateManager {
     var selectedTab by mutableStateOf(TabType.RECOMMEND)
     
     // Hot states
@@ -53,7 +53,7 @@ class HomeViewModel : ViewModel() {
     // Flag to control focus restoration logic
     // When switching tabs explicitly, we want focus to stay on the tab bar (false)
     // When returning from player or other screens, we want focus to restore to the list (true)
-    var shouldRestoreFocusToGrid by mutableStateOf(false)
+    override var shouldRestoreFocusToGrid by mutableStateOf(false)
 
     init {
         // Initial load for recommend videos
@@ -173,20 +173,33 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    fun updateScrollState(tab: TabType, index: Int, offset: Int) {
-        _tabScrollStates[tab] = index to offset
+    // VideoGridStateManager 接口实现
+    override fun updateScrollState(key: Any, index: Int, offset: Int) {
+        if (key is TabType) {
+            _tabScrollStates[key] = index to offset
+        }
     }
 
-    fun updateFocusedIndex(tab: TabType, index: Int) {
-        _tabFocusStates[tab] = index
+    override fun updateFocusedIndex(key: Any, index: Int) {
+        if (key is TabType) {
+            _tabFocusStates[key] = index
+        }
     }
     
-    fun getScrollState(tab: TabType): Pair<Int, Int> {
-        return _tabScrollStates[tab] ?: (0 to 0)
+    override fun getScrollState(key: Any): Pair<Int, Int> {
+        return if (key is TabType) {
+            _tabScrollStates[key] ?: (0 to 0)
+        } else {
+            (0 to 0)
+        }
     }
     
-    fun getFocusedIndex(tab: TabType): Int {
-        return _tabFocusStates[tab] ?: -1
+    override fun getFocusedIndex(key: Any): Int {
+        return if (key is TabType) {
+            _tabFocusStates[key] ?: -1
+        } else {
+            -1
+        }
     }
     
     fun onTabChanged(newTab: TabType) {

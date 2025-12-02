@@ -5,11 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.automirrored.filled.List
@@ -28,7 +23,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.collect
 
 import android.util.Log
 
@@ -147,101 +141,40 @@ fun DynamicScreen(
                             Text("暂无视频")
                         }
                     } else {
-                        val listState = rememberLazyGridState(
-                            initialFirstVisibleItemIndex = viewModel.videoListScrollIndex,
-                            initialFirstVisibleItemScrollOffset = viewModel.videoListScrollOffset
-                        )
-
-                        // Save scroll state
-                        LaunchedEffect(listState) {
-                            snapshotFlow {
-                                listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
-                            }.collect { (index, offset) ->
-                                viewModel.videoListScrollIndex = index
-                                viewModel.videoListScrollOffset = offset
-                            }
-                        }
-                        
-                        // Load more detection
-                        LaunchedEffect(listState) {
-                            snapshotFlow {
-                                val layoutInfo = listState.layoutInfo
-                                val totalItems = layoutInfo.totalItemsCount
-                                val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                                totalItems > 0 && lastVisibleItem >= totalItems - 6 // Trigger when 2 rows left
-                            }.collect { shouldLoad ->
-                                if (shouldLoad) {
-                                    viewModel.loadMoreVideos()
-                                }
-                            }
-                        }
-
-                        LazyVerticalGrid(
-                            state = listState,
-                            columns = GridCells.Fixed(3),
-                            horizontalArrangement = Arrangement.spacedBy(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(20.dp),
-                            contentPadding = PaddingValues(top = 24.dp, bottom = 56.dp, start = 24.dp, end = 24.dp)
-                        ) {
-                            items(
-                                items = viewModel.userVideos,
-                                key = { video -> video.id }
-                            ) { video ->
-                                val requester = remember { FocusRequester() }
-                                
-                                LaunchedEffect(Unit) {
-                                    if (video.id == viewModel.lastFocusedVideoId) {
-                                        requester.requestFocus()
-                                    }
-                                }
-
-                                VideoItem(
-                                    video = video,
-                                    modifier = Modifier
-                                        .focusRequester(requester)
-                                        .onFocusChanged { 
-                                            if (it.isFocused) {
-                                                viewModel.lastFocusedVideoId = video.id 
-                                            }
-                                        },
-                                    onClick = { clickedVideo ->
-                                        coroutineScope.launch {
-                                            var cid = clickedVideo.cid
-                                            if (cid == 0L && clickedVideo.bvid.isNotEmpty()) {
-                                                val details = VideoPlayUrlFetcher.fetchVideoDetails(clickedVideo.bvid)
-                                                if (details != null) {
-                                                    cid = details.cid
-                                                }
-                                            }
-                                            
-                                            if (cid != 0L && clickedVideo.bvid.isNotEmpty()) {
-                                                 val playInfo = VideoPlayUrlFetcher.fetchPlayUrl(
-                                                    bvid = clickedVideo.bvid,
-                                                    cid = cid,
-                                                    qn = 80, // 1080P - 非大会员最高清晰度
-                                                    fnval = 4048, // DASH格式
-                                                    cookie = SessionManager.getCookieString()
-                                                )
-                                                if (playInfo != null) {
-                                                    onEnterFullScreen(playInfo, clickedVideo.title)
-                                                }
-                                            }
+                        CommonVideoGrid(
+                            videos = viewModel.userVideos,
+                            stateManager = viewModel,
+                            stateKey = "dynamic",
+                            columns = 3,
+                            onVideoClick = { video ->
+                                coroutineScope.launch {
+                                    var cid = video.cid
+                                    if (cid == 0L && video.bvid.isNotEmpty()) {
+                                        val details = VideoPlayUrlFetcher.fetchVideoDetails(video.bvid)
+                                        if (details != null) {
+                                            cid = details.cid
                                         }
                                     }
-                                )
-                            }
-                            
-                            if (viewModel.isVideoLoading) {
-                                item(span = { GridItemSpan(3) }) {
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        CircularProgressIndicator()
+                                    
+                                    if (cid != 0L && video.bvid.isNotEmpty()) {
+                                         val playInfo = VideoPlayUrlFetcher.fetchPlayUrl(
+                                            bvid = video.bvid,
+                                            cid = cid,
+                                            qn = 80, // 1080P - 非大会员最高清晰度
+                                            fnval = 4048, // DASH格式
+                                            cookie = SessionManager.getCookieString()
+                                        )
+                                        if (playInfo != null) {
+                                            onEnterFullScreen(playInfo, video.title)
+                                        }
                                     }
                                 }
-                            }
-                        }
+                            },
+                            onLoadMore = { viewModel.loadMoreVideos() },
+                            horizontalSpacing = 20.dp,
+                            verticalSpacing = 20.dp,
+                            contentPadding = PaddingValues(top = 24.dp, bottom = 56.dp, start = 24.dp, end = 24.dp)
+                        )
                     }
                 }
             } else {

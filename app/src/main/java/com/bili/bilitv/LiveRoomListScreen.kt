@@ -7,10 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,7 +31,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -72,7 +67,7 @@ data class LiveRoomItem(
 
 // --- ViewModel ---
 
-class LiveRoomListViewModel : ViewModel() {
+class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
     private val _rooms = MutableStateFlow<List<LiveRoomItem>>(emptyList())
     val rooms: StateFlow<List<LiveRoomItem>> = _rooms.asStateFlow()
 
@@ -91,6 +86,27 @@ class LiveRoomListViewModel : ViewModel() {
     var scrollIndex = 0
     var scrollOffset = 0
     var focusedIndex = -1
+
+    // VideoGridStateManager 接口实现
+    override fun updateScrollState(key: Any, index: Int, offset: Int) {
+        scrollIndex = index
+        scrollOffset = offset
+    }
+
+    override fun getScrollState(key: Any): Pair<Int, Int> {
+        return scrollIndex to scrollOffset
+    }
+
+    override fun updateFocusedIndex(key: Any, index: Int) {
+        focusedIndex = index
+    }
+
+    override fun getFocusedIndex(key: Any): Int {
+        return focusedIndex
+    }
+
+    override val shouldRestoreFocusToGrid: Boolean
+        get() = false // 直播列表不需要自动恢复焦点
 
     /**
      * 进入直播间
@@ -199,15 +215,6 @@ class LiveRoomListViewModel : ViewModel() {
             }
         }
     }
-    
-    fun updateScrollState(index: Int, offset: Int) {
-        scrollIndex = index
-        scrollOffset = offset
-    }
-
-    fun updateFocusedIndex(index: Int) {
-        focusedIndex = index
-    }
 }
 
 // --- Screen ---
@@ -229,39 +236,9 @@ fun LiveRoomListScreen(
         onBack()
     }
 
-    val listState = rememberLazyGridState(
-        initialFirstVisibleItemIndex = viewModel.scrollIndex,
-        initialFirstVisibleItemScrollOffset = viewModel.scrollOffset
-    )
-
     LaunchedEffect(enterTimestamp) {
         // Force reload and reset on new entry
         viewModel.initialLoad(area.parent_id, area.id, force = true)
-        listState.scrollToItem(0, 0)
-    }
-
-    // Track scroll state
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .collect { (index, offset) ->
-                viewModel.updateScrollState(index, offset)
-            }
-    }
-
-    // Load more when scrolling to bottom
-    LaunchedEffect(listState) {
-        snapshotFlow {
-            val layoutInfo = listState.layoutInfo
-            val totalItems = layoutInfo.totalItemsCount
-            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-            val lastIndex = lastVisibleItem?.index ?: 0
-            // Trigger when within 4 items of bottom
-            totalItems > 0 && lastIndex >= totalItems - 4
-        }.collect { shouldLoad ->
-            if (shouldLoad) {
-                viewModel.loadMore()
-            }
-        }
     }
 
     Column(
@@ -305,40 +282,29 @@ fun LiveRoomListScreen(
                 }
             }
         } else {
-            LazyVerticalGrid(
-                state = listState,
-                columns = GridCells.Fixed(4), // Match HomeScreen
-                horizontalArrangement = Arrangement.spacedBy(20.dp), // Match HomeScreen
-                verticalArrangement = Arrangement.spacedBy(20.dp), // Match HomeScreen
+            CommonVideoGrid(
+                items = rooms,
+                stateManager = viewModel,
+                stateKey = "live_room_${area.id}",
+                columns = 4,
+                onItemClick = { room ->
+                    Log.d("LiveRoomList", "Clicked room: ${room.title}")
+                    // 获取直播流信息并跳转到播放页
+                    viewModel.enterLiveRoom(room.roomid, room.title, room.uname, onEnterLiveRoom)
+                },
+                onLoadMore = { viewModel.loadMore() },
+                horizontalSpacing = 20.dp,
+                verticalSpacing = 20.dp,
                 contentPadding = PaddingValues(top = 20.dp, bottom = 24.dp)
-            ) {
-                itemsIndexed(rooms) { index, room ->
-                    // Restore focus logic
-                    val focusRequester = remember { FocusRequester() }
-                    
-                    // Restore focus if matches or if it's the first item and no focus is set
-                    LaunchedEffect(Unit) {
-                        if (index == viewModel.focusedIndex || (viewModel.focusedIndex == -1 && index == 0)) {
-                            focusRequester.requestFocus()
-                        }
-                    }
-                    
-                    LiveRoomCard(
-                        room = room,
-                        modifier = Modifier
-                            .focusRequester(focusRequester)
-                            .onFocusChanged {
-                                if (it.isFocused) {
-                                    viewModel.updateFocusedIndex(index)
-                                }
-                            },
-                        onClick = {
-                            Log.d("LiveRoomList", "Clicked room: ${room.title}")
-                            // 获取直播流信息并跳转到播放页
-                            viewModel.enterLiveRoom(room.roomid, room.title, room.uname, onEnterLiveRoom)
-                        }
-                    )
-                }
+            ) { room, itemModifier ->
+                LiveRoomCard(
+                    room = room,
+                    onClick = {
+                        Log.d("LiveRoomList", "Clicked room: ${room.title}")
+                        viewModel.enterLiveRoom(room.roomid, room.title, room.uname, onEnterLiveRoom)
+                    },
+                    modifier = itemModifier
+                )
             }
         }
     }
