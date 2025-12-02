@@ -563,8 +563,28 @@ private fun createExoPlayer(
         }
     })
     
-    val mediaItem = MediaItem.fromUri(videoPlayInfo.videoUrl)
-    exoPlayer.setMediaItem(mediaItem)
+    // 根据格式创建不同的MediaSource
+    if (videoPlayInfo.format == "dash" && !videoPlayInfo.audioUrl.isNullOrEmpty()) {
+        // DASH格式：合并视频和音频流
+        val videoMediaItem = MediaItem.fromUri(videoPlayInfo.videoUrl)
+        val audioMediaItem = MediaItem.fromUri(videoPlayInfo.audioUrl)
+        
+        val videoMediaSource = mediaSourceFactory.createMediaSource(videoMediaItem)
+        val audioMediaSource = mediaSourceFactory.createMediaSource(audioMediaItem)
+        
+        // 合并音视频源
+        val mergedMediaSource = androidx.media3.exoplayer.source.MergingMediaSource(
+            videoMediaSource,
+            audioMediaSource
+        )
+        
+        exoPlayer.setMediaSource(mergedMediaSource)
+    } else {
+        // MP4格式或其他情况：单一视频流
+        val mediaItem = MediaItem.fromUri(videoPlayInfo.videoUrl)
+        exoPlayer.setMediaItem(mediaItem)
+    }
+    
     exoPlayer.prepare()
     exoPlayer.playWhenReady = true
     
