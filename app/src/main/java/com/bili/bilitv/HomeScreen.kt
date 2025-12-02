@@ -130,44 +130,7 @@ fun HomeScreen(
 
     LaunchedEffect(viewModel.selectedTab) {
         if (viewModel.selectedTab == TabType.HOT && viewModel.hotVideos.isEmpty()) {
-            Log.d("BiliTV", "Fetching popular videos for Hot tab...")
-            try {
-                val url = "https://api.bilibili.com/x/web-interface/popular?pn=1&ps=20"
-                val requestBuilder = Request.Builder()
-                    .url(url)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
-                
-                // 添加Cookie信息（如果已登录）
-                val cookieString = SessionManager.getCookieString()
-                if (cookieString != null) {
-                    requestBuilder.header("Cookie", cookieString)
-                    Log.d("BiliTV", "Added Cookie to request: $cookieString")
-                } else {
-                    Log.d("BiliTV", "No session found, requesting without Cookie")
-                }
-                
-                val request = requestBuilder.build()
-                val response = withContext(Dispatchers.IO) { httpClient.newCall(request).execute() }
-
-                if (response.isSuccessful) {
-                    response.body?.string()?.let { responseBody ->
-                        Log.d("BiliTV", "Popular Videos API Response: $responseBody")
-                        val popularResponse = withContext(Dispatchers.Default) {
-                            json.decodeFromString<PopularVideoResponse>(responseBody)
-                        }
-                        if (popularResponse.code == 0 && popularResponse.data != null) {
-                            viewModel.hotVideos = popularResponse.data.list
-                            Log.d("BiliTV", "Fetched ${viewModel.hotVideos.size} popular videos.")
-                        } else {
-                            Log.e("BiliTV", "Popular Videos API error: ${popularResponse.message}")
-                        }
-                    }
-                } else {
-                    Log.e("BiliTV", "Popular Videos HTTP error: ${response.code}")
-                }
-            } catch (e: Exception) {
-                Log.e("BiliTV", "Popular Videos Network error: ${e.localizedMessage}")
-            }
+            viewModel.loadMoreHot()
         }
     }
     
@@ -201,8 +164,9 @@ fun HomeScreen(
                     onVideoClick = handleVideoClick,
                     viewModel = viewModel,
                     onLoadMore = {
-                        if (viewModel.selectedTab == TabType.RECOMMEND) {
-                            viewModel.loadMoreRecommend()
+                        when (viewModel.selectedTab) {
+                            TabType.RECOMMEND -> viewModel.loadMoreRecommend()
+                            TabType.HOT -> viewModel.loadMoreHot()
                         }
                     }
                 )

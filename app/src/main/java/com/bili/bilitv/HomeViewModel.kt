@@ -30,8 +30,12 @@ data class RecommendVideoData(
 
 class HomeViewModel : ViewModel() {
     var selectedTab by mutableStateOf(TabType.RECOMMEND)
-    var hotVideos by mutableStateOf<List<VideoItemData>>(emptyList())
     
+    // Hot states
+    var hotVideos by mutableStateOf<List<VideoItemData>>(emptyList())
+    var isHotLoading by mutableStateOf(false)
+    private var hotPage = 1
+
     // Recommend states
     var recommendVideos by mutableStateOf<List<VideoItemData>>(emptyList())
     var isRecommendLoading by mutableStateOf(false)
@@ -109,6 +113,61 @@ class HomeViewModel : ViewModel() {
             } finally {
                 withContext(Dispatchers.Main) {
                     isRecommendLoading = false
+                }
+            }
+        }
+    }
+
+    fun loadMoreHot() {
+        if (isHotLoading) return
+        isHotLoading = true
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                Log.d("BiliTV", "Fetching popular videos page $hotPage...")
+                val url = "https://api.bilibili.com/x/web-interface/popular?pn=$hotPage&ps=20"
+                val requestBuilder = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
+
+                SessionManager.getCookieString()?.let {
+                    requestBuilder.header("Cookie", it)
+                }
+
+                val request = requestBuilder.build()
+                val response = httpClient.newCall(request).execute()
+
+                if (response.isSuccessful) {
+                    response.body?.string()?.let { responseBody ->
+                        try {
+                            // Using PopularVideoResponse which is defined in HomeScreen.kt (same package)
+                            val popularResponse = json.decodeFromString<PopularVideoResponse>(responseBody)
+                            if (popularResponse.code == 0 && popularResponse.data != null) {
+                                val newVideos = popularResponse.data.list
+                                withContext(Dispatchers.Main) {
+                                    // Filter duplicates
+                                    val currentBvids = hotVideos.map { it.bvid }.toSet()
+                                    val uniqueNewVideos = newVideos.filter { !currentBvids.contains(it.bvid) }
+
+                                    hotVideos = hotVideos + uniqueNewVideos
+                                    hotPage++
+                                    Log.d("BiliTV", "Loaded ${uniqueNewVideos.size} popular videos. Total: ${hotVideos.size}")
+                                }
+                            } else {
+                                Log.e("BiliTV", "Popular Videos API error: ${popularResponse.message}")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("BiliTV", "Popular Videos JSON parse error", e)
+                        }
+                    }
+                } else {
+                    Log.e("BiliTV", "Popular Videos HTTP error: ${response.code}")
+                }
+            } catch (e: Exception) {
+                Log.e("BiliTV", "Popular Videos Network error: ${e.localizedMessage}")
+            } finally {
+                withContext(Dispatchers.Main) {
+                    isHotLoading = false
                 }
             }
         }
