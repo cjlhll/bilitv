@@ -86,6 +86,9 @@ class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
     var scrollIndex = 0
     var scrollOffset = 0
     var focusedIndex = -1
+    
+    // 焦点恢复标志：首次进入或从播放器返回时恢复焦点
+    override var shouldRestoreFocusToGrid by mutableStateOf(false)
 
     // VideoGridStateManager 接口实现
     override fun updateScrollState(key: Any, index: Int, offset: Int) {
@@ -105,9 +108,6 @@ class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
         return focusedIndex
     }
 
-    override val shouldRestoreFocusToGrid: Boolean
-        get() = false // 直播列表不需要自动恢复焦点
-
     /**
      * 进入直播间
      */
@@ -115,6 +115,8 @@ class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
         viewModelScope.launch {
             val livePlayInfo = LiveStreamUrlFetcher.fetchLivePlayInfo(roomId, title, uname)
             if (livePlayInfo != null) {
+                // 进入播放器时，标记需要恢复焦点（用于返回时）
+                shouldRestoreFocusToGrid = true
                 onEnterLiveRoom(livePlayInfo, title)
             } else {
                 Log.e("LiveRoomListViewModel", "无法获取直播间播放信息")
@@ -136,6 +138,8 @@ class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
         scrollOffset = 0
         focusedIndex = -1
         _rooms.value = emptyList()
+        // 首次进入时，设置焦点恢复标志为true，确保焦点定位到第一个视频卡片
+        shouldRestoreFocusToGrid = true
         loadData()
     }
 

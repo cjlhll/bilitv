@@ -133,9 +133,9 @@ fun <T> CommonVideoGrid(
         itemsIndexed(items) { index, item ->
             val focusRequester = remember { FocusRequester() }
             
-            // 恢复焦点
-            LaunchedEffect(shouldRestoreFocus) {
-                if (shouldRestoreFocus) {
+            // 恢复焦点 - 监听shouldRestoreFocus和items列表变化
+            LaunchedEffect(shouldRestoreFocus, items.size) {
+                if (shouldRestoreFocus && items.isNotEmpty()) {
                     if (index == initialFocusIndex || (initialFocusIndex == -1 && index == 0)) {
                         focusRequester.requestFocus()
                     }

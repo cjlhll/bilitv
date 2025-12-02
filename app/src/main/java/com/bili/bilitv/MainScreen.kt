@@ -208,6 +208,10 @@ fun MainScreen() {
     var fullScreenLivePlayInfo by remember { mutableStateOf<LivePlayInfo?>(null) }
     var fullScreenVideoTitle by remember { mutableStateOf("") }
     
+    // 直播模块的导航状态 - 提升到顶层以保持状态
+    var selectedLiveArea by remember { mutableStateOf<LiveAreaItem?>(null) }
+    var liveListEnterTimestamp by remember { mutableLongStateOf(0L) }
+    
     // 使用 ViewModel 保存首页状态
     val homeViewModel: HomeViewModel = viewModel()
 
@@ -262,6 +266,9 @@ fun MainScreen() {
         fullScreenVideoTitle = ""
     }
 
+    // 判断是否应该隐藏导航栏（直播列表页面全屏显示）
+    val shouldHideNavigation = currentRoute == NavRoute.LIVE && selectedLiveArea != null
+
     if (isFullScreenPlayer) {
             if (fullScreenLivePlayInfo != null) {
                 // 直播播放
@@ -286,14 +293,16 @@ fun MainScreen() {
                 )
             }
         } else {
-        // 普通界面（带导航栏）
+        // 普通界面（带导航栏或全屏）
         Row(modifier = Modifier.fillMaxSize()) {
-            // Left Side Navigation
-            NavigationRail(
-                currentRoute = currentRoute,
-                onNavigate = { currentRoute = it },
-                userAvatarUrl = userInfo?.face
-            )
+            // Left Side Navigation - 仅在非全屏模式时显示
+            if (!shouldHideNavigation) {
+                NavigationRail(
+                    currentRoute = currentRoute,
+                    onNavigate = { currentRoute = it },
+                    userAvatarUrl = userInfo?.face
+                )
+            }
 
             // Right Side Content
             Box(
@@ -335,21 +344,18 @@ fun MainScreen() {
                         }
                     )
                     NavRoute.LIVE -> {
-                        var selectedArea by remember { mutableStateOf<LiveAreaItem?>(null) }
-                        var liveListEnterTimestamp by remember { mutableLongStateOf(0L) }
-
-                        if (selectedArea == null) {
+                        if (selectedLiveArea == null) {
                             LiveAreaScreen(
                                 onAreaClick = { area -> 
-                                    selectedArea = area 
+                                    selectedLiveArea = area 
                                     liveListEnterTimestamp = System.currentTimeMillis()
                                 }
                             )
                         } else {
                             LiveRoomListScreen(
-                                area = selectedArea!!,
+                                area = selectedLiveArea!!,
                                 enterTimestamp = liveListEnterTimestamp,
-                                onBack = { selectedArea = null },
+                                onBack = { selectedLiveArea = null },
                                 onEnterFullScreen = { playInfo, title ->
                                     isFullScreenPlayer = true
                                     fullScreenPlayInfo = playInfo
