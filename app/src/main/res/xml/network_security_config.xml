@@ -3,5 +3,6 @@
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">bilibili.com</domain>
         <domain includeSubdomains="true">hdslb.com</domain>
+        <domain includeSubdomains="true">biliimg.com</domain>
     </domain-config>
 </network-security-config>

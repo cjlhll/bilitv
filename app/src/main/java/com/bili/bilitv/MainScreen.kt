@@ -310,6 +310,7 @@ fun MainScreen() {
                             fullScreenVideoTitle = title
                         }
                     )
+                    NavRoute.LIVE -> LiveAreaScreen()
                     NavRoute.SETTINGS -> PlaceholderScreen(NavRoute.SETTINGS.title)
                     else -> PlaceholderScreen(currentRoute.title)
                 }
