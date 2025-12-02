@@ -240,14 +240,15 @@ private fun LiveAreaTabButton(
         ),
         border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null,
         modifier = modifier
-            .height(40.dp)
+            .width(80.dp)
+            .height(32.dp)
             .onFocusChanged { isFocused = it.isFocused }
             .scale(scale),
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 0.dp)
+        contentPadding = PaddingValues(0.dp)
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.labelLarge
+            style = MaterialTheme.typography.labelMedium
         )
     }
 }

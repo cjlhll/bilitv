@@ -103,7 +103,8 @@ fun HomeScreen(
                     bvid = video.bvid,
                     cid = video.cid,
                     qn = 80, // 1080P - 非大会员最高清晰度
-                    fnval = 4048 // DASH格式
+                    fnval = 4048, // DASH格式
+                    cookie = SessionManager.getCookieString()
                 )
                 
                 if (playInfo != null) {
@@ -139,14 +140,13 @@ fun HomeScreen(
             modifier = modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
+                .padding(start = 24.dp, top = 24.dp, end = 24.dp)
         ) {
             // Tab栏
             TabRow(
                 selectedTab = viewModel.selectedTab,
                 onTabSelected = { viewModel.onTabChanged(it) }
             )
-            
-            Spacer(modifier = Modifier.height(16.dp))
             
             // 视频列表
             val videosToDisplay = remember(viewModel.selectedTab, viewModel.hotVideos, viewModel.recommendVideos) {
@@ -186,7 +186,7 @@ private fun TabRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp),
+            .padding(bottom = 8.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -293,9 +293,7 @@ private fun VideoGrid(
         horizontalArrangement = Arrangement.spacedBy(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
         contentPadding = PaddingValues(
-            start = 24.dp,
-            end = 24.dp,
-            top = 32.dp,
+            top = 16.dp,
             bottom = 32.dp
         )
     ) {

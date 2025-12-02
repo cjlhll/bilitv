@@ -319,7 +319,8 @@ fun CategoryScreen(
                     bvid = video.bvid,
                     cid = video.cid,
                     qn = 80, // 1080P - 非大会员最高清晰度
-                    fnval = 4048 // DASH格式
+                    fnval = 4048, // DASH格式
+                    cookie = SessionManager.getCookieString()
                 )
                 
                 if (playInfo != null) {
@@ -402,14 +403,15 @@ private fun CategoryTabButton(
         ),
         border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null,
         modifier = modifier
-            .height(40.dp)
+            .width(80.dp)
+            .height(32.dp)
             .onFocusChanged { isFocused = it.isFocused }
             .scale(scale),
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 0.dp)
+        contentPadding = PaddingValues(0.dp)
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.labelLarge
+            style = MaterialTheme.typography.labelMedium
         )
     }
 }

@@ -217,7 +217,10 @@ fun DynamicScreen(
                                             if (cid != 0L && clickedVideo.bvid.isNotEmpty()) {
                                                  val playInfo = VideoPlayUrlFetcher.fetchPlayUrl(
                                                     bvid = clickedVideo.bvid,
-                                                    cid = cid
+                                                    cid = cid,
+                                                    qn = 80, // 1080P - 非大会员最高清晰度
+                                                    fnval = 4048, // DASH格式
+                                                    cookie = SessionManager.getCookieString()
                                                 )
                                                 if (playInfo != null) {
                                                     onEnterFullScreen(playInfo, clickedVideo.title)

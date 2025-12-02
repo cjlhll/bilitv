@@ -167,8 +167,9 @@ object VideoPlayUrlFetcher {
      * @param cid 视频CID
      * @param qn 清晰度 (80: 1080P, 64: 720P, 32: 480P, 16: 360P)
      * @param fnval 格式标记 (1: MP4, 16: DASH, 4048: DASH + 4K)
+     * @param cookie 登录Cookie (可选，用于获取高清晰度)
      */
-    suspend fun fetchPlayUrl(bvid: String, cid: Long, qn: Int = 64, fnval: Int = 4048): VideoPlayInfo? {
+    suspend fun fetchPlayUrl(bvid: String, cid: Long, qn: Int = 64, fnval: Int = 4048, cookie: String? = null): VideoPlayInfo? {
         return withContext(Dispatchers.IO) {
             try {
                 // 确保有WBI keys
@@ -197,11 +198,17 @@ object VideoPlayUrlFetcher {
                 
                 val url = "https://api.bilibili.com/x/player/wbi/playurl?$query"
                 
-                val request = Request.Builder()
+                val requestBuilder = Request.Builder()
                     .url(url)
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .header("Referer", "https://www.bilibili.com")
-                    .build()
+                
+                // 添加Cookie（如果已登录）
+                cookie?.let {
+                    requestBuilder.header("Cookie", it)
+                }
+                
+                val request = requestBuilder.build()
 
                 val response = client.newCall(request).execute()
                 if (response.isSuccessful) {
