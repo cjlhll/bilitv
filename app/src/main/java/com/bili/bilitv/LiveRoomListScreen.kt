@@ -143,6 +143,16 @@ class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
         loadData()
     }
 
+    /**
+     * 重置滚动位置和焦点（在退出页面时调用）
+     */
+    fun resetScrollAndFocus() {
+        scrollIndex = 0
+        scrollOffset = 0
+        focusedIndex = -1
+        shouldRestoreFocusToGrid = false
+    }
+
     fun loadMore() {
         if (_isLoading.value || isLastPage || currentAreaId == null) return
         currentPage++
@@ -237,6 +247,8 @@ fun LiveRoomListScreen(
     
     // Handle hardware/remote back button
     BackHandler {
+        // 返回直播分区时重置状态
+        viewModel.resetScrollAndFocus()
         onBack()
     }
 
