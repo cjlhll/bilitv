@@ -365,13 +365,13 @@ fun CategoryScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(start = 24.dp, top = 24.dp, end = 24.dp)
+            .padding(top = 24.dp)
     ) {
         // 横向滚动Tabs
         if (categories.isNotEmpty()) {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(bottom = 8.dp)
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 8.dp)
             ) {
                 items(categories) { zone ->
                     CategoryTabButton(
@@ -402,9 +402,9 @@ fun CategoryScreen(
                         columns = 4,
                         onVideoClick = handleVideoClick,
                         onLoadMore = { viewModel.loadMore() },
-                        horizontalSpacing = 20.dp,
-                        verticalSpacing = 20.dp,
-                        contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
+                        horizontalSpacing = 12.dp,
+                        verticalSpacing = 12.dp,
+                        contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp, start = 12.dp, end = 12.dp)
                     )
                 }
             }

@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.collect
@@ -76,9 +77,9 @@ fun <T> CommonVideoGrid(
     onItemClick: (T) -> Unit = {},
     onLoadMore: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    horizontalSpacing: Dp = 20.dp,
-    verticalSpacing: Dp = 20.dp,
-    contentPadding: PaddingValues = PaddingValues(top = 16.dp, bottom = 32.dp),
+    horizontalSpacing: Dp = 12.dp,
+    verticalSpacing: Dp = 12.dp,
+    contentPadding: PaddingValues = PaddingValues(top = 16.dp, bottom = 32.dp, start = 12.dp, end = 12.dp),
     itemContent: @Composable (item: T, modifier: Modifier) -> Unit
 ) {
     val (initialIndex, initialOffset) = remember(stateKey) { 
@@ -171,10 +172,18 @@ fun CommonVideoGrid(
     onVideoClick: (Video) -> Unit = {},
     onLoadMore: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    horizontalSpacing: Dp = 20.dp,
-    verticalSpacing: Dp = 20.dp,
-    contentPadding: PaddingValues = PaddingValues(top = 16.dp, bottom = 32.dp)
+    horizontalSpacing: Dp = 12.dp,
+    verticalSpacing: Dp = 12.dp,
+    contentPadding: PaddingValues = PaddingValues(top = 16.dp, bottom = 32.dp, start = 12.dp, end = 12.dp)
 ) {
+    val context = LocalContext.current
+    
+    LaunchedEffect(videos.map { it.coverUrl }.joinToString()) {
+        if (videos.isNotEmpty()) {
+            ImagePreloader.preloadImages(context, videos)
+        }
+    }
+    
     CommonVideoGrid(
         items = videos,
         stateManager = stateManager,

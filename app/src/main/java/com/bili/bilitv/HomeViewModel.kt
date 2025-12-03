@@ -1,11 +1,12 @@
 package com.bili.bilitv
 
+import android.app.Application
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -28,7 +29,7 @@ data class RecommendVideoData(
     val item: List<VideoItemData>? = null
 )
 
-class HomeViewModel : ViewModel(), VideoGridStateManager {
+class HomeViewModel(application: Application) : AndroidViewModel(application), VideoGridStateManager {
     var selectedTab by mutableStateOf(TabType.RECOMMEND)
     
     // Hot states
@@ -90,13 +91,31 @@ class HomeViewModel : ViewModel(), VideoGridStateManager {
                             if (resp.code == 0 && resp.data?.item != null) {
                                 val newVideos = resp.data.item
                                 withContext(Dispatchers.Main) {
-                                    // Filter duplicates based on bvid just in case
                                     val currentBvids = recommendVideos.map { it.bvid }.toSet()
                                     val uniqueNewVideos = newVideos.filter { !currentBvids.contains(it.bvid) }
                                     
                                     recommendVideos = recommendVideos + uniqueNewVideos
                                     recommendFreshIdx++
                                     Log.d("BiliTV", "Loaded ${uniqueNewVideos.size} recommend videos. Total: ${recommendVideos.size}")
+                                    
+                                    launch(Dispatchers.IO) {
+                                        val allVideos = recommendVideos.map { videoItemData ->
+                                            Video(
+                                                id = videoItemData.bvid,
+                                                bvid = videoItemData.bvid,
+                                                cid = videoItemData.cid,
+                                                title = videoItemData.title,
+                                                coverUrl = videoItemData.pic,
+                                                author = videoItemData.owner.name,
+                                                playCount = "${videoItemData.stat.view}次观看",
+                                                pubDate = videoItemData.pubdate
+                                            )
+                                        }
+                                        ImagePreloader.preloadImages(
+                                            context = getApplication(),
+                                            videos = allVideos
+                                        )
+                                    }
                                 }
                             } else {
                                 Log.e("BiliTV", "Recommend API error: ${resp.message} (Code: ${resp.code})")
@@ -145,13 +164,31 @@ class HomeViewModel : ViewModel(), VideoGridStateManager {
                             if (popularResponse.code == 0 && popularResponse.data != null) {
                                 val newVideos = popularResponse.data.list
                                 withContext(Dispatchers.Main) {
-                                    // Filter duplicates
                                     val currentBvids = hotVideos.map { it.bvid }.toSet()
                                     val uniqueNewVideos = newVideos.filter { !currentBvids.contains(it.bvid) }
 
                                     hotVideos = hotVideos + uniqueNewVideos
                                     hotPage++
                                     Log.d("BiliTV", "Loaded ${uniqueNewVideos.size} popular videos. Total: ${hotVideos.size}")
+                                    
+                                    launch(Dispatchers.IO) {
+                                        val allVideos = hotVideos.map { videoItemData ->
+                                            Video(
+                                                id = videoItemData.bvid,
+                                                bvid = videoItemData.bvid,
+                                                cid = videoItemData.cid,
+                                                title = videoItemData.title,
+                                                coverUrl = videoItemData.pic,
+                                                author = videoItemData.owner.name,
+                                                playCount = "${videoItemData.stat.view}次观看",
+                                                pubDate = videoItemData.pubdate
+                                            )
+                                        }
+                                        ImagePreloader.preloadImages(
+                                            context = getApplication(),
+                                            videos = allVideos
+                                        )
+                                    }
                                 }
                             } else {
                                 Log.e("BiliTV", "Popular Videos API error: ${popularResponse.message}")

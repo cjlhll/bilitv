@@ -287,7 +287,7 @@ fun LiveRoomListScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(24.dp)
+            .padding(top = 24.dp, bottom = 24.dp)
     ) {
         // Header
         Row(
@@ -335,9 +335,9 @@ fun LiveRoomListScreen(
                     viewModel.enterLiveRoom(room.roomid, room.title, room.uname, onEnterLiveRoom)
                 },
                 onLoadMore = { viewModel.loadMore() },
-                horizontalSpacing = 20.dp,
-                verticalSpacing = 20.dp,
-                contentPadding = PaddingValues(top = 20.dp, bottom = 24.dp)
+                horizontalSpacing = 12.dp,
+                verticalSpacing = 12.dp,
+                contentPadding = PaddingValues(top = 20.dp, bottom = 24.dp, start = 12.dp, end = 12.dp)
             ) { room, itemModifier ->
                 LiveRoomCard(
                     room = room,

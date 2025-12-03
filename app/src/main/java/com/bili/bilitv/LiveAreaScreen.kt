@@ -201,7 +201,7 @@ fun LiveAreaScreen(
         if (areaGroups.isNotEmpty()) {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 16.dp)
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 16.dp)
             ) {
                 items(areaGroups) { group ->
                     LiveAreaTabButton(
@@ -298,11 +298,11 @@ private fun LiveAreaGrid(
 
     LazyVerticalGrid(
         state = listState,
-        columns = GridCells.Fixed(8), // Requirement: 8 columns
+        columns = GridCells.Fixed(8),
         modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 32.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 32.dp)
     ) {
         itemsIndexed(areas) { index, area ->
             val focusRequester = remember { FocusRequester() }
@@ -337,8 +337,6 @@ private fun LiveAreaItemView(
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (isFocused) 1.1f else 1.0f, label = "scale")
-    // Removed unused internal FocusRequester
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -354,39 +352,31 @@ private fun LiveAreaItemView(
             .padding(4.dp)
             .zIndex(if (isFocused) 1f else 0f)
     ) {
-        // Inner scale container
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.scale(scale)
+        Card(
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier
+                .aspectRatio(1f)
+                .fillMaxWidth(),
+            border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null
         ) {
-            // Image
-            Card(
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .aspectRatio(1f) // Square image area or adjust as needed
-                    .fillMaxWidth(),
-                border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null
-            ) {
-                AsyncImage(
-                    model = area.pic,
-                    contentDescription = area.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // Text
-            Text(
-                text = area.name,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                color = if (isFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
+            AsyncImage(
+                model = area.pic,
+                contentDescription = area.name,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
             )
         }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        Text(
+            text = area.name,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            color = if (isFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
+        )
     }
 }
 

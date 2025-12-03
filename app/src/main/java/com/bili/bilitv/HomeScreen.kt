@@ -155,7 +155,7 @@ fun HomeScreen(
             modifier = modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
-                .padding(start = 24.dp, top = 24.dp, end = 24.dp)
+                .padding(top = 24.dp)
         ) {
             // Tab栏
             TabRow(
@@ -202,9 +202,9 @@ fun HomeScreen(
                                     TabType.HOT -> viewModel.loadMoreHot()
                                 }
                             },
-                            horizontalSpacing = 20.dp,
-                            verticalSpacing = 20.dp,
-                            contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
+                            horizontalSpacing = 12.dp,
+                            verticalSpacing = 12.dp,
+                            contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp, start = 12.dp, end = 12.dp)
                         )
                     }
                 }
@@ -225,7 +225,7 @@ private fun TabRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp),
+            .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {

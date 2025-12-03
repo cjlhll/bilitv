@@ -194,9 +194,9 @@ fun DynamicScreen(
                                 }
                             },
                             onLoadMore = { viewModel.loadMoreVideos() },
-                            horizontalSpacing = 20.dp,
-                            verticalSpacing = 20.dp,
-                            contentPadding = PaddingValues(top = 24.dp, bottom = 56.dp, start = 24.dp, end = 24.dp)
+                            horizontalSpacing = 12.dp,
+                            verticalSpacing = 12.dp,
+                            contentPadding = PaddingValues(top = 24.dp, bottom = 56.dp, start = 12.dp, end = 12.dp)
                         )
                     }
                 }

@@ -477,7 +477,7 @@ fun VideoPlayerScreen(
                                     colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
                                 )
                             )
-                            .padding(start = 32.dp, end = 32.dp, bottom = 32.dp, top = 16.dp) // 增加边距，使其悬浮
+                            .padding(start = 12.dp, end = 12.dp, bottom = 32.dp, top = 16.dp) // 增加边距，使其悬浮
                     ) {
                         // 预览窗口（仅限普通视频）
                         if (!isLiveStream && isSeeking && previewTime >= 0 && videoshotData != null) {
