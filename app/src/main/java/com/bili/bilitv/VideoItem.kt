@@ -25,7 +25,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 
 /**
  * 视频数据模型
@@ -78,15 +78,46 @@ fun VideoItem(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(112.dp)
-                        .background(Color.LightGray)
+                        .background(Color.LightGray),
+                    contentAlignment = Alignment.Center
                 ) {
-                    AsyncImage(
+                    SubcomposeAsyncImage(
                         model = video.coverUrl,
                         contentDescription = video.title,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
-                        placeholder = painterResource(id = android.R.drawable.ic_menu_gallery),
-                        error = painterResource(id = android.R.drawable.ic_menu_gallery)
+                        loading = {
+                            // 加载中占位图 - 居中显示，占容器50%宽度
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.video_placeholder),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.5f)
+                                        .aspectRatio(1f),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
+                        },
+                        error = {
+                            // 加载失败占位图 - 居中显示，占容器50%宽度
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.video_placeholder),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.5f)
+                                        .aspectRatio(1f),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
+                        }
                     )
                 }
                 
@@ -103,29 +134,21 @@ fun VideoItem(
                 )
 
                 // 作者和时间
-                Row(
+                Text(
+                    text = buildString {
+                        append(video.author)
+                        video.pubDate?.let {
+                            append(" · ${formatUnixTimestamp(it)}")
+                        }
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = video.author,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    video.pubDate?.let {
-                        Text(
-                            text = " · ${formatUnixTimestamp(it)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                )
             }
         }
     }

@@ -103,12 +103,12 @@ class LiveAreaViewModel : ViewModel() {
     var shouldRestoreFocusToGrid by mutableStateOf(false)
 
     init {
+        _isLoading.value = true
         fetchLiveAreas()
     }
 
     private fun fetchLiveAreas() {
         viewModelScope.launch {
-            _isLoading.value = true
             try {
                 val response = withContext(Dispatchers.IO) {
                     val request = Request.Builder()

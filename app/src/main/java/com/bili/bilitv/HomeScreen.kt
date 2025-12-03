@@ -172,24 +172,42 @@ fun HomeScreen(
                 }
             }
             
-            // 使用 key 确保切换 Tab 时重新创建 Grid，从而应用新的初始滚动位置
-            key(viewModel.selectedTab) {
-                CommonVideoGrid(
-                    videos = videosToDisplay,
-                    stateManager = viewModel,
-                    stateKey = viewModel.selectedTab,
-                    columns = 4,
-                    onVideoClick = handleVideoClick,
-                    onLoadMore = {
-                        when (viewModel.selectedTab) {
-                            TabType.RECOMMEND -> viewModel.loadMoreRecommend()
-                            TabType.HOT -> viewModel.loadMoreHot()
-                        }
-                    },
-                    horizontalSpacing = 20.dp,
-                    verticalSpacing = 20.dp,
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
-                )
+            // 检查加载状态
+            val isLoading = when (viewModel.selectedTab) {
+                TabType.HOT -> viewModel.isHotLoading && viewModel.hotVideos.isEmpty()
+                TabType.RECOMMEND -> viewModel.isRecommendLoading && viewModel.recommendVideos.isEmpty()
+            }
+            
+            // 内容区域
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator()
+                } else {
+                    // 使用 key 确保切换 Tab 时重新创建 Grid，从而应用新的初始滚动位置
+                    key(viewModel.selectedTab) {
+                        CommonVideoGrid(
+                            videos = videosToDisplay,
+                            stateManager = viewModel,
+                            stateKey = viewModel.selectedTab,
+                            columns = 4,
+                            onVideoClick = handleVideoClick,
+                            onLoadMore = {
+                                when (viewModel.selectedTab) {
+                                    TabType.RECOMMEND -> viewModel.loadMoreRecommend()
+                                    TabType.HOT -> viewModel.loadMoreHot()
+                                }
+                            },
+                            horizontalSpacing = 20.dp,
+                            verticalSpacing = 20.dp,
+                            contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
+                        )
+                    }
+                }
             }
         }
     }

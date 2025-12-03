@@ -188,11 +188,11 @@ fun VideoPlayerScreen(
         }
     }
     
-    // 清理资源 - 在协程中异步释放,避免阻塞UI线程
+    // 清理资源 - ExoPlayer必须在主线程释放
     DisposableEffect(Unit) {
         onDispose {
-            // 在后台线程异步释放资源,不阻塞UI
-            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            // ExoPlayer必须在主线程释放
+            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                 try {
                     exoPlayer.release()
                     danmakuManager.release()

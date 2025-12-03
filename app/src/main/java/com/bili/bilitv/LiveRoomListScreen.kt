@@ -145,6 +145,7 @@ class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
         scrollOffset = 0
         focusedIndex = -1
         _rooms.value = emptyList()
+        _isLoading.value = true
         // 首次进入时，设置焦点恢复标志为true，确保焦点定位到第一个视频卡片
         shouldRestoreFocusToGrid = true
         loadData()

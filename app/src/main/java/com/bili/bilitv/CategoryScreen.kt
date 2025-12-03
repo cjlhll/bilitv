@@ -132,12 +132,12 @@ class CategoryViewModel : ViewModel(), VideoGridStateManager {
     private val json = Json { ignoreUnknownKeys = true }
 
     init {
+        _isLoading.value = true
         fetchCategories()
     }
 
     private fun fetchCategories() {
         viewModelScope.launch {
-            _isLoading.value = true
             try {
                 val response = withContext(Dispatchers.IO) {
                     val request = Request.Builder()
@@ -204,6 +204,7 @@ class CategoryViewModel : ViewModel(), VideoGridStateManager {
         currentPage = 1 // Reset page logic. Note: The API uses `display_id` which increments.
                         // For simplicity, we assume fetchVideos handles pagination start.
         _videos.value = emptyList()
+        _isLoading.value = true
         shouldRestoreFocusToGrid = false // Reset focus restore flag when changing category
         fetchVideos(zone.tid, isRefresh = true)
     }
@@ -219,10 +220,6 @@ class CategoryViewModel : ViewModel(), VideoGridStateManager {
         }
 
         viewModelScope.launch {
-            // Don't show full screen loading for load more, maybe show bottom indicator?
-            // For now, just generic loading state for initial load
-            if (isRefresh) _isLoading.value = true
-
             try {
                 val response = withContext(Dispatchers.IO) {
                     val url = "https://api.bilibili.com/x/web-interface/region/feed/rcmd?" +
