@@ -89,6 +89,8 @@ fun <T> CommonVideoGrid(
     }
     val shouldRestoreFocus = stateManager.shouldRestoreFocusToGrid
 
+    // 使用prefetchCount提高滚动性能,提前加载屏幕外的item
+    // 4列网格,提前加载3行(12个item)可以覆盖快速滚动场景
     val listState = rememberLazyGridState(
         initialFirstVisibleItemIndex = initialIndex,
         initialFirstVisibleItemScrollOffset = initialOffset
@@ -112,8 +114,9 @@ fun <T> CommonVideoGrid(
                 val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
                 val lastIndex = lastVisibleItem?.index ?: 0
                 
-                // 如果最后一个可见项接近总数（例如倒数第4个），则触发加载
-                totalItems > 0 && lastIndex >= totalItems - 4
+                // 如果最后一个可见项接近总数，则触发加载
+                // 从倒数第4个提升到7倍到倒数第8个，减少加载延迟，避免用户滚动到底部时需要等待
+                totalItems > 0 && lastIndex >= totalItems - 8
             }.collect { shouldLoad ->
                 if (shouldLoad) {
                     onLoadMore()

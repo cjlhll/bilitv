@@ -108,6 +108,9 @@ fun VideoPlayerScreen(
     val danmakuView = remember { DanmakuView(context) }
     val danmakuManager = remember { DanmakuManager(danmakuView) }
     val danmakuLiveManager = remember { DanmakuLiveManager(danmakuManager) } // Live Danmaku Manager
+    
+    // 弹幕分段加载状态
+    var currentCid by remember { mutableLongStateOf(0L) }
 
     // 请求焦点，确保能接收按键事件
     LaunchedEffect(Unit) {
@@ -118,6 +121,8 @@ fun VideoPlayerScreen(
     LaunchedEffect(videoPlayInfo.bvid, videoPlayInfo.cid, isLiveStream) {
         danmakuManager.release() // Always release previous danmaku resources
         danmakuManager.pause() // Ensure danmaku is paused before new loading
+        danmakuManager.clearLoadedSegments() // 清空已加载分段
+        currentCid = videoPlayInfo.cid
 
         if (!isLiveStream) {
             // VOD Video logic
@@ -127,7 +132,7 @@ fun VideoPlayerScreen(
             launch(kotlinx.coroutines.Dispatchers.Main) {
                 val danmakuData = DanmakuRepository.fetchDanmaku(videoPlayInfo.cid, 1)
                 if (danmakuData != null) {
-                    danmakuManager.loadDanmaku(danmakuData) // This calls danmakuView.prepare(parser, context)
+                    danmakuManager.loadDanmaku(danmakuData, 1) // 加载第一个分段
                     danmakuManager.resume() // Resume drawing after loading
                 }
             }
@@ -176,13 +181,38 @@ fun VideoPlayerScreen(
         )
     }
     
-    // 定时更新进度（直播流不显示进度）
-    LaunchedEffect(exoPlayer) {
+    // 定时更新进度（直播流不显示进度）并动态加载弹幕分段
+    LaunchedEffect(exoPlayer, isLiveStream) {
         while (true) {
             // 只有在不处于seeking状态且不是直播流时才更新currentTime
             if (exoPlayer.isPlaying && !isSeeking && !isLongPressing && !isLiveStream) {
                 currentTime = exoPlayer.currentPosition
                 duration = exoPlayer.duration.coerceAtLeast(0)
+                
+                // 动态加载弹幕分段（每6分钟为一个分段）
+                val currentSegment = (currentTime / (6 * 60 * 1000)) + 1 // 分段索引从1开始
+                val nextSegment = currentSegment + 1 // 预加载下一个分段
+                
+                // 加载当前分段
+                if (!danmakuManager.isSegmentLoaded(currentSegment.toInt())) {
+                    launch(kotlinx.coroutines.Dispatchers.Main) {
+                        val danmakuData = DanmakuRepository.fetchDanmaku(currentCid, currentSegment.toInt())
+                        if (danmakuData != null) {
+                            danmakuManager.loadDanmaku(danmakuData, currentSegment.toInt())
+                        }
+                    }
+                }
+                
+                // 预加载下一个分段（当当前分段播放超过一半时）
+                val segmentProgress = (currentTime % (6 * 60 * 1000)).toFloat() / (6 * 60 * 1000)
+                if (segmentProgress > 0.5f && !danmakuManager.isSegmentLoaded(nextSegment.toInt())) {
+                    launch(kotlinx.coroutines.Dispatchers.Main) {
+                        val danmakuData = DanmakuRepository.fetchDanmaku(currentCid, nextSegment.toInt())
+                        if (danmakuData != null) {
+                            danmakuManager.loadDanmaku(danmakuData, nextSegment.toInt())
+                        }
+                    }
+                }
             }
             delay(1000)
         }

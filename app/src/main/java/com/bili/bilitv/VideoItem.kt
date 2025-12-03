@@ -26,6 +26,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+import coil.size.Size
 
 /**
  * 视频数据模型
@@ -54,6 +57,7 @@ fun VideoItem(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isFocused) 1.1f else 1.0f, label = "scale")
+    val context = LocalContext.current
 
     // 使用 Box 作为布局容器，保持占位大小不变
     Box(
@@ -82,7 +86,14 @@ fun VideoItem(
                     contentAlignment = Alignment.Center
                 ) {
                     SubcomposeAsyncImage(
-                        model = video.coverUrl,
+                        model = ImageRequest.Builder(context)
+                            .data(video.coverUrl)
+                            // 明确指定图片大小，避免解码大图后再缩放，减少内存开销
+                            .size(Size.ORIGINAL) // 使用原始尺寸，由ContentScale.Crop处理缩放
+                            // 缓存key使用URL，确保缓存命中
+                            .memoryCacheKey(video.coverUrl)
+                            .diskCacheKey(video.coverUrl)
+                            .build(),
                         contentDescription = video.title,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,

@@ -8,6 +8,7 @@ import master.flame.danmaku.danmaku.model.IDisplayer
 import master.flame.danmaku.danmaku.model.android.DanmakuContext
 import master.flame.danmaku.danmaku.parser.BaseDanmakuParser
 import com.bilibili.community.service.dm.v1.DmSegMobileReply
+import com.bilibili.community.service.dm.v1.DanmakuElem
 import master.flame.danmaku.danmaku.util.DanmakuUtils
 import com.bili.bilitv.danmaku.live.LiveDanmakuItem // Import new data class
 
@@ -15,6 +16,7 @@ class DanmakuManager(private val danmakuView: IDanmakuView) {
 
     private val danmakuContext: DanmakuContext = DanmakuContext.create()
     private var parser: BaseDanmakuParser? = null
+    private val loadedSegments = mutableSetOf<Int>() // 跟踪已加载的分段
 
     init {
         initDanmaku()
@@ -42,12 +44,80 @@ class DanmakuManager(private val danmakuView: IDanmakuView) {
         danmakuView.enableDanmakuDrawingCache(true)
     }
 
-    fun loadDanmaku(data: DmSegMobileReply) {
-        parser = BiliDanmakuParser().apply {
-            load(BiliDanmakuDataSource(data))
+    fun loadDanmaku(data: DmSegMobileReply, segmentIndex: Int = 1) {
+        if (loadedSegments.isEmpty()) {
+            // 首次加载，准备弹幕视图
+            parser = BiliDanmakuParser().apply {
+                load(BiliDanmakuDataSource(data))
+            }
+            danmakuView.prepare(parser, danmakuContext)
+            danmakuView.show()
+        } else {
+            // 追加弹幕到已存在的弹幕池
+            addDanmakuSegment(data)
         }
-        danmakuView.prepare(parser, danmakuContext)
-        danmakuView.show()
+        loadedSegments.add(segmentIndex)
+    }
+    
+    /**
+     * 添加弹幕分段到已存在的弹幕池
+     */
+    private fun addDanmakuSegment(data: DmSegMobileReply) {
+        if (!danmakuView.isPrepared) return
+        
+        data.elemsList.forEach { elem ->
+            val danmaku = createDanmakuFromElem(elem)
+            if (danmaku != null) {
+                danmakuView.addDanmaku(danmaku)
+            }
+        }
+    }
+    
+    /**
+     * 从DanmakuElem创建弹幕对象
+     */
+    private fun createDanmakuFromElem(elem: DanmakuElem): BaseDanmaku? {
+        val type = when (elem.mode) {
+            1, 2, 3 -> BaseDanmaku.TYPE_SCROLL_RL
+            4 -> BaseDanmaku.TYPE_FIX_BOTTOM
+            5 -> BaseDanmaku.TYPE_FIX_TOP
+            6 -> BaseDanmaku.TYPE_SCROLL_LR
+            7 -> BaseDanmaku.TYPE_SPECIAL
+            else -> BaseDanmaku.TYPE_SCROLL_RL
+        }
+
+        val item = danmakuContext.mDanmakuFactory.createDanmaku(type, danmakuContext) ?: return null
+        
+        // Progress is in milliseconds in protobuf
+        item.time = elem.progress.toLong()
+        
+        // Fontsize mapping
+        val textSize = if (elem.fontsize > 0) elem.fontsize else 25
+        item.textSize = textSize * (danmakuContext.displayer.density - 0.6f)
+        
+        // Color (ensure alpha is FF)
+        item.textColor = (elem.color.toInt() or -16777216) 
+        item.textShadowColor = if (item.textColor <= -1) 0 else -16777216
+        
+        DanmakuUtils.fillText(item, elem.content)
+        item.index = 0
+        item.flags = danmakuContext.mGlobalFlagValues
+        // 注意：item.timer 不需要设置，DanmakuView会自动管理
+        return item
+    }
+    
+    /**
+     * 检查某个分段是否已加载
+     */
+    fun isSegmentLoaded(segmentIndex: Int): Boolean {
+        return loadedSegments.contains(segmentIndex)
+    }
+    
+    /**
+     * 清空已加载分段记录
+     */
+    fun clearLoadedSegments() {
+        loadedSegments.clear()
     }
 
     fun addLiveDanmaku(item: LiveDanmakuItem) {
@@ -81,6 +151,7 @@ class DanmakuManager(private val danmakuView: IDanmakuView) {
     
     fun release() {
         danmakuView.release()
+        loadedSegments.clear()
     }
     
     fun isPrepared(): Boolean = danmakuView.isPrepared
