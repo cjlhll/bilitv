@@ -8,6 +8,8 @@ import master.flame.danmaku.danmaku.model.IDisplayer
 import master.flame.danmaku.danmaku.model.android.DanmakuContext
 import master.flame.danmaku.danmaku.parser.BaseDanmakuParser
 import com.bilibili.community.service.dm.v1.DmSegMobileReply
+import master.flame.danmaku.danmaku.util.DanmakuUtils
+import com.bili.bilitv.danmaku.live.LiveDanmakuItem // Import new data class
 
 class DanmakuManager(private val danmakuView: IDanmakuView) {
 
@@ -48,6 +50,19 @@ class DanmakuManager(private val danmakuView: IDanmakuView) {
         danmakuView.show()
     }
 
+    fun addLiveDanmaku(item: LiveDanmakuItem) {
+        if (!danmakuView.isPrepared) return
+
+        val danmaku = danmakuContext.mDanmakuFactory.createDanmaku(BaseDanmaku.TYPE_SCROLL_RL, danmakuContext)
+        // Use current time from danmakuView's timer
+        danmaku.time = danmakuView.currentTime
+        danmaku.textSize = 25f * (danmakuContext.displayer.density - 0.6f) // Approximate scaling
+        danmaku.textColor = item.color.toInt() or -16777216 // Ensure alpha is FF
+        danmaku.textShadowColor = if (danmaku.textColor <= -1) 0 else -16777216
+        DanmakuUtils.fillText(danmaku, "${item.userName}: ${item.text}")
+        danmakuView.addDanmaku(danmaku)
+    }
+
     fun seekTo(time: Long) {
         danmakuView.seekTo(time)
     }
@@ -69,4 +84,7 @@ class DanmakuManager(private val danmakuView: IDanmakuView) {
     }
     
     fun isPrepared(): Boolean = danmakuView.isPrepared
+
+    // Expose danmakuContext for direct DanmakuView preparation for live streams
+    fun getDanmakuContext(): DanmakuContext = danmakuContext
 }

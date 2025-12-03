@@ -50,7 +50,11 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import com.bili.bilitv.danmaku.DanmakuManager
 import com.bili.bilitv.danmaku.DanmakuRepository
+import com.bili.bilitv.danmaku.live.DanmakuLiveManager // Live Danmaku
 import master.flame.danmaku.ui.widget.DanmakuView
+import com.bilibili.community.service.dm.v1.DmSegMobileReply // For dummy parser
+import com.bili.bilitv.danmaku.BiliDanmakuParser // For dummy parser
+import com.bili.bilitv.danmaku.BiliDanmakuDataSource // For dummy parser
 
 /**
  * 视频播放页面（使用ExoPlayer）
@@ -103,24 +107,44 @@ fun VideoPlayerScreen(
     // Danmaku Manager
     val danmakuView = remember { DanmakuView(context) }
     val danmakuManager = remember { DanmakuManager(danmakuView) }
+    val danmakuLiveManager = remember { DanmakuLiveManager(danmakuManager) } // Live Danmaku Manager
 
     // 请求焦点，确保能接收按键事件
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
     }
     
-    // 获取预览图数据（仅限普通视频）
-    LaunchedEffect(videoPlayInfo.bvid, videoPlayInfo.cid) {
+    // 获取预览图数据（仅限普通视频）和加载弹幕
+    LaunchedEffect(videoPlayInfo.bvid, videoPlayInfo.cid, isLiveStream) {
+        danmakuManager.release() // Always release previous danmaku resources
+        danmakuManager.pause() // Ensure danmaku is paused before new loading
+
         if (!isLiveStream) {
+            // VOD Video logic
             videoshotData = VideoPlayUrlFetcher.fetchVideoshot(videoPlayInfo.bvid, videoPlayInfo.cid)
             
-            // Fetch Danmaku
+            // Fetch VOD Danmaku (will prepare danmakuView internally)
             launch(kotlinx.coroutines.Dispatchers.Main) {
                 val danmakuData = DanmakuRepository.fetchDanmaku(videoPlayInfo.cid, 1)
                 if (danmakuData != null) {
-                    danmakuManager.loadDanmaku(danmakuData)
+                    danmakuManager.loadDanmaku(danmakuData) // This calls danmakuView.prepare(parser, context)
+                    danmakuManager.resume() // Resume drawing after loading
                 }
             }
+            danmakuLiveManager.stop() // Stop live danmaku if playing
+        } else {
+            // Live Stream logic
+            videoshotData = null // No videoshot for live
+            
+            // Prepare danmakuView for live stream (manual adding)
+            val dummyParser = BiliDanmakuParser().apply {
+                load(BiliDanmakuDataSource(DmSegMobileReply.getDefaultInstance())) // Empty data source
+            }
+            danmakuView.prepare(dummyParser, danmakuManager.getDanmakuContext())
+            danmakuView.show() // Make sure DanmakuView is shown
+            danmakuManager.resume() // Resume drawing for live danmaku
+
+            danmakuLiveManager.start(videoPlayInfo.cid) // Start live danmaku with room ID
         }
     }
 
@@ -143,9 +167,7 @@ fun VideoPlayerScreen(
             onReady = { 
                 isLoading = false 
                 duration = it.duration
-                if (!isLiveStream) {
-                     danmakuManager.resume()
-                }
+                danmakuManager.resume() // Resume danmaku drawing regardless of type
             },
             onError = { error -> 
                 isLoading = false
@@ -171,7 +193,8 @@ fun VideoPlayerScreen(
         onDispose {
             exoPlayer.release()
             danmakuManager.release()
-            Log.d("BiliTV", "ExoPlayer released")
+            danmakuLiveManager.stop() // Stop live danmaku as well
+            Log.d("BiliTV", "ExoPlayer and Danmaku resources released")
         }
     }
 
@@ -356,19 +379,17 @@ fun VideoPlayerScreen(
                 )
 
                 // 1.5 Danmaku View
-                if (!isLiveStream) {
-                    AndroidView(
-                        factory = { 
-                            danmakuView.apply {
-                                isFocusable = false
-                                isFocusableInTouchMode = false
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .align(Alignment.Center)
-                    )
-                }
+                AndroidView(
+                    factory = { 
+                        danmakuView.apply {
+                            isFocusable = false
+                            isFocusableInTouchMode = false
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .align(Alignment.Center)
+                )
 
                 // 2. 顶部标题栏 (移除了返回按钮)
                 AnimatedVisibility(

@@ -107,6 +107,9 @@ dependencies {
     // DanmakuFlameMaster
     implementation(libs.danmaku.flame.master)
 
+    // Brotli
+    implementation(libs.brotli.dec)
+
     // Protobuf
     implementation(libs.protobuf.java)
 }

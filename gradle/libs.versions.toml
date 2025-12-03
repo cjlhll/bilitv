@@ -20,6 +20,7 @@ lifecycleViewModelCompose = "2.8.7"
 protobuf = "3.25.1"
 protobufPlugin = "0.9.4"
 danmakuFlameMaster = "0.9.25"
+brotli = "0.1.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -37,6 +38,9 @@ gsyvideoplayer = { group = "com.github.CarGuo.GSYVideoPlayer", name = "GSYVideoP
 
 # DanmakuFlameMaster
 danmaku-flame-master = { group = "com.github.bilibili", name = "DanmakuFlameMaster", version.ref = "danmakuFlameMaster" }
+
+# Brotli
+brotli-dec = { group = "org.brotli", name = "dec", version.ref = "brotli" }
 
 # Protobuf
 protobuf-java = { group = "com.google.protobuf", name = "protobuf-java", version.ref = "protobuf" }
