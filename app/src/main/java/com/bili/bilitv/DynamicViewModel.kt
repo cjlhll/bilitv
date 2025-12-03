@@ -184,8 +184,7 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
         return userVideos.indexOfFirst { it.id == focusedId }
     }
 
-    override val shouldRestoreFocusToGrid: Boolean
-        get() = true // Always restore focus for dynamic screen
+    override var shouldRestoreFocusToGrid: Boolean = false
 
     private val httpClient = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
@@ -299,6 +298,7 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
         videoListScrollIndex = 0
         videoListScrollOffset = 0
         lastFocusedVideoId = null
+        shouldRestoreFocusToGrid = false // Don't auto-focus when switching user
         fetchUserVideos(user.mid, 1)
     }
 
@@ -312,6 +312,7 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
         videoListScrollIndex = 0
         videoListScrollOffset = 0
         lastFocusedVideoId = null
+        shouldRestoreFocusToGrid = false // Don't auto-focus when switching to all dynamics
         fetchAllDynamics()
     }
 
@@ -509,6 +510,11 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
         } catch (e: Exception) {
             ""
         }
+    }
+    
+    fun onEnterFullScreen() {
+        // Prepare to restore focus when coming back from player
+        shouldRestoreFocusToGrid = true
     }
 }
 

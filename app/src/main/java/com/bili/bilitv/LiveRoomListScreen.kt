@@ -260,7 +260,7 @@ fun LiveRoomListScreen(
     
     // Handle hardware/remote back button
     BackHandler {
-        // 返回直播分区时才重置状态
+        // 返回直播分区时，重置直播列表的状态
         viewModel.resetScrollAndFocus()
         isVisible = false
         // 延迟回调,等待动画完成

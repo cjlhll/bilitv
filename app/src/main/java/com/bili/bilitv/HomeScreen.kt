@@ -1,7 +1,11 @@
 package com.bili.bilitv
 
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -89,6 +93,12 @@ fun HomeScreen(
     onEnterFullScreen: (VideoPlayInfo, String) -> Unit = { _, _ -> }
 ) {
     val coroutineScope = rememberCoroutineScope()
+    var isVisible by remember { mutableStateOf(false) }
+    
+    // 进入动画
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
     
     // 播放状态
     var currentPlayInfo by remember { mutableStateOf<VideoPlayInfo?>(null) }
@@ -135,6 +145,11 @@ fun HomeScreen(
         }
     }
     
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn(animationSpec = tween(300)),
+        exit = fadeOut(animationSpec = tween(200))
+    ) {
     // 显示视频列表
     Column(
             modifier = modifier
@@ -178,6 +193,7 @@ fun HomeScreen(
             }
         }
     }
+}
 
 /**
  * Tab切换栏

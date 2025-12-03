@@ -1,6 +1,10 @@
 package com.bili.bilitv
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -320,6 +324,18 @@ fun CategoryScreen(
     val videos by viewModel.videos.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val coroutineScope = rememberCoroutineScope()
+    var isVisible by remember { mutableStateOf(false) }
+    
+    // 进入动画
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
+
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn(animationSpec = tween(300)),
+        exit = fadeOut(animationSpec = tween(200))
+    ) {
 
     // 处理视频点击
     val handleVideoClick: (Video) -> Unit = { video ->
@@ -396,6 +412,7 @@ fun CategoryScreen(
                 }
             }
         }
+    }
     }
 }
 

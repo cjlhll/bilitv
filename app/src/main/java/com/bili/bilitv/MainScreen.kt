@@ -216,6 +216,12 @@ fun MainScreen() {
     
     // 使用 ViewModel 保存首页状态
     val homeViewModel: HomeViewModel = viewModel()
+    
+    // 使用 ViewModel 保存直播分区状态，确保在导航时不会丢失
+    val liveAreaViewModel: LiveAreaViewModel = viewModel()
+    
+    // 使用 ViewModel 保存直播列表状态，确保在导航时不会丢失
+    val liveRoomListViewModel: LiveRoomListViewModel = viewModel()
 
     var loggedInSession by remember { mutableStateOf(SessionManager.getSession()) }
     var userInfo by remember { mutableStateOf<UserInfoData?>(null) }
@@ -312,14 +318,19 @@ fun MainScreen() {
                 )
             }
 
-            // Right Side Content
+            // Right Side Content - 使用Crossfade实现页面切换的淡入淡出动画
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.background)
             ) {
-                when (currentRoute) {
+                Crossfade(
+                    targetState = currentRoute,
+                    animationSpec = tween(durationMillis = 300),
+                    label = "nav_transition"
+                ) { route ->
+                when (route) {
                     NavRoute.HOME -> HomeScreen(
                         viewModel = homeViewModel,
                         onEnterFullScreen = { playInfo, title ->
@@ -354,6 +365,7 @@ fun MainScreen() {
                     NavRoute.LIVE -> {
                         if (selectedLiveArea == null) {
                             LiveAreaScreen(
+                                viewModel = liveAreaViewModel,
                                 onAreaClick = { area -> 
                                     selectedLiveArea = area 
                                     liveListEnterTimestamp = System.currentTimeMillis()
@@ -363,7 +375,12 @@ fun MainScreen() {
                             LiveRoomListScreen(
                                 area = selectedLiveArea!!,
                                 enterTimestamp = liveListEnterTimestamp,
-                                onBack = { selectedLiveArea = null },
+                                viewModel = liveRoomListViewModel,
+                                onBack = { 
+                                    selectedLiveArea = null
+                                    // 返回直播分区时，标记需要恢复焦点
+                                    liveAreaViewModel.shouldRestoreFocusToGrid = true
+                                },
                                 onEnterFullScreen = { playInfo, title ->
                                     isFullScreenPlayer = true
                                     fullScreenPlayInfo = playInfo
@@ -378,7 +395,8 @@ fun MainScreen() {
                         }
                     }
                     NavRoute.SETTINGS -> PlaceholderScreen(NavRoute.SETTINGS.title)
-                    else -> PlaceholderScreen(currentRoute.title)
+                    else -> PlaceholderScreen(route.title)
+                }
                 }
             }
         }

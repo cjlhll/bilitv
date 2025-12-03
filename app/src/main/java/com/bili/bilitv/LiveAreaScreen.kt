@@ -1,6 +1,10 @@
 package com.bili.bilitv
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -159,7 +163,8 @@ class LiveAreaViewModel : ViewModel() {
     }
 
     fun onEnterLiveRoom() {
-        shouldRestoreFocusToGrid = true
+        // 进入直播列表页时，不改变当前焦点状态，保持直播分区的焦点
+        // 从直播列表返回时会自动恢复直播分区的焦点
     }
 }
 
@@ -173,6 +178,18 @@ fun LiveAreaScreen(
     val areaGroups by viewModel.areaGroups.collectAsState()
     val selectedGroup by viewModel.selectedGroup.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    var isVisible by remember { mutableStateOf(false) }
+    
+    // 进入动画
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
+
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn(animationSpec = tween(300)),
+        exit = fadeOut(animationSpec = tween(200))
+    ) {
 
     Column(
         modifier = Modifier
@@ -219,6 +236,7 @@ fun LiveAreaScreen(
                 }
             }
         }
+    }
     }
 }
 

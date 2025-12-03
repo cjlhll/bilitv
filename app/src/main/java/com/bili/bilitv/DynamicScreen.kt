@@ -1,5 +1,9 @@
 package com.bili.bilitv
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -33,6 +37,12 @@ fun DynamicScreen(
     onEnterFullScreen: (VideoPlayInfo, String) -> Unit = { _, _ -> }
 ) {
     val coroutineScope = rememberCoroutineScope()
+    var isVisible by remember { mutableStateOf(false) }
+    
+    // 进入动画
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
 
     LaunchedEffect(loggedInSession) {
         Log.d("BiliTV", "DynamicScreen: loggedInSession is ${if (loggedInSession == null) "null" else "not null"}")
@@ -45,11 +55,23 @@ fun DynamicScreen(
     }
 
     if (loggedInSession == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("请先登录", style = MaterialTheme.typography.headlineMedium)
+        AnimatedVisibility(
+            visible = isVisible,
+            enter = fadeIn(animationSpec = tween(300)),
+            exit = fadeOut(animationSpec = tween(200))
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("请先登录", style = MaterialTheme.typography.headlineMedium)
+            }
         }
         return
     }
+
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn(animationSpec = tween(300)),
+        exit = fadeOut(animationSpec = tween(200))
+    ) {
 
     // Focus handling for the "Left Side" container to prevent focus skipping
     val itemFocusRequesters = remember { mutableMapOf<Long, FocusRequester>() }
@@ -165,6 +187,7 @@ fun DynamicScreen(
                                             cookie = SessionManager.getCookieString()
                                         )
                                         if (playInfo != null) {
+                                            viewModel.onEnterFullScreen()
                                             onEnterFullScreen(playInfo, video.title)
                                         }
                                     }
@@ -186,6 +209,7 @@ fun DynamicScreen(
                 )
             }
         }
+    }
     }
 }
 
