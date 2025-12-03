@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.protobuf)
 }
 
 android {
@@ -56,6 +57,21 @@ android {
     }
 }
 
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:3.25.1"
+    }
+    generateProtoTasks {
+        all().forEach { task ->
+            task.builtins {
+                create("java") {
+                    option("lite")
+                }
+            }
+        }
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
@@ -84,4 +100,13 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:1.2.0")
     implementation("androidx.media3:media3-exoplayer-hls:1.2.0")
     implementation("androidx.media3:media3-ui:1.2.0")
+
+    // GSYVideoPlayer
+    implementation(libs.gsyvideoplayer)
+
+    // DanmakuFlameMaster
+    implementation(libs.danmaku.flame.master)
+
+    // Protobuf
+    implementation(libs.protobuf.java)
 }

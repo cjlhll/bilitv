@@ -48,6 +48,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import com.bili.bilitv.danmaku.DanmakuManager
+import com.bili.bilitv.danmaku.DanmakuRepository
+import master.flame.danmaku.ui.widget.DanmakuView
 
 /**
  * 视频播放页面（使用ExoPlayer）
@@ -97,6 +100,10 @@ fun VideoPlayerScreen(
     // 焦点控制
     val focusRequester = remember { FocusRequester() }
     
+    // Danmaku Manager
+    val danmakuView = remember { DanmakuView(context) }
+    val danmakuManager = remember { DanmakuManager(danmakuView) }
+
     // 请求焦点，确保能接收按键事件
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -106,6 +113,14 @@ fun VideoPlayerScreen(
     LaunchedEffect(videoPlayInfo.bvid, videoPlayInfo.cid) {
         if (!isLiveStream) {
             videoshotData = VideoPlayUrlFetcher.fetchVideoshot(videoPlayInfo.bvid, videoPlayInfo.cid)
+            
+            // Fetch Danmaku
+            launch(kotlinx.coroutines.Dispatchers.Main) {
+                val danmakuData = DanmakuRepository.fetchDanmaku(videoPlayInfo.cid, 1)
+                if (danmakuData != null) {
+                    danmakuManager.loadDanmaku(danmakuData)
+                }
+            }
         }
     }
 
@@ -128,6 +143,9 @@ fun VideoPlayerScreen(
             onReady = { 
                 isLoading = false 
                 duration = it.duration
+                if (!isLiveStream) {
+                     danmakuManager.resume()
+                }
             },
             onError = { error -> 
                 isLoading = false
@@ -152,6 +170,7 @@ fun VideoPlayerScreen(
     DisposableEffect(Unit) {
         onDispose {
             exoPlayer.release()
+            danmakuManager.release()
             Log.d("BiliTV", "ExoPlayer released")
         }
     }
@@ -201,6 +220,7 @@ fun VideoPlayerScreen(
                                         if (isSeeking && !isLiveStream) {
                                             // 确认seek（仅限普通视频）
                                             exoPlayer.seekTo(previewTime)
+                                            danmakuManager.seekTo(previewTime) // Sync Danmaku
                                             // 保持seek状态一小段时间，防止进度条跳变
                                             coroutineScope.launch {
                                                 delay(500) // 等待播放器调整
@@ -209,7 +229,13 @@ fun VideoPlayerScreen(
                                             }
                                         } else {
                                             // 切换播放/暂停
-                                            if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                            if (exoPlayer.isPlaying) {
+                                                exoPlayer.pause()
+                                                danmakuManager.pause()
+                                            } else {
+                                                exoPlayer.play()
+                                                danmakuManager.resume()
+                                            }
                                             isPlaying = !isPlaying
                                         }
                                     }
@@ -284,6 +310,7 @@ fun VideoPlayerScreen(
                                     seekJob?.cancel()
                                     // 松开后跳转播放
                                     exoPlayer.seekTo(previewTime)
+                                    danmakuManager.seekTo(previewTime) // Sync Danmaku
                                     currentTime = previewTime
                                     
                                     // 延迟退出seeking状态，给播放器一点缓冲时间
@@ -295,6 +322,7 @@ fun VideoPlayerScreen(
                                 } else if (isSeeking) {
                                     // 短按结束
                                     exoPlayer.seekTo(previewTime)
+                                    danmakuManager.seekTo(previewTime) // Sync Danmaku
                                     currentTime = previewTime
                                     
                                     seekJob?.cancel()
@@ -326,6 +354,21 @@ fun VideoPlayerScreen(
                         .fillMaxSize()
                         .align(Alignment.Center)
                 )
+
+                // 1.5 Danmaku View
+                if (!isLiveStream) {
+                    AndroidView(
+                        factory = { 
+                            danmakuView.apply {
+                                isFocusable = false
+                                isFocusableInTouchMode = false
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .align(Alignment.Center)
+                    )
+                }
 
                 // 2. 顶部标题栏 (移除了返回按钮)
                 AnimatedVisibility(
