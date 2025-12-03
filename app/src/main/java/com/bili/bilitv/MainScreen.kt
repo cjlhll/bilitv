@@ -3,7 +3,9 @@ package com.bili.bilitv
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -269,7 +271,13 @@ fun MainScreen() {
     // 判断是否应该隐藏导航栏（直播列表页面全屏显示）
     val shouldHideNavigation = currentRoute == NavRoute.LIVE && selectedLiveArea != null
 
-    if (isFullScreenPlayer) {
+    // 使用Crossfade实现播放器与列表之间的平滑过渡
+    Crossfade(
+        targetState = isFullScreenPlayer,
+        animationSpec = tween(durationMillis = 300),
+        label = "player_transition"
+    ) { showPlayer ->
+        if (showPlayer) {
             if (fullScreenLivePlayInfo != null) {
                 // 直播播放
                 VideoPlayerScreen(
@@ -373,6 +381,7 @@ fun MainScreen() {
                     else -> PlaceholderScreen(currentRoute.title)
                 }
             }
+        }
         }
     }
 }
@@ -502,8 +511,6 @@ fun UserLoginScreen(
         }
     }
     
-    // 移除原来的 LaunchedEffect(loggedInSession) 获取用户信息逻辑
-
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -552,7 +559,7 @@ fun UserLoginScreen(
 }
 
 @Composable
-private fun NavigationRail(
+fun NavigationRail(
     currentRoute: NavRoute,
     onNavigate: (NavRoute) -> Unit,
     modifier: Modifier = Modifier,
@@ -622,7 +629,7 @@ private fun NavigationRail(
 }
 
 @Composable
-private fun NavButton(
+fun NavButton(
     icon: ImageVector,
     label: String,
     selected: Boolean,
@@ -680,7 +687,7 @@ private fun NavButton(
 }
 
 @Composable
-private fun PlaceholderScreen(title: String) {
+fun PlaceholderScreen(title: String) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center

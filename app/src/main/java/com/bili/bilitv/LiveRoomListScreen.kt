@@ -1,7 +1,11 @@
 package com.bili.bilitv
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -126,7 +130,9 @@ class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
 
     fun initialLoad(parentAreaId: String, areaId: String, force: Boolean = false) {
         if (!force && currentAreaId == areaId && _rooms.value.isNotEmpty()) {
-            // Already loaded, don't reset
+            // Already loaded, don't reset - 从播放器返回时保持原有位置
+            // 但需要标记恢复焦点
+            shouldRestoreFocusToGrid = true
             return
         }
         
@@ -134,6 +140,7 @@ class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
         currentAreaId = areaId
         currentPage = 1
         isLastPage = false
+        // 只有当是新区域时才重置滚动和焦点位置
         scrollIndex = 0
         scrollOffset = 0
         focusedIndex = -1
@@ -244,18 +251,36 @@ fun LiveRoomListScreen(
 ) {
     val rooms by viewModel.rooms.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    var isVisible by remember { mutableStateOf(false) }
+    
+    // 进入动画
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
     
     // Handle hardware/remote back button
     BackHandler {
-        // 返回直播分区时重置状态
+        // 返回直播分区时才重置状态
         viewModel.resetScrollAndFocus()
-        onBack()
+        isVisible = false
+        // 延迟回调,等待动画完成
+        kotlinx.coroutines.GlobalScope.launch {
+            kotlinx.coroutines.delay(200)
+            onBack()
+        }
     }
 
     LaunchedEffect(enterTimestamp) {
-        // Force reload and reset on new entry
-        viewModel.initialLoad(area.parent_id, area.id, force = true)
+        // 从播放器返回时不强制重新加载,保持滚动和焦点位置
+        viewModel.initialLoad(area.parent_id, area.id, force = false)
     }
+
+    // 只使用淡入淡出动画
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn(animationSpec = tween(300)),
+        exit = fadeOut(animationSpec = tween(200))
+    ) {
 
     Column(
         modifier = Modifier
@@ -323,6 +348,7 @@ fun LiveRoomListScreen(
                 )
             }
         }
+    }
     }
 }
 

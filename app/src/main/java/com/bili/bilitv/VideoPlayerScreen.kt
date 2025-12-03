@@ -188,13 +188,20 @@ fun VideoPlayerScreen(
         }
     }
     
-    // 清理资源
+    // 清理资源 - 在协程中异步释放,避免阻塞UI线程
     DisposableEffect(Unit) {
         onDispose {
-            exoPlayer.release()
-            danmakuManager.release()
-            danmakuLiveManager.stop() // Stop live danmaku as well
-            Log.d("BiliTV", "ExoPlayer and Danmaku resources released")
+            // 在后台线程异步释放资源,不阻塞UI
+            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    exoPlayer.release()
+                    danmakuManager.release()
+                    danmakuLiveManager.stop()
+                    Log.d("BiliTV", "ExoPlayer and Danmaku resources released")
+                } catch (e: Exception) {
+                    Log.e("BiliTV", "Error releasing resources", e)
+                }
+            }
         }
     }
 
