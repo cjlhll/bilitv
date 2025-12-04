@@ -2,8 +2,8 @@ package com.bili.bilitv
 
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,15 +18,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import coil.compose.SubcomposeAsyncImage
+import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import androidx.compose.ui.platform.LocalContext
-import coil.size.Size
 
 /**
  * 视频数据模型
@@ -41,6 +40,8 @@ data class Video(
     val playCount: String = "",
     val pubDate: Long? = null // Add pubDate field
 )
+
+private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
 /**
  * 视频列表项组件
@@ -80,7 +81,7 @@ fun VideoItem(
                         .background(Color.LightGray),
                     contentAlignment = Alignment.Center
                 ) {
-                    SubcomposeAsyncImage(
+                    AsyncImage(
                         model = ImageRequest.Builder(context)
                             .data(video.coverUrl)
                             // 使用统一配置的图片尺寸
@@ -91,42 +92,13 @@ fun VideoItem(
                             // 启用内存缓存和磁盘缓存
                             .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
                             .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                            .crossfade(true)
                             .build(),
                         contentDescription = video.title,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
-                        loading = {
-                            // 加载中占位图 - 居中显示，占容器50%宽度
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.video_placeholder),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxWidth(0.5f)
-                                        .aspectRatio(1f),
-                                    contentScale = ContentScale.Fit
-                                )
-                            }
-                        },
-                        error = {
-                            // 加载失败占位图 - 居中显示，占容器50%宽度
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.video_placeholder),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxWidth(0.5f)
-                                        .aspectRatio(1f),
-                                    contentScale = ContentScale.Fit
-                                )
-                            }
-                        }
+                        placeholder = painterResource(id = R.drawable.video_placeholder),
+                        error = painterResource(id = R.drawable.video_placeholder)
                     )
                 }
                 
@@ -164,6 +136,5 @@ fun VideoItem(
 // Utility function to format Unix timestamp
 private fun formatUnixTimestamp(timestamp: Long): String {
     val date = Date(timestamp * 1000L) // Convert seconds to milliseconds
-    val formatter = SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-    return formatter.format(date)
+    return dateFormat.format(date)
 }
