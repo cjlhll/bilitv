@@ -49,7 +49,8 @@ class BiliDanmakuParser : BaseDanmakuParser() {
         
         // Color (ensure alpha is FF)
         item.textColor = (elem.color.toInt() or -16777216) 
-        item.textShadowColor = if (item.textColor <= -1) 0 else -16777216
+        // 给弹幕文字添加黑灰色描边，以便更清晰可见
+        item.textShadowColor = 0xFF333333.toInt()
         
         DanmakuUtils.fillText(item, elem.content)
         item.index = 0

@@ -214,7 +214,7 @@ fun VideoPlayerScreen(
                     }
                 }
             }
-            delay(1000)
+            delay(200)
         }
     }
     
@@ -519,6 +519,9 @@ fun VideoPlayerScreen(
                             Spacer(modifier = Modifier.width(12.dp))
 
                             // 自定义进度条样式
+                            val primaryColor = MaterialTheme.colorScheme.primary
+                            val inactiveColor = Color.White.copy(alpha = 0.3f)
+                            
                             Slider(
                                 value = if (isSeeking) previewTime.toFloat() else currentTime.toFloat(),
                                 onValueChange = { 
@@ -541,10 +544,35 @@ fun VideoPlayerScreen(
                                     .weight(1f)
                                     .height(20.dp), // 增加触摸区域高度
                                 colors = SliderDefaults.colors(
-                                    thumbColor = MaterialTheme.colorScheme.primary,
-                                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                                    inactiveTrackColor = Color.White.copy(alpha = 0.3f)
-                                )
+                                    thumbColor = primaryColor,
+                                    activeTrackColor = primaryColor,
+                                    inactiveTrackColor = inactiveColor
+                                ),
+                                thumb = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(12.dp)
+                                            .offset(y = 2.dp)
+                                            .background(primaryColor, androidx.compose.foundation.shape.CircleShape)
+                                    )
+                                },
+                                track = { sliderState ->
+                                    val fraction = (sliderState.value - sliderState.valueRange.start) / (sliderState.valueRange.endInclusive - sliderState.valueRange.start)
+                                    Canvas(modifier = Modifier.fillMaxWidth().height(6.dp)) {
+                                        // 绘制背景轨道
+                                        drawRoundRect(
+                                            color = inactiveColor,
+                                            size = size,
+                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
+                                        )
+                                        // 绘制已播放轨道
+                                        drawRoundRect(
+                                            color = primaryColor,
+                                            size = androidx.compose.ui.geometry.Size(size.width * fraction, size.height),
+                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
+                                        )
+                                    }
+                                }
                             )
                             
                             Spacer(modifier = Modifier.width(12.dp))
@@ -573,6 +601,29 @@ fun VideoPlayerScreen(
                                   else "${videoPlayInfo.format.uppercase()} | ${getQualityName(videoPlayInfo.quality)}",
                             color = Color.White.copy(alpha = 0.7f),
                             style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+
+                // 5. 沉浸式播放时的底部进度条 (仅限非直播)
+                AnimatedVisibility(
+                    visible = !isOverlayVisible && !isLiveStream,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.BottomStart)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.5f.dp)
+                            .background(Color.Transparent)
+                    ) {
+                        val progress = if (duration > 0) currentTime.toFloat() / duration.toFloat() else 0f
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(fraction = progress.coerceIn(0f, 1f))
+                                .background(Color.White.copy(alpha = 0.5f))
                         )
                     }
                 }

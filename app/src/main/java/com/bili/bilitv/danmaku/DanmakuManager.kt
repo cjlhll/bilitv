@@ -97,7 +97,8 @@ class DanmakuManager(private val danmakuView: IDanmakuView) {
         
         // Color (ensure alpha is FF)
         item.textColor = (elem.color.toInt() or -16777216) 
-        item.textShadowColor = if (item.textColor <= -1) 0 else -16777216
+        // 给弹幕文字添加黑灰色描边，以便更清晰可见
+        item.textShadowColor = 0xFF333333.toInt()
         
         DanmakuUtils.fillText(item, elem.content)
         item.index = 0
@@ -128,7 +129,8 @@ class DanmakuManager(private val danmakuView: IDanmakuView) {
         danmaku.time = danmakuView.currentTime
         danmaku.textSize = 25f * (danmakuContext.displayer.density - 0.6f) // Approximate scaling
         danmaku.textColor = item.color.toInt() or -16777216 // Ensure alpha is FF
-        danmaku.textShadowColor = if (danmaku.textColor <= -1) 0 else -16777216
+        // 给直播弹幕添加黑灰色描边
+        danmaku.textShadowColor = 0xFF333333.toInt()
         DanmakuUtils.fillText(danmaku, "${item.userName}: ${item.text}")
         danmakuView.addDanmaku(danmaku)
     }
