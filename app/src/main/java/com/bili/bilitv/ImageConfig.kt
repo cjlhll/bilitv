@@ -22,6 +22,9 @@ object ImageConfig {
     // 滚动预加载阈值（还剩多少个item时开始预加载）
     const val SCROLL_PRELOAD_THRESHOLD = 50
     
+    // 滚动提前预加载数量（屏幕外提前加载的数量）
+    const val SCROLL_PRELOAD_AHEAD_COUNT = 20
+    
     // 内存缓存大小（字节）
     const val MEMORY_CACHE_SIZE_BYTES = 50 * 1024 * 1024 // 50MB
     

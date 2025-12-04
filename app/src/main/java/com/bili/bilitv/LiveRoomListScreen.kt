@@ -360,7 +360,6 @@ fun LiveRoomCard(
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (isFocused) 1.1f else 1.0f, label = "scale")
 
     Box(
         modifier = modifier
@@ -370,8 +369,7 @@ fun LiveRoomCard(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .zIndex(if (isFocused) 1f else 0f)
-                .scale(scale),
+                .zIndex(if (isFocused) 1f else 0f),
             shape = RoundedCornerShape(8.dp),
             elevation = CardDefaults.cardElevation(
                 defaultElevation = if (isFocused) 8.dp else 2.dp

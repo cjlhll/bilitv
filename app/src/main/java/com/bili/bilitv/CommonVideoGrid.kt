@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.collect
+import kotlin.math.min
 
 /**
  * 通用视频网格组件接口，用于管理滚动位置和焦点状态
@@ -82,6 +83,7 @@ fun <T> CommonVideoGrid(
     horizontalSpacing: Dp = 12.dp,
     verticalSpacing: Dp = 12.dp,
     contentPadding: PaddingValues = PaddingValues(top = 16.dp, bottom = 32.dp, start = 12.dp, end = 12.dp),
+    state: androidx.compose.foundation.lazy.grid.LazyGridState? = null,
     itemContent: @Composable (item: T, modifier: Modifier) -> Unit
 ) {
     val (initialIndex, initialOffset) = remember(stateKey) { 
@@ -92,12 +94,22 @@ fun <T> CommonVideoGrid(
     }
     val shouldRestoreFocus = stateManager.shouldRestoreFocusToGrid
 
-    // 使用prefetchCount提高滚动性能,提前加载屏幕外的item
-    // 4列网格,提前加载3行(12个item)可以覆盖快速滚动场景
-    val listState = rememberLazyGridState(
+    // Use provided state or create a new one
+    val listState = state ?: rememberLazyGridState(
         initialFirstVisibleItemIndex = initialIndex,
         initialFirstVisibleItemScrollOffset = initialOffset
     )
+
+    // If state was provided, we might need to restore position manually if it wasn't initialized with our values
+    // But typically the caller should handle initialization if they provide state.
+    // To be safe, we can rely on the caller to initialize it correctly or just ignore for now as we are the only caller.
+    // Actually, rememberLazyGridState with initial values is the standard way.
+    // If we pass a state from outside, we should probably initialize it outside.
+    
+    // Let's keep it simple: The generic one uses the passed state OR creates one.
+    
+    // ... rest of the function uses listState ...
+
 
     // 监听滚动位置并保存到 StateManager
     LaunchedEffect(listState, stateKey) {
@@ -169,6 +181,9 @@ fun <T> CommonVideoGrid(
     }
 }
 
+/**
+ * 视频网格专用版本 - 使用 Video 数据类型
+ */
 @Composable
 fun CommonVideoGrid(
     videos: List<Video>,
@@ -182,6 +197,34 @@ fun CommonVideoGrid(
     verticalSpacing: Dp = 12.dp,
     contentPadding: PaddingValues = PaddingValues(top = 16.dp, bottom = 32.dp, start = 12.dp, end = 12.dp)
 ) {
+    val context = LocalContext.current
+    val (initialIndex, initialOffset) = remember(stateKey) { 
+        stateManager.getScrollState(stateKey) 
+    }
+    
+    val listState = rememberLazyGridState(
+        initialFirstVisibleItemIndex = initialIndex,
+        initialFirstVisibleItemScrollOffset = initialOffset
+    )
+    
+    // Scroll-based Image Preloading
+    LaunchedEffect(listState, videos) {
+        snapshotFlow { 
+            val layoutInfo = listState.layoutInfo
+            val visibleItems = layoutInfo.visibleItemsInfo
+            visibleItems.lastOrNull()?.index ?: 0
+        }.collect { lastIndex ->
+            // Calculate preload range: N items AFTER the last visible item
+            val start = lastIndex + 1
+            val end = min(videos.size, start + ImageConfig.SCROLL_PRELOAD_AHEAD_COUNT)
+            
+            if (start < end) {
+                val itemsToPreload = videos.subList(start, end)
+                ImagePreloader.preloadImages(context, itemsToPreload)
+            }
+        }
+    }
+
     CommonVideoGrid(
         items = videos,
         stateManager = stateManager,
@@ -192,7 +235,8 @@ fun CommonVideoGrid(
         modifier = modifier,
         horizontalSpacing = horizontalSpacing,
         verticalSpacing = verticalSpacing,
-        contentPadding = contentPadding
+        contentPadding = contentPadding,
+        state = listState
     ) { video, itemModifier ->
         VideoItem(
             video = video,
