@@ -342,20 +342,29 @@ object VideoPlayUrlFetcher {
         return withContext(Dispatchers.IO) {
             try {
                 val url = "https://api.bilibili.com/x/player/videoshot?bvid=$bvid&cid=$cid"
+                Log.d("BiliTV", "fetchVideoshot: Requesting URL: $url")
                 val request = Request.Builder()
                     .url(url)
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .build()
                 
                 val response = client.newCall(request).execute()
+                Log.d("BiliTV", "fetchVideoshot: Response code: ${response.code}")
                 if (response.isSuccessful) {
                     val body = response.body?.string()
+                    Log.d("BiliTV", "fetchVideoshot: Response body length: ${body?.length}")
                     if (body != null) {
+                        Log.d("BiliTV", "fetchVideoshot: Response body: $body")
                         val resp = json.decodeFromString<VideoshotResponse>(body)
+                        Log.d("BiliTV", "fetchVideoshot: Response code: ${resp.code}, data: ${resp.data}")
                         if (resp.code == 0) {
                             return@withContext resp.data
+                        } else {
+                            Log.e("BiliTV", "fetchVideoshot: API returned error code: ${resp.code}")
                         }
                     }
+                } else {
+                    Log.e("BiliTV", "fetchVideoshot: HTTP error: ${response.code}")
                 }
                 null
             } catch (e: Exception) {

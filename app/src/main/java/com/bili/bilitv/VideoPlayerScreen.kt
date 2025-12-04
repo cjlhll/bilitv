@@ -30,10 +30,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
@@ -127,6 +130,17 @@ fun VideoPlayerScreen(
         if (!isLiveStream) {
             // VOD Video logic
             videoshotData = VideoPlayUrlFetcher.fetchVideoshot(videoPlayInfo.bvid, videoPlayInfo.cid)
+            Log.d("BiliTV", "Fetched videoshotData: ${videoshotData != null}")
+            if (videoshotData == null) {
+                Log.e("BiliTV", "Videoshot data is null for bvid=${videoPlayInfo.bvid}, cid=${videoPlayInfo.cid}")
+            } else {
+                videoshotData?.let { data ->
+                    Log.d("BiliTV", "VideoshotData details: image count=${data.image?.size}, img_x_len=${data.img_x_len}, img_y_len=${data.img_y_len}, img_x_size=${data.img_x_size}, img_y_size=${data.img_y_size}")
+                    data.image?.forEachIndexed { index, url ->
+                        Log.d("BiliTV", "Videoshot image $index: $url")
+                    }
+                }
+            }
             
             // Fetch VOD Danmaku (will prepare danmakuView internally)
             launch(kotlinx.coroutines.Dispatchers.Main) {
@@ -310,6 +324,7 @@ fun VideoPlayerScreen(
                                         if (previewTime == -1L) previewTime = currentTime
                                     }
                                     isOverlayVisible = true
+                                    Log.d("BiliTV", "DPAD_LEFT DOWN: isSeeking=$isSeeking, previewTime=$previewTime")
                                     
                                     // 长按逻辑
                                     if (event.nativeKeyEvent.repeatCount > 0) {
@@ -320,6 +335,7 @@ fun VideoPlayerScreen(
                                             seekJob = coroutineScope.launch {
                                                 while (isLongPressing) {
                                                     previewTime = (previewTime - 5000).coerceAtLeast(0)
+                                                    Log.d("BiliTV", "DPAD_LEFT LONG PRESS: previewTime=$previewTime")
                                                     delay(100) // 100ms 刷新一次
                                                 }
                                             }
@@ -327,6 +343,7 @@ fun VideoPlayerScreen(
                                     } else {
                                         // 短按逻辑 - 立即步进
                                         previewTime = (previewTime - 5000).coerceAtLeast(0)
+                                        Log.d("BiliTV", "DPAD_LEFT SHORT PRESS: previewTime=$previewTime")
                                     }
                                 }
                                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
@@ -339,6 +356,7 @@ fun VideoPlayerScreen(
                                         if (previewTime == -1L) previewTime = currentTime
                                     }
                                     isOverlayVisible = true
+                                    Log.d("BiliTV", "DPAD_RIGHT DOWN: isSeeking=$isSeeking, previewTime=$previewTime")
                                     
                                     // 长按逻辑
                                     if (event.nativeKeyEvent.repeatCount > 0) {
@@ -349,6 +367,7 @@ fun VideoPlayerScreen(
                                             seekJob = coroutineScope.launch {
                                                 while (isLongPressing) {
                                                     previewTime = (previewTime + 5000).coerceAtMost(duration)
+                                                    Log.d("BiliTV", "DPAD_RIGHT LONG PRESS: previewTime=$previewTime")
                                                     delay(100) // 100ms 刷新一次
                                                 }
                                             }
@@ -356,6 +375,7 @@ fun VideoPlayerScreen(
                                     } else {
                                         // 短按逻辑 - 立即步进
                                         previewTime = (previewTime + 5000).coerceAtMost(duration)
+                                        Log.d("BiliTV", "DPAD_RIGHT SHORT PRESS: previewTime=$previewTime")
                                     }
                                 }
                             }
@@ -479,110 +499,147 @@ fun VideoPlayerScreen(
                             )
                             .padding(start = 12.dp, end = 12.dp, bottom = 32.dp, top = 16.dp) // 增加边距，使其悬浮
                     ) {
-                        // 预览窗口（仅限普通视频）
-                        if (!isLiveStream && isSeeking && previewTime >= 0 && videoshotData != null) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(100.dp)
-                            ) {
-                                // 计算预览位置
-                                val progress = if (duration > 0) previewTime.toFloat() / duration else 0f
-                                
-                                VideoshotPreview(
-                                    data = videoshotData!!,
-                                    time = previewTime,
-                                    totalDuration = duration,
-                                    modifier = Modifier
-                                        .align(Alignment.BottomStart)
-                                        .offset(x = (progress * 800).dp) // 这里的偏移量需要根据实际屏幕宽度动态计算，暂时简化
-                                        .border(2.dp, Color.White, RoundedCornerShape(4.dp))
-                                        .clip(RoundedCornerShape(4.dp))
-                                )
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-
                         // 进度条和时间
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             if (!isLiveStream) {
-                            Text(
-                                text = formatDuration(if (isSeeking) previewTime else currentTime),
-                                color = Color.White,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            
-                            Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = formatDuration(if (isSeeking) previewTime else currentTime),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                
+                                Spacer(modifier = Modifier.width(12.dp))
 
-                            // 自定义进度条样式
-                            val primaryColor = MaterialTheme.colorScheme.primary
-                            val inactiveColor = Color.White.copy(alpha = 0.3f)
-                            
-                            Slider(
-                                value = if (isSeeking) previewTime.toFloat() else currentTime.toFloat(),
-                                onValueChange = { 
-                                    isSeeking = true
-                                    previewTime = it.toLong()
-                                    lastInteractionTime = System.currentTimeMillis()
-                                },
-                                onValueChangeFinished = {
-                                    exoPlayer.seekTo(previewTime)
-                                    currentTime = previewTime
-                                    coroutineScope.launch {
-                                        delay(1000)
-                                        isSeeking = false
-                                        previewTime = -1L
-                                    }
-                                    lastInteractionTime = System.currentTimeMillis()
-                                },
-                                valueRange = 0f..(duration.toFloat().coerceAtLeast(1f)),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(20.dp), // 增加触摸区域高度
-                                colors = SliderDefaults.colors(
-                                    thumbColor = primaryColor,
-                                    activeTrackColor = primaryColor,
-                                    inactiveTrackColor = inactiveColor
-                                ),
-                                thumb = {
-                                    Box(
+                                // 预览窗口容器 + 进度条
+                                Box(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    var sliderWidth by remember { mutableStateOf(0) }
+                                    
+                                    // 自定义进度条样式
+                                    val primaryColor = MaterialTheme.colorScheme.primary
+                                    val inactiveColor = Color.White.copy(alpha = 0.3f)
+                                    
+                                    Slider(
+                                        value = if (isSeeking) previewTime.toFloat() else currentTime.toFloat(),
+                                        onValueChange = { 
+                                            isSeeking = true
+                                            previewTime = it.toLong()
+                                            lastInteractionTime = System.currentTimeMillis()
+                                        },
+                                        onValueChangeFinished = {
+                                            exoPlayer.seekTo(previewTime)
+                                            currentTime = previewTime
+                                            coroutineScope.launch {
+                                                delay(1000)
+                                                isSeeking = false
+                                                previewTime = -1L
+                                            }
+                                            lastInteractionTime = System.currentTimeMillis()
+                                        },
+                                        valueRange = 0f..(duration.toFloat().coerceAtLeast(1f)),
                                         modifier = Modifier
-                                            .size(12.dp)
-                                            .offset(y = 2.dp)
-                                            .background(primaryColor, androidx.compose.foundation.shape.CircleShape)
+                                            .fillMaxWidth()
+                                            .height(20.dp) // 增加触摸区域高度
+                                            .onGloballyPositioned { coordinates ->
+                                                sliderWidth = coordinates.size.width
+                                            },
+                                        colors = SliderDefaults.colors(
+                                            thumbColor = primaryColor,
+                                            activeTrackColor = primaryColor,
+                                            inactiveTrackColor = inactiveColor
+                                        ),
+                                        thumb = {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(12.dp)
+                                                    .offset(y = 2.dp)
+                                                    .background(primaryColor, androidx.compose.foundation.shape.CircleShape)
+                                            )
+                                        },
+                                        track = { sliderState ->
+                                            val fraction = (sliderState.value - sliderState.valueRange.start) / (sliderState.valueRange.endInclusive - sliderState.valueRange.start)
+                                            Canvas(modifier = Modifier.fillMaxWidth().height(6.dp)) {
+                                                // 绘制背景轨道
+                                                drawRoundRect(
+                                                    color = inactiveColor,
+                                                    size = size,
+                                                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
+                                                )
+                                                // 绘制已播放轨道
+                                                drawRoundRect(
+                                                    color = primaryColor,
+                                                    size = androidx.compose.ui.geometry.Size(size.width * fraction, size.height),
+                                                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
+                                                )
+                                            }
+                                        }
                                     )
-                                },
-                                track = { sliderState ->
-                                    val fraction = (sliderState.value - sliderState.valueRange.start) / (sliderState.valueRange.endInclusive - sliderState.valueRange.start)
-                                    Canvas(modifier = Modifier.fillMaxWidth().height(6.dp)) {
-                                        // 绘制背景轨道
-                                        drawRoundRect(
-                                            color = inactiveColor,
-                                            size = size,
-                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
-                                        )
-                                        // 绘制已播放轨道
-                                        drawRoundRect(
-                                            color = primaryColor,
-                                            size = androidx.compose.ui.geometry.Size(size.width * fraction, size.height),
-                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
-                                        )
+                                    
+                                    // 预览窗口容器（绝对定位在Slider上方）
+                                    if (isSeeking && previewTime >= 0 && videoshotData != null) {
+                                        // 计算预览位置
+                                        val progress = if (duration > 0) previewTime.toFloat() / duration else 0f
+                                        
+                                        // 转换sliderWidth从px到dp
+                                        val density = LocalDensity.current
+                                        val sliderWidthDp = with(density) { sliderWidth.toDp() }
+                                        val previewWidth = 160.dp
+                                        val previewHeight = 90.dp
+                                        
+                                        // 计算offset X: (sliderWidth * progress) - (previewWidth / 2)
+                                        val offsetX = (sliderWidthDp * progress) - (previewWidth / 2)
+                                        
+                                        // 限制边界
+                                        val constrainedOffsetX = minOf(maxOf(offsetX, 0.dp), sliderWidthDp - previewWidth)
+                                        
+                                        Log.d("BiliTV", "VideoshotPreview visible check: isSeeking=$isSeeking, previewTime=$previewTime, videoshotData=${videoshotData != null}")
+                                        
+                                        // 使用绝对定位，将预览窗口放在进度条上方
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.TopStart)
+                                                .offset(y = (-previewHeight - 10.dp), x = constrainedOffsetX)
+                                                .size(previewWidth, previewHeight)
+                                                .border(2.dp, Color.White, RoundedCornerShape(4.dp))
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(Color.Black)
+                                        ) {
+                                            // 添加调试信息显示
+                                            if (videoshotData != null) {
+                                                VideoshotPreview(
+                                                    data = videoshotData!!,
+                                                    time = previewTime,
+                                                    totalDuration = duration,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            } else {
+                                                Box(
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = "No preview data",
+                                                        color = Color.White,
+                                                        fontSize = 12.sp
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                            )
-                            
-                            Spacer(modifier = Modifier.width(12.dp))
-                            
-                            Text(
-                                text = formatDuration(duration),
-                                color = Color.White,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        } else {
+                                
+                                Spacer(modifier = Modifier.width(12.dp))
+                                
+                                Text(
+                                    text = formatDuration(duration),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            } else {
                             // 直播流显示"直播中"标识
                             Text(
                                 text = "直播中",
@@ -643,7 +700,7 @@ fun VideoPlayerScreen(
 }
 
 /**
- * 视频预览组件
+ * 视频预览组件（带缓存优化）
  */
 @Composable
 fun VideoshotPreview(
@@ -657,11 +714,17 @@ fun VideoshotPreview(
     
     // 计算当前时间对应的图片索引
     val totalImages = (data.image?.size ?: 0) * data.img_x_len * data.img_y_len
-    if (totalImages == 0) return
+    Log.d("BiliTV", "VideoshotPreview: totalImages=$totalImages, time=$time, totalDuration=$totalDuration")
+    if (totalImages == 0) {
+        Log.e("BiliTV", "VideoshotPreview: totalImages is 0, returning early")
+        return
+    }
     
     val index = if (totalDuration > 0) {
         ((time.toDouble() / totalDuration) * totalImages).toInt().coerceIn(0, totalImages - 1)
     } else 0
+    
+    Log.d("BiliTV", "VideoshotPreview: index=$index, totalImages=$totalImages")
     
     // 计算所在的拼图索引
     val sheetSize = data.img_x_len * data.img_y_len
@@ -672,33 +735,90 @@ fun VideoshotPreview(
     val row = internalIndex / data.img_x_len
     val col = internalIndex % data.img_x_len
     
-    // 加载图片
-    LaunchedEffect(sheetIndex) {
-        if (data.image != null && sheetIndex < data.image.size) {
-            val url = data.image[sheetIndex]
-            val loader = ImageLoader(context)
-            val request = ImageRequest.Builder(context)
-                .data(url)
-                .allowHardware(false) // 需要软Bitmap进行Canvas绘制
-                .build()
-            
-            val result = loader.execute(request)
-            if (result is SuccessResult) {
-                bitmap = (result.drawable as BitmapDrawable).bitmap.asImageBitmap()
+    Log.d("BiliTV", "VideoshotPreview: sheetIndex=$sheetIndex, internalIndex=$internalIndex, row=$row, col=$col")
+    Log.d("BiliTV", "VideoshotPreview: img_x_len=${data.img_x_len}, img_y_len=${data.img_y_len}, img_x_size=${data.img_x_size}, img_y_size=${data.img_y_size}")
+    
+    // 使用缓存加载图片
+    val cachedBitmap = remember(sheetIndex) {
+        mutableStateOf<ImageBitmap?>(null)
+    }
+    
+    // 如果缓存中有，直接使用
+    if (cachedBitmap.value != null) {
+        bitmap = cachedBitmap.value
+        Log.d("BiliTV", "VideoshotPreview: Using cached bitmap for sheetIndex=$sheetIndex")
+    } else {
+        // 加载图片
+        LaunchedEffect(sheetIndex) {
+            if (data.image != null && sheetIndex < data.image.size) {
+                val url = if (data.image[sheetIndex].startsWith("//")) "https:${data.image[sheetIndex]}" else data.image[sheetIndex]
+                Log.d("BiliTV", "VideoshotPreview: Loading image for sheetIndex=$sheetIndex, URL=$url")
+                val loader = ImageLoader(context)
+                val request = ImageRequest.Builder(context)
+                    .data(url)
+                    .allowHardware(false)
+                    .build()
+                
+                try {
+                    val result = loader.execute(request)
+                    if (result is SuccessResult) {
+                        val loadedBitmap = (result.drawable as BitmapDrawable).bitmap.asImageBitmap()
+                        Log.d("BiliTV", "VideoshotPreview: Bitmap loaded successfully, size=${loadedBitmap.width}x${loadedBitmap.height}")
+                        cachedBitmap.value = loadedBitmap
+                        bitmap = loadedBitmap
+                    } else {
+                        Log.e("BiliTV", "VideoshotPreview: Failed to load bitmap, result=$result")
+                    }
+                } catch (e: Exception) {
+                    Log.e("BiliTV", "VideoshotPreview: Exception loading image", e)
+                }
+            } else {
+                Log.e("BiliTV", "VideoshotPreview: data.image is null or sheetIndex out of bounds. data.image=${data.image}, sheetIndex=$sheetIndex")
             }
         }
     }
     
     if (bitmap != null) {
         Canvas(modifier = modifier.size(160.dp, 90.dp)) {
-            val srcX = col * data.img_x_size
-            val srcY = row * data.img_y_size
+            // 根据实际bitmap尺寸重新计算小图尺寸
+            val actualImgWidth = bitmap!!.width / data.img_x_len
+            val actualImgHeight = bitmap!!.height / data.img_y_len
             
-            drawImage(
-                image = bitmap!!,
-                srcOffset = IntOffset(srcX, srcY),
-                srcSize = IntSize(data.img_x_size, data.img_y_size),
-                dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt())
+            val srcX = col * actualImgWidth
+            val srcY = row * actualImgHeight
+            
+            val dstWidth = size.width.roundToInt()
+            val dstHeight = size.height.roundToInt()
+
+            Log.d("BiliTV", "VideoshotPreview: Drawing image. srcOffset=($srcX,$srcY), srcSize=($actualImgWidth,$actualImgHeight), dstSize=($dstWidth,$dstHeight)")
+            Log.d("BiliTV", "VideoshotPreview: Bitmap size=${bitmap!!.width}x${bitmap!!.height}, actual tile size=${actualImgWidth}x${actualImgHeight}")
+            
+            // 检查裁剪区域是否在bitmap范围内
+            if (srcX + actualImgWidth <= bitmap!!.width && srcY + actualImgHeight <= bitmap!!.height) {
+                drawImage(
+                    image = bitmap!!,
+                    srcOffset = IntOffset(srcX, srcY),
+                    srcSize = IntSize(actualImgWidth, actualImgHeight),
+                    dstSize = IntSize(dstWidth, dstHeight)
+                )
+                Log.d("BiliTV", "VideoshotPreview: Image drawn successfully")
+            } else {
+                Log.e("BiliTV", "VideoshotPreview: Crop region out of bounds! srcX=$srcX, srcY=$srcY, actualImgWidth=$actualImgWidth, actualImgHeight=$actualImgHeight, bitmap size=${bitmap!!.width}x${bitmap!!.height}")
+                // 绘制错误占位符
+                drawRect(Color.DarkGray.copy(alpha = 0.8f))
+            }
+        }
+    } else {
+        Log.d("BiliTV", "VideoshotPreview: Bitmap is null, not drawing Canvas.")
+        // 显示加载状态
+        Box(
+            modifier = modifier.size(160.dp, 90.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "加载中...",
+                color = Color.White,
+                fontSize = 12.sp
             )
         }
     }
