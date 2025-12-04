@@ -140,8 +140,17 @@ fun HomeScreen(
     }
 
     LaunchedEffect(viewModel.selectedTab) {
-        if (viewModel.selectedTab == TabType.HOT && viewModel.hotVideos.isEmpty()) {
-            viewModel.loadMoreHot()
+        when (viewModel.selectedTab) {
+            TabType.HOT -> {
+                if (viewModel.hotVideos.isEmpty() && viewModel.canLoadMore(TabType.HOT)) {
+                    viewModel.loadMoreHot()
+                }
+            }
+            TabType.RECOMMEND -> {
+                if (viewModel.recommendVideos.isEmpty() && viewModel.canLoadMore(TabType.RECOMMEND)) {
+                    viewModel.loadMoreRecommend()
+                }
+            }
         }
     }
     
@@ -198,8 +207,18 @@ fun HomeScreen(
                             onVideoClick = handleVideoClick,
                             onLoadMore = {
                                 when (viewModel.selectedTab) {
-                                    TabType.RECOMMEND -> viewModel.loadMoreRecommend()
-                                    TabType.HOT -> viewModel.loadMoreHot()
+                                    TabType.RECOMMEND -> {
+                                        if (viewModel.canLoadMore(TabType.RECOMMEND)) {
+                                            viewModel.resetTargetCount(TabType.RECOMMEND)
+                                            viewModel.loadMoreRecommend()
+                                        }
+                                    }
+                                    TabType.HOT -> {
+                                        if (viewModel.canLoadMore(TabType.HOT)) {
+                                            viewModel.resetTargetCount(TabType.HOT)
+                                            viewModel.loadMoreHot()
+                                        }
+                                    }
                                 }
                             },
                             horizontalSpacing = 12.dp,

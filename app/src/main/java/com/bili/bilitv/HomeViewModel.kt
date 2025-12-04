@@ -36,11 +36,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
     var hotVideos by mutableStateOf<List<VideoItemData>>(emptyList())
     var isHotLoading by mutableStateOf(false)
     private var hotPage = 1
+    private var hotTargetCount = 100  // 目标加载100条数据
 
     // Recommend states
     var recommendVideos by mutableStateOf<List<VideoItemData>>(emptyList())
     var isRecommendLoading by mutableStateOf(false)
     private var recommendFreshIdx = 1
+    private var recommendTargetCount = 100  // 目标加载100条数据
 
     private val httpClient = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
@@ -57,75 +59,94 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
     override var shouldRestoreFocusToGrid by mutableStateOf(false)
 
     init {
-        // Initial load for recommend videos
-        loadMoreRecommend()
+        // 初始加载推荐视频，目标100条
+        if (canLoadMore(TabType.RECOMMEND)) {
+            loadMoreRecommend()
+        }
     }
 
     fun loadMoreRecommend() {
         if (isRecommendLoading) return
         isRecommendLoading = true
         
-        viewModelScope.launch(Dispatchers.IO) {
+        // 使用低优先级协程，避免影响UI渲染
+        viewModelScope.launch(Dispatchers.IO + kotlinx.coroutines.CoroutineName("RecommendLoader") + kotlinx.coroutines.NonCancellable) {
             try {
-                // Using the Wbi endpoint or standard endpoint. 
-                // Trying standard first as per common Bilibili API behavior for web clients.
-                // If this fails, we might need to handle Wbi signing.
-                // Note: API documentation suggests /x/web-interface/wbi/index/top/feed/rcmd
-                // We will try the non-wbi path first if available, or wbi path without signature (might work for some data).
-                // Let's try the one from the search result.
-                val url = "https://api.bilibili.com/x/web-interface/wbi/index/top/feed/rcmd?fresh_idx=$recommendFreshIdx&ps=20"
+                val allNewVideos = mutableListOf<VideoItemData>()
+                val currentBvids = withContext(Dispatchers.Main) { recommendVideos.map { it.bvid }.toSet() }
                 
-                val requestBuilder = Request.Builder()
-                    .url(url)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
-                
-                SessionManager.getCookieString()?.let {
-                    requestBuilder.header("Cookie", it)
-                }
+                // 批量加载直到达到目标数量或没有更多数据
+                var shouldContinue = true
+                while (allNewVideos.size < recommendTargetCount - recommendVideos.size && shouldContinue) {
+                    val url = "https://api.bilibili.com/x/web-interface/wbi/index/top/feed/rcmd?fresh_idx=$recommendFreshIdx&ps=20"
+                    
+                    val requestBuilder = Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
+                    
+                    SessionManager.getCookieString()?.let {
+                        requestBuilder.header("Cookie", it)
+                    }
 
-                val response = httpClient.newCall(requestBuilder.build()).execute()
-                if (response.isSuccessful) {
-                    response.body?.string()?.let { body ->
-                        try {
-                            val resp = json.decodeFromString<RecommendVideoResponse>(body)
-                            if (resp.code == 0 && resp.data?.item != null) {
-                                val newVideos = resp.data.item
-                                withContext(Dispatchers.Main) {
-                                    val currentBvids = recommendVideos.map { it.bvid }.toSet()
+                    val response = httpClient.newCall(requestBuilder.build()).execute()
+                    if (response.isSuccessful) {
+                        response.body?.string()?.let { body ->
+                            try {
+                                val resp = json.decodeFromString<RecommendVideoResponse>(body)
+                                if (resp.code == 0 && resp.data?.item != null) {
+                                    val newVideos = resp.data.item
                                     val uniqueNewVideos = newVideos.filter { !currentBvids.contains(it.bvid) }
-                                    
-                                    recommendVideos = recommendVideos + uniqueNewVideos
+                                    allNewVideos.addAll(uniqueNewVideos)
                                     recommendFreshIdx++
-                                    Log.d("BiliTV", "Loaded ${uniqueNewVideos.size} recommend videos. Total: ${recommendVideos.size}")
+                                    Log.d("BiliTV", "Batch loaded ${uniqueNewVideos.size} recommend videos. Batch total: ${allNewVideos.size}")
                                     
-                                    launch(Dispatchers.IO) {
-                                        val allVideos = recommendVideos.map { videoItemData ->
-                                            Video(
-                                                id = videoItemData.bvid,
-                                                bvid = videoItemData.bvid,
-                                                cid = videoItemData.cid,
-                                                title = videoItemData.title,
-                                                coverUrl = videoItemData.pic,
-                                                author = videoItemData.owner.name,
-                                                playCount = "${videoItemData.stat.view}次观看",
-                                                pubDate = videoItemData.pubdate
-                                            )
-                                        }
-                                        ImagePreloader.preloadImages(
-                                            context = getApplication(),
-                                            videos = allVideos
-                                        )
+                                    // 如果本次请求没有新数据，说明没有更多数据了
+                                    if (uniqueNewVideos.isEmpty()) {
+                                        Log.d("BiliTV", "No more new recommend videos available")
+                                        shouldContinue = false
                                     }
+                                } else {
+                                    Log.e("BiliTV", "Recommend API error: ${resp.message} (Code: ${resp.code})")
+                                    shouldContinue = false
                                 }
-                            } else {
-                                Log.e("BiliTV", "Recommend API error: ${resp.message} (Code: ${resp.code})")
+                            } catch (e: Exception) {
+                                Log.e("BiliTV", "Failed to parse recommend response", e)
+                                shouldContinue = false
                             }
-                        } catch (e: Exception) {
-                            Log.e("BiliTV", "Failed to parse recommend response", e)
+                        }
+                    } else {
+                        Log.e("BiliTV", "Recommend HTTP error: ${response.code}")
+                        shouldContinue = false
+                    }
+                    
+                    // 短暂延迟避免请求过快
+                    kotlinx.coroutines.delay(100)
+                }
+                
+                withContext(Dispatchers.Main) {
+                    if (allNewVideos.isNotEmpty()) {
+                        recommendVideos = recommendVideos + allNewVideos
+                        Log.d("BiliTV", "Total loaded ${allNewVideos.size} recommend videos. Total: ${recommendVideos.size}")
+                        
+                        launch(Dispatchers.IO) {
+                            val allVideos = recommendVideos.map { videoItemData ->
+                                Video(
+                                    id = videoItemData.bvid,
+                                    bvid = videoItemData.bvid,
+                                    cid = videoItemData.cid,
+                                    title = videoItemData.title,
+                                    coverUrl = videoItemData.pic,
+                                    author = videoItemData.owner.name,
+                                    playCount = "${videoItemData.stat.view}次观看",
+                                    pubDate = videoItemData.pubdate
+                                )
+                            }
+                            ImagePreloader.preloadImages(
+                                context = getApplication(),
+                                videos = allVideos
+                            )
                         }
                     }
-                } else {
-                    Log.e("BiliTV", "Recommend HTTP error: ${response.code}")
                 }
             } catch (e: Exception) {
                 Log.e("BiliTV", "Recommend Network error", e)
@@ -141,64 +162,86 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         if (isHotLoading) return
         isHotLoading = true
 
-        viewModelScope.launch(Dispatchers.IO) {
+        // 使用低优先级协程，避免影响UI渲染
+        viewModelScope.launch(Dispatchers.IO + kotlinx.coroutines.CoroutineName("HotLoader") + kotlinx.coroutines.NonCancellable) {
             try {
-                Log.d("BiliTV", "Fetching popular videos page $hotPage...")
-                val url = "https://api.bilibili.com/x/web-interface/popular?pn=$hotPage&ps=20"
-                val requestBuilder = Request.Builder()
-                    .url(url)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
+                val allNewVideos = mutableListOf<VideoItemData>()
+                val currentBvids = withContext(Dispatchers.Main) { hotVideos.map { it.bvid }.toSet() }
+                
+                // 批量加载直到达到目标数量或没有更多数据
+                var shouldContinue = true
+                while (allNewVideos.size < hotTargetCount - hotVideos.size && shouldContinue) {
+                    Log.d("BiliTV", "Fetching popular videos page $hotPage...")
+                    val url = "https://api.bilibili.com/x/web-interface/popular?pn=$hotPage&ps=20"
+                    val requestBuilder = Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
 
-                SessionManager.getCookieString()?.let {
-                    requestBuilder.header("Cookie", it)
-                }
+                    SessionManager.getCookieString()?.let {
+                        requestBuilder.header("Cookie", it)
+                    }
 
-                val request = requestBuilder.build()
-                val response = httpClient.newCall(request).execute()
+                    val request = requestBuilder.build()
+                    val response = httpClient.newCall(request).execute()
 
-                if (response.isSuccessful) {
-                    response.body?.string()?.let { responseBody ->
-                        try {
-                            // Using PopularVideoResponse which is defined in HomeScreen.kt (same package)
-                            val popularResponse = json.decodeFromString<PopularVideoResponse>(responseBody)
-                            if (popularResponse.code == 0 && popularResponse.data != null) {
-                                val newVideos = popularResponse.data.list
-                                withContext(Dispatchers.Main) {
-                                    val currentBvids = hotVideos.map { it.bvid }.toSet()
+                    if (response.isSuccessful) {
+                        response.body?.string()?.let { responseBody ->
+                            try {
+                                val popularResponse = json.decodeFromString<PopularVideoResponse>(responseBody)
+                                if (popularResponse.code == 0 && popularResponse.data != null) {
+                                    val newVideos = popularResponse.data.list
                                     val uniqueNewVideos = newVideos.filter { !currentBvids.contains(it.bvid) }
-
-                                    hotVideos = hotVideos + uniqueNewVideos
+                                    allNewVideos.addAll(uniqueNewVideos)
                                     hotPage++
-                                    Log.d("BiliTV", "Loaded ${uniqueNewVideos.size} popular videos. Total: ${hotVideos.size}")
+                                    Log.d("BiliTV", "Batch loaded ${uniqueNewVideos.size} popular videos. Batch total: ${allNewVideos.size}")
                                     
-                                    launch(Dispatchers.IO) {
-                                        val allVideos = hotVideos.map { videoItemData ->
-                                            Video(
-                                                id = videoItemData.bvid,
-                                                bvid = videoItemData.bvid,
-                                                cid = videoItemData.cid,
-                                                title = videoItemData.title,
-                                                coverUrl = videoItemData.pic,
-                                                author = videoItemData.owner.name,
-                                                playCount = "${videoItemData.stat.view}次观看",
-                                                pubDate = videoItemData.pubdate
-                                            )
-                                        }
-                                        ImagePreloader.preloadImages(
-                                            context = getApplication(),
-                                            videos = allVideos
-                                        )
+                                    // 如果本次请求没有新数据，说明没有更多数据了
+                                    if (uniqueNewVideos.isEmpty()) {
+                                        Log.d("BiliTV", "No more new popular videos available")
+                                        shouldContinue = false
                                     }
+                                } else {
+                                    Log.e("BiliTV", "Popular Videos API error: ${popularResponse.message}")
+                                    shouldContinue = false
                                 }
-                            } else {
-                                Log.e("BiliTV", "Popular Videos API error: ${popularResponse.message}")
+                            } catch (e: Exception) {
+                                Log.e("BiliTV", "Popular Videos JSON parse error", e)
+                                shouldContinue = false
                             }
-                        } catch (e: Exception) {
-                            Log.e("BiliTV", "Popular Videos JSON parse error", e)
+                        }
+                    } else {
+                        Log.e("BiliTV", "Popular Videos HTTP error: ${response.code}")
+                        shouldContinue = false
+                    }
+                    
+                    // 短暂延迟避免请求过快
+                    kotlinx.coroutines.delay(100)
+                }
+                
+                withContext(Dispatchers.Main) {
+                    if (allNewVideos.isNotEmpty()) {
+                        hotVideos = hotVideos + allNewVideos
+                        Log.d("BiliTV", "Total loaded ${allNewVideos.size} popular videos. Total: ${hotVideos.size}")
+                        
+                        launch(Dispatchers.IO) {
+                            val allVideos = hotVideos.map { videoItemData ->
+                                Video(
+                                    id = videoItemData.bvid,
+                                    bvid = videoItemData.bvid,
+                                    cid = videoItemData.cid,
+                                    title = videoItemData.title,
+                                    coverUrl = videoItemData.pic,
+                                    author = videoItemData.owner.name,
+                                    playCount = "${videoItemData.stat.view}次观看",
+                                    pubDate = videoItemData.pubdate
+                                )
+                            }
+                            ImagePreloader.preloadImages(
+                                context = getApplication(),
+                                videos = allVideos
+                            )
                         }
                     }
-                } else {
-                    Log.e("BiliTV", "Popular Videos HTTP error: ${response.code}")
                 }
             } catch (e: Exception) {
                 Log.e("BiliTV", "Popular Videos Network error: ${e.localizedMessage}")
@@ -248,5 +291,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
     fun onEnterFullScreen() {
         // Prepare to restore focus when coming back
         shouldRestoreFocusToGrid = true
+    }
+    
+    // 检查是否可以加载更多数据（不限制100条上限）
+    fun canLoadMore(tabType: TabType): Boolean {
+        return when (tabType) {
+            TabType.HOT -> !isHotLoading
+            TabType.RECOMMEND -> !isRecommendLoading
+            else -> false
+        }
+    }
+    
+    // 重置目标数量，用于加载更多时
+    fun resetTargetCount(tabType: TabType) {
+        when (tabType) {
+            TabType.HOT -> hotTargetCount = hotVideos.size + 100
+            TabType.RECOMMEND -> recommendTargetCount = recommendVideos.size + 100
+        }
     }
 }

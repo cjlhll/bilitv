@@ -83,11 +83,14 @@ fun VideoItem(
                     SubcomposeAsyncImage(
                         model = ImageRequest.Builder(context)
                             .data(video.coverUrl)
-                            // 明确指定图片大小，避免解码大图后再缩放，减少内存开销
-                            .size(Size.ORIGINAL) // 使用原始尺寸，由ContentScale.Crop处理缩放
+                            // 使用统一配置的图片尺寸
+                            .size(ImageConfig.VIDEO_COVER_SIZE)
                             // 缓存key使用URL，确保缓存命中
                             .memoryCacheKey(video.coverUrl)
                             .diskCacheKey(video.coverUrl)
+                            // 启用内存缓存和磁盘缓存
+                            .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                            .diskCachePolicy(coil.request.CachePolicy.ENABLED)
                             .build(),
                         contentDescription = video.title,
                         modifier = Modifier.fillMaxSize(),
