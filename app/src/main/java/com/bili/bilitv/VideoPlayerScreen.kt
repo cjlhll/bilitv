@@ -685,6 +685,42 @@ fun VideoPlayerScreen(
                     }
                 }
                 
+                // 6. 暂停图标显示
+                AnimatedVisibility(
+                    visible = !isPlaying,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.Center)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .background(Color.Black.copy(alpha = 0.7f), androidx.compose.foundation.shape.CircleShape)
+                            .border(2.dp, Color.White.copy(alpha = 0.8f), androidx.compose.foundation.shape.CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(modifier = Modifier.size(40.dp)) {
+                            val barWidth = size.width / 3
+                            val barHeight = size.height
+                            val gap = barWidth / 2
+                            
+                            // 绘制左侧暂停条
+                            drawRect(
+                                color = Color.White,
+                                topLeft = androidx.compose.ui.geometry.Offset(0f, 0f),
+                                size = androidx.compose.ui.geometry.Size(barWidth, barHeight)
+                            )
+                            
+                            // 绘制右侧暂停条
+                            drawRect(
+                                color = Color.White,
+                                topLeft = androidx.compose.ui.geometry.Offset(barWidth + gap, 0f),
+                                size = androidx.compose.ui.geometry.Size(barWidth, barHeight)
+                            )
+                        }
+                    }
+                }
+                
                 // 错误显示
                 errorMessage?.let { error ->
                     Card(
