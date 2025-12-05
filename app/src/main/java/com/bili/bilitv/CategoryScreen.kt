@@ -252,7 +252,9 @@ class CategoryViewModel : ViewModel(), VideoGridStateManager {
                                     title = archive.title,
                                     coverUrl = archive.cover,
                                     author = archive.author.name,
-                                    playCount = "${archive.stat.view}",
+                                    playCount = formatCount(archive.stat.view),
+                                    danmakuCount = formatCount(archive.stat.danmaku),
+                                    duration = formatDuration(archive.duration.toLong()),
                                     pubDate = archive.pubdate
                                 )
                             }
@@ -272,6 +274,25 @@ class CategoryViewModel : ViewModel(), VideoGridStateManager {
             } finally {
                 if (isRefresh) _isLoading.value = false
             }
+        }
+    }
+
+    private fun formatCount(count: Int): String {
+        return when {
+            count >= 10000 -> String.format("%.1f万", count / 10000f)
+            else -> count.toString()
+        }
+    }
+
+    private fun formatDuration(seconds: Long): String {
+        val totalSeconds = seconds
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val secs = totalSeconds % 60
+        return if (hours > 0) {
+            String.format("%d:%02d:%02d", hours, minutes, secs)
+        } else {
+            String.format("%02d:%02d", minutes, secs)
         }
     }
 

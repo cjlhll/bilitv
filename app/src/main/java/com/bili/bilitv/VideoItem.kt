@@ -26,8 +26,46 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import androidx.compose.ui.draw.scale
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.vector.ImageVector
+
+/**
+ * 通用图标+文字组件（用于视频卡片和直播卡片的统计信息显示）
+ */
+@Composable
+fun IconWithText(
+    icon: ImageVector,
+    text: String,
+    iconSize: androidx.compose.ui.unit.Dp = 13.dp,
+    textSize: androidx.compose.ui.unit.TextUnit = 11.sp,
+    tint: Color = Color.White,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = modifier
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier
+                .size(iconSize)
+                .offset(y = 0.5.dp) // 统一向下偏移0.5dp与文字对齐
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = textSize),
+            color = tint
+        )
+    }
+}
 
 /**
  * 视频数据模型
@@ -41,6 +79,8 @@ data class Video(
     val coverUrl: String,
     val author: String = "",
     val playCount: String = "",
+    val danmakuCount: String = "", // Add danmakuCount field
+    val duration: String = "", // Add duration field
     val pubDate: Long? = null // Add pubDate field
 )
 
@@ -114,18 +154,64 @@ fun VideoItem(
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
+                        
+                        // 底部渐变和信息展示
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.BottomCenter)
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
+                                    )
+                                )
+                                .padding(start = 6.dp, end = 6.dp, bottom = 4.dp, top = 20.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                // 播放数
+                                if (video.playCount.isNotEmpty()) {
+                                    IconWithText(
+                                        icon = Icons.Filled.PlayArrow,
+                                        text = video.playCount
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+                                
+                                // 弹幕数
+                                if (video.danmakuCount.isNotEmpty()) {
+                                    IconWithText(
+                                        icon = Icons.Filled.Menu,
+                                        text = video.danmakuCount
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.weight(1f))
+                                
+                                // 时长
+                                if (video.duration.isNotEmpty()) {
+                                    Text(
+                                        text = video.duration,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 
                 Text(
                     text = video.title,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.titleSmall, // 增大字体
                     minLines = 2,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                        .padding(horizontal = 8.dp, vertical = 6.dp) // 调整间距
                 )
 
                 Text(

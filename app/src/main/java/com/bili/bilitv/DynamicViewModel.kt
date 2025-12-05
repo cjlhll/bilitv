@@ -78,6 +78,8 @@ data class SpaceVideoItem(
             title = title,
             coverUrl = if (pic.startsWith("//")) "https:$pic" else pic,
             author = author,
+            playCount = "", // SpaceSearch API doesn't return play count directly in vlist item easily without extra call or fields check, leaving empty or need to update data class
+            duration = length,
             pubDate = created
         )
     }
@@ -128,7 +130,8 @@ data class DynamicArchive(
     val bvid: String,
     val title: String,
     val cover: String,
-    val stat: DynamicStat
+    val stat: DynamicStat,
+    val duration_text: String = ""
 )
 
 @Serializable
@@ -368,7 +371,9 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
                                             coverUrl = archive.cover,
                                             author = item.modules.module_author.name,
                                             pubDate = item.modules.module_author.pub_ts,
-                                            playCount = archive.stat.play
+                                            playCount = archive.stat.play,
+                                            danmakuCount = archive.stat.danmaku,
+                                            duration = archive.duration_text
                                         )
                                     } else null
                                 } else null

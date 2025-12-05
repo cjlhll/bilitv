@@ -336,12 +336,6 @@ fun MainScreen() {
         fullScreenVideoTitle = ""
     }
 
-    // 非全屏播放器状态下处理返回键 - 双击返回键退出应用
-    BackHandler(enabled = !isFullScreenPlayer && selectedLiveArea == null) {
-        // 由于MainActivity中已经有双击返回键逻辑，这里不需要额外处理
-        // MainActivity会处理应用退出逻辑
-    }
-
     // 处理从直播房间列表返回到直播分区的逻辑
     BackHandler(enabled = !isFullScreenPlayer && selectedLiveArea != null) {
         selectedLiveArea = null

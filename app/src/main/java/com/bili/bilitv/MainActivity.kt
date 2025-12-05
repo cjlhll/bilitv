@@ -29,6 +29,21 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // 处理双击返回退出逻辑
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (backPressedTime + 2000 > System.currentTimeMillis()) {
+                    backToast?.cancel()
+                    finishAffinity()
+                } else {
+                    backToast = Toast.makeText(this@MainActivity, "再按一次返回键退出程序", Toast.LENGTH_SHORT)
+                    backToast?.show()
+                }
+                backPressedTime = System.currentTimeMillis()
+            }
+        })
+
         // 初始化SessionManager，从本地存储恢复登录状态
         SessionManager.init(this)
         setContent {
@@ -43,18 +58,6 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
                 }
             }
         }
-    }
-
-    override fun onBackPressed() {
-        if (backPressedTime + 2000 > System.currentTimeMillis()) {
-            backToast?.cancel()
-            // 关闭应用程序
-            finishAffinity()
-        } else {
-            backToast = Toast.makeText(this, "再按一次返回键退出程序", Toast.LENGTH_SHORT)
-            backToast?.show()
-        }
-        backPressedTime = System.currentTimeMillis()
     }
 
     /**

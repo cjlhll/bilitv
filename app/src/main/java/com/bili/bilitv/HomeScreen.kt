@@ -59,7 +59,8 @@ data class VideoItemData(
     val pic: String, // cover image URL
     val owner: Owner,
     val stat: Stat,
-    val pubdate: Long
+    val pubdate: Long,
+    val duration: Long = 0 // Add duration field
 )
 
 @Serializable
@@ -253,7 +254,9 @@ private fun getVideosForTab(tabType: TabType): List<Video> {
             title = "$prefix ${index + 1}: 这是一个有趣的视频标题，内容非常精彩",
             coverUrl = "", // 这里使用空字符串，会显示占位图
             author = "UP主${index + 1}",
-            playCount = "${(index + 1) * 1000}次观看"
+            playCount = "${(index + 1) * 1000}",
+            danmakuCount = "${(index + 1) * 100}",
+            duration = String.format("%02d:%02d", (index + 1), (index * 10) % 60)
         )
     }
 }
@@ -267,7 +270,28 @@ private fun mapVideoItemDataToVideo(videoItemData: VideoItemData): Video {
         title = videoItemData.title,
         coverUrl = videoItemData.pic,
         author = videoItemData.owner.name,
-        playCount = "${videoItemData.stat.view}次观看", // Format play count
+        playCount = formatCount(videoItemData.stat.view),
+        danmakuCount = formatCount(videoItemData.stat.danmaku),
+        duration = formatDuration(videoItemData.duration),
         pubDate = videoItemData.pubdate
     )
+}
+
+private fun formatCount(count: Int): String {
+    return when {
+        count >= 10000 -> String.format("%.1f万", count / 10000f)
+        else -> count.toString()
+    }
+}
+
+private fun formatDuration(seconds: Long): String {
+    val totalSeconds = seconds
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val secs = totalSeconds % 60
+    return if (hours > 0) {
+        String.format("%d:%02d:%02d", hours, minutes, secs)
+    } else {
+        String.format("%02d:%02d", minutes, secs)
+    }
 }

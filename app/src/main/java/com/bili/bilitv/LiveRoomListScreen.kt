@@ -43,6 +43,10 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import android.util.Log
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.ui.graphics.vector.ImageVector
+
 // --- Data Models ---
 
 @Serializable
@@ -399,10 +403,10 @@ fun LiveRoomCard(
                             .align(Alignment.BottomStart)
                             .padding(4.dp)
                     ) {
-                        Text(
+                        IconWithText(
+                            icon = Icons.Default.Person,
                             text = formatOnline(room.online),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White,
+                            iconSize = 10.dp,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                     }
