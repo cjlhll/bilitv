@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -49,19 +50,35 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 
 @Serializable
-data class UserInfoResponse(
-    val code: Int,
-    val message: String,
-    val data: UserInfoData? = null
-)
-
-@Serializable
 data class UserInfoData(
     val mid: Long,
     val uname: String,
     val face: String,
     val isLogin: Boolean = false,
-    val wbi_img: WbiImg? = null
+    val wbi_img: com.bili.bilitv.WbiImg? = null,
+    val level: Int = 0,
+    val sign: String = "",
+    val vip: VipInfo? = null
+)
+
+@Serializable
+data class VipInfo(
+    val type: Int,
+    val status: Int,
+    val due_date: Long = 0L,
+    val label: VipLabel? = null
+)
+
+@Serializable
+data class VipLabel(
+    val text: String = ""
+)
+
+@Serializable
+data class UserInfoResponse(
+    val code: Int,
+    val message: String,
+    val data: UserInfoData? = null
 )
 
 @Serializable
@@ -226,33 +243,77 @@ fun MainScreen() {
 
     var loggedInSession by remember { mutableStateOf(SessionManager.getSession()) }
     var userInfo by remember { mutableStateOf<UserInfoData?>(null) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
     // 获取用户信息
     LaunchedEffect(loggedInSession) {
         if (loggedInSession != null && userInfo == null) {
             withContext(Dispatchers.IO) {
                 try {
-                    val request = Request.Builder()
+                    // 先获取WBI密钥
+                    val navRequest = Request.Builder()
                         .url("https://api.bilibili.com/x/web-interface/nav")
                         .addHeader("Cookie", loggedInSession!!.toCookieString())
                         .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
                         .build()
-                    val response = httpClient.newCall(request).execute()
-                    if (response.isSuccessful) {
-                        val body = response.body?.string()
-                        if (body != null) {
+                    val navResponse = httpClient.newCall(navRequest).execute()
+                    if (navResponse.isSuccessful) {
+                        val navBody = navResponse.body?.string()
+                        if (navBody != null) {
                             try {
-                                val apiResp = json.decodeFromString<UserInfoResponse>(body)
-                                if (apiResp.code == 0) {
-                                    userInfo = apiResp.data
+                                val navApiResp = json.decodeFromString<UserInfoResponse>(navBody)
+                                if (navApiResp.code == 0) {
                                     // Extract and store WBI keys
-                                    apiResp.data?.wbi_img?.let { wbi ->
+                                    navApiResp.data?.wbi_img?.let { wbi ->
                                         SessionManager.wbiImgKey = wbi.img_url.substringAfterLast("/").substringBefore(".")
                                         SessionManager.wbiSubKey = wbi.sub_url.substringAfterLast("/").substringBefore(".")
                                         Log.d("BiliTV", "WBI Keys extracted: ${SessionManager.wbiImgKey}, ${SessionManager.wbiSubKey}")
+                                        
+                                        // 使用WBI签名获取详细用户信息
+                                        if (SessionManager.wbiImgKey != null && SessionManager.wbiSubKey != null) {
+                                            val params = mapOf("mid" to navApiResp.data.mid.toString())
+                                            val signedParams = com.bili.bilitv.utils.WbiUtil.sign(
+                                                params, 
+                                                SessionManager.wbiImgKey!!, 
+                                                SessionManager.wbiSubKey!!
+                                            )
+                                            
+                                            val queryString = signedParams.entries.joinToString("&") { "${it.key}=${it.value}" }
+                                            val detailUrl = "https://api.bilibili.com/x/space/wbi/acc/info?$queryString"
+                                            
+                                            val detailRequest = Request.Builder()
+                                                .url(detailUrl)
+                                                .addHeader("Cookie", loggedInSession!!.toCookieString())
+                                                .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                                                .build()
+                                            val detailResponse = httpClient.newCall(detailRequest).execute()
+                                            if (detailResponse.isSuccessful) {
+                                                val detailBody = detailResponse.body?.string()
+                                                if (detailBody != null) {
+                                                    try {
+                                                        val detailApiResp = json.decodeFromString<UserInfoResponse>(detailBody)
+                                                        if (detailApiResp.code == 0) {
+                                                            userInfo = detailApiResp.data
+                                                            Log.d("BiliTV", "Detailed user info loaded successfully")
+                                                        } else {
+                                                            Log.e("BiliTV", "Failed to get detailed user info: ${detailApiResp.message}")
+                                                            // 如果详细信息获取失败，使用基本信息
+                                                            userInfo = navApiResp.data
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        Log.e("BiliTV", "Failed to parse detailed user info", e)
+                                                        // 如果详细信息解析失败，使用基本信息
+                                                        userInfo = navApiResp.data
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            // 如果没有WBI密钥，使用基本信息
+                                            userInfo = navApiResp.data
+                                        }
                                     }
                                 } else {
-                                    Log.e("BiliTV", "Failed to get user info: ${apiResp.message}")
+                                    Log.e("BiliTV", "Failed to get user info: ${navApiResp.message}")
                                 }
                             } catch (e: Exception) {
                                 Log.e("BiliTV", "Failed to parse user info", e)
@@ -359,6 +420,9 @@ fun MainScreen() {
                         onLoginSuccess = { session ->
                             loggedInSession = session
                             // 登录成功后，userInfo 会通过 LaunchedEffect 自动获取
+                        },
+                        onLogout = {
+                            showLogoutDialog = true
                         }
                     )
                     NavRoute.DYNAMIC -> DynamicScreen(
@@ -416,6 +480,38 @@ fun MainScreen() {
         }
         }
     }
+    
+    // 退出登录确认弹窗
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("退出登录") },
+            text = { Text("确定要退出登录吗？") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        SessionManager.setSession(null)
+                        loggedInSession = null
+                        userInfo = null
+                        showLogoutDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Red,
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text("退出")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { showLogoutDialog = false }
+                ) {
+                    Text("取消")
+                }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -423,7 +519,8 @@ fun MainScreen() {
 fun UserLoginScreen(
     loggedInSession: LoggedInSession?,
     userInfo: UserInfoData?,
-    onLoginSuccess: (LoggedInSession) -> Unit
+    onLoginSuccess: (LoggedInSession) -> Unit,
+    onLogout: () -> Unit
 ) {
     val context = LocalContext.current
     var qrCodeBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -434,8 +531,8 @@ fun UserLoginScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    // LaunchedEffect to trigger API call when screen becomes active
-    LaunchedEffect(Unit) { // Unit means it runs once
+    // LaunchedEffect to trigger API call when login state changes
+    LaunchedEffect(loggedInSession) {
         if (loggedInSession != null) {
             // 如果已登录，直接显示登录状态，不再获取二维码
             isPollingActive = false
@@ -445,6 +542,7 @@ fun UserLoginScreen(
             // 如果未登录，获取二维码
             isLoading = true
             error = null
+            isPollingActive = true // 重置轮询状态
             coroutineScope.launch {
                 try {
                     val response = withContext(Dispatchers.IO) { // Network call on IO dispatcher
@@ -550,24 +648,182 @@ fun UserLoginScreen(
         when {
             isLoading -> CircularProgressIndicator()
             loggedInSession != null -> { // Login successful
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (userInfo != null) {
-                        AsyncImage(
-                            model = userInfo!!.face,
-                            contentDescription = "Avatar",
+                if (userInfo != null) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp), // 减少主页面padding，与其他页面保持一致
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // 上部分：头像和信息左右排列
+                        Card(
                             modifier = Modifier
-                                .size(120.dp)
-                                .clip(CircleShape)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(userInfo!!.uname, style = MaterialTheme.typography.displaySmall)
-                    } else {
-                        CircularProgressIndicator()
+                                .fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color.Transparent
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp), // 减少卡片内部padding
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // 左侧头像
+                                AsyncImage(
+                                    model = userInfo!!.face,
+                                    contentDescription = "Avatar",
+                                    modifier = Modifier
+                                        .size(80.dp)
+                                        .clip(CircleShape)
+                                )
+                                
+                                Spacer(modifier = Modifier.width(16.dp)) // 减少头像和信息之间的间距
+                                
+                                // 右侧信息
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(4.dp) // 减少信息项之间的间距
+                                    ) {
+                                    Text(
+                                        text = userInfo!!.uname,
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    
+                                    // 会员类型信息
+                                    userInfo!!.vip?.let { vip ->
+                                        if (vip.status == 1) {
+                                            val vipTypeText = when (vip.type) {
+                                                1 -> "月大会员"
+                                                2 -> "年度大会员"
+                                                else -> "会员"
+                                            }
+                                            Text(
+                                                text = vipTypeText,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier
+                                                    .background(
+                                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                                        shape = MaterialTheme.shapes.small
+                                                    )
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                    
+                                    // 等级、会员类型和过期时间信息
+                                    val membershipText = userInfo!!.vip?.let { vip ->
+                                        if (vip.status == 1) {
+                                            val membershipLabel = when (vip.type) {
+                                                1 -> "月大会员"
+                                                2 -> "年度大会员"
+                                                else -> "会员"
+                                            }
+                                            val expireDate = java.util.Date(vip.due_date)
+                                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                                            val expireStr = dateFormat.format(expireDate)
+                                            "$membershipLabel (过期时间: $expireStr)"
+                                        } else {
+                                            "非会员"
+                                        }
+                                    } ?: "非会员"
+                                    
+                                    Text(
+                                        text = "LV${userInfo!!.level} $membershipText",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    
+                                    // UID信息
+                                    Text(
+                                        text = "UID: ${userInfo!!.mid}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    
+                                    // 签名
+                                    if (userInfo!!.sign.isNotEmpty()) {
+                                        Text(
+                                            text = userInfo!!.sign,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2
+                                        )
+                                    }
+                                }
+                                
+                                // 退出登录按钮
+                                var isLogoutFocused by remember { mutableStateOf(false) }
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .onFocusChanged { isLogoutFocused = it.isFocused }
+                                ) {
+                                    Button(
+                                        onClick = onLogout,
+                                        modifier = Modifier.size(40.dp), // 放大按钮
+                                        shape = MaterialTheme.shapes.medium,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color.Transparent,
+                                            contentColor = MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        contentPadding = PaddingValues(0.dp),
+                                        border = if (isLogoutFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.ExitToApp,
+                                            contentDescription = "退出登录",
+                                            modifier = Modifier.size(20.dp) // 相应放大图标
+                                        )
+                                    }
+                                    
+                                    if (isLogoutFocused) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "退出登录",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+                            }
+                        }
+                        
+                        // 中间分隔
+                        Spacer(modifier = Modifier.height(8.dp)) // 减少间距
+                        
+                        // 下方预留空间（用于后续添加历史观看信息）
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color.Transparent
+                            )
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(16.dp), // 减少卡片内部padding
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "历史观看信息（待开发）",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text("登录成功!", style = MaterialTheme.typography.titleMedium)
-                    Text("UID: ${loggedInSession?.dedeUserID}", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    CircularProgressIndicator()
                 }
             }
             error != null -> Text("Error: $error", color = MaterialTheme.colorScheme.error)
