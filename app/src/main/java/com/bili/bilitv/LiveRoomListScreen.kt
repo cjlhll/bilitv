@@ -287,16 +287,17 @@ fun LiveRoomListScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(top = 24.dp, bottom = 24.dp)
+            .padding(top = 8.dp) // 统一顶部间距
     ) {
         // Header
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier
+                .padding(start = 12.dp, bottom = 8.dp) // 与列表项保持相同的左侧间距
         ) {
             Text(
                 text = area.name,
-                style = MaterialTheme.typography.headlineMedium
+                style = MaterialTheme.typography.headlineSmall // 减小字体大小
             )
         }
 
@@ -337,7 +338,7 @@ fun LiveRoomListScreen(
                 onLoadMore = { viewModel.loadMore() },
                 horizontalSpacing = 12.dp,
                 verticalSpacing = 12.dp,
-                contentPadding = PaddingValues(top = 20.dp, bottom = 24.dp, start = 12.dp, end = 12.dp)
+                contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp, start = 12.dp, end = 12.dp) // 统一顶部间距
             ) { room, itemModifier ->
                 LiveRoomCard(
                     room = room,

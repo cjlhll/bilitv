@@ -11,11 +11,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -195,22 +195,19 @@ fun LiveAreaScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(top = 24.dp)
+            .padding(top = 8.dp) // 统一顶部间距
     ) {
         // Tabs (Main Areas)
         if (areaGroups.isNotEmpty()) {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 16.dp)
-            ) {
-                items(areaGroups) { group ->
-                    LiveAreaTabButton(
-                        text = group.name,
-                        selected = selectedGroup == group,
-                        onClick = { viewModel.selectGroup(group) }
-                    )
-                }
-            }
+            CommonTabRow(
+                tabs = areaGroups.map { group -> TabItem(group.id, group.name) },
+                selectedTab = selectedGroup?.id ?: 0,
+                onTabSelected = { groupId ->
+                    val selectedGroupItem = areaGroups.find { it.id == groupId }
+                    selectedGroupItem?.let { viewModel.selectGroup(it) }
+                },
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 4.dp)
+            )
         }
 
         // Content (Sub Areas)
@@ -240,38 +237,7 @@ fun LiveAreaScreen(
     }
 }
 
-@Composable
-private fun LiveAreaTabButton(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (isFocused) 1.1f else 1.0f, label = "scale")
-
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary
-                          else MaterialTheme.colorScheme.onSurfaceVariant
-        ),
-        border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null,
-        modifier = modifier
-            .width(80.dp)
-            .height(32.dp)
-            .onFocusChanged { isFocused = it.isFocused }
-            .scale(scale),
-        contentPadding = PaddingValues(0.dp)
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelMedium
-        )
-    }
-}
+// 使用通用选项卡组件，无需重复定义
 
 @Composable
 private fun LiveAreaGrid(
@@ -302,7 +268,7 @@ private fun LiveAreaGrid(
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 32.dp)
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 32.dp) // 统一顶部间距
     ) {
         itemsIndexed(areas) { index, area ->
             val focusRequester = remember { FocusRequester() }

@@ -46,6 +46,7 @@ import android.util.Log
 import coil.compose.AsyncImage
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 
 @Serializable
 data class UserInfoResponse(
@@ -272,6 +273,19 @@ fun MainScreen() {
         fullScreenPlayInfo = null
         fullScreenLivePlayInfo = null
         fullScreenVideoTitle = ""
+    }
+
+    // 非全屏播放器状态下处理返回键 - 双击返回键退出应用
+    BackHandler(enabled = !isFullScreenPlayer && selectedLiveArea == null) {
+        // 由于MainActivity中已经有双击返回键逻辑，这里不需要额外处理
+        // MainActivity会处理应用退出逻辑
+    }
+
+    // 处理从直播房间列表返回到直播分区的逻辑
+    BackHandler(enabled = !isFullScreenPlayer && selectedLiveArea != null) {
+        selectedLiveArea = null
+        // 返回直播分区时，标记需要恢复焦点
+        liveAreaViewModel.shouldRestoreFocusToGrid = true
     }
 
     // 判断是否应该隐藏导航栏（直播列表页面全屏显示）
@@ -586,9 +600,9 @@ fun NavigationRail(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .width(80.dp) // Fixed width for the side menu
+            .width(50.dp) // Fixed width for the side menu (more narrow)
             .background(MaterialTheme.colorScheme.surface)
-            .padding(vertical = 24.dp),
+            .padding(vertical = 16.dp), // Reduced padding to match narrower menu
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Top // Allow content to be pushed to bottom
     ) {
@@ -655,22 +669,20 @@ fun NavButton(
     avatarUrl: String? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (isFocused) 1.2f else 1.0f, label = "scale")
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .onFocusChanged { isFocused = it.isFocused }
-            .scale(scale)
     ) {
         Button(
             onClick = onClick,
-            modifier = Modifier.size(48.dp),
+            modifier = Modifier.size(32.dp), // Further reduced button size for narrower menu
             shape = MaterialTheme.shapes.medium,
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (selected) MaterialTheme.colorScheme.primary 
+                containerColor = if (selected) MaterialTheme.colorScheme.primary
                                 else Color.Transparent,
-                contentColor = if (selected) MaterialTheme.colorScheme.onPrimary 
+                contentColor = if (selected) MaterialTheme.colorScheme.onPrimary
                               else MaterialTheme.colorScheme.onSurface
             ),
             contentPadding = PaddingValues(0.dp),
@@ -681,18 +693,18 @@ fun NavButton(
                     model = avatarUrl,
                     contentDescription = label,
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(16.dp) // Reduced avatar size for narrower menu
                         .clip(CircleShape)
                 )
             } else {
                 Icon(
                     imageVector = icon,
                     contentDescription = label,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(16.dp) // Further reduced icon size for narrower menu
                 )
             }
         }
-        
+
         if (isFocused) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(

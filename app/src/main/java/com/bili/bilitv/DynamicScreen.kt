@@ -118,7 +118,7 @@ fun DynamicScreen(
             }
             
             LazyColumn(
-                contentPadding = PaddingValues(vertical = 8.dp)
+                contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp)
             ) {
                 item {
                     AllDynamicsItem(
@@ -196,7 +196,7 @@ fun DynamicScreen(
                             onLoadMore = { viewModel.loadMoreVideos() },
                             horizontalSpacing = 12.dp,
                             verticalSpacing = 12.dp,
-                            contentPadding = PaddingValues(top = 24.dp, bottom = 56.dp, start = 12.dp, end = 12.dp)
+                            contentPadding = PaddingValues(top = 8.dp, bottom = 56.dp, start = 12.dp, end = 12.dp) // 统一顶部间距
                         )
                     }
                 }

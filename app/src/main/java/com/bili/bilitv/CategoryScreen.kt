@@ -365,22 +365,19 @@ fun CategoryScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(top = 24.dp)
+            .padding(top = 8.dp) // 统一顶部间距
     ) {
         // 横向滚动Tabs
         if (categories.isNotEmpty()) {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            CommonTabRow(
+                tabs = categories.map { zone -> TabItem(zone.tid, zone.name) },
+                selectedTab = selectedCategory?.tid ?: 0,
+                onTabSelected = { tid ->
+                    val selectedZone = categories.find { it.tid == tid }
+                    selectedZone?.let { viewModel.selectCategory(it) }
+                },
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 8.dp)
-            ) {
-                items(categories) { zone ->
-                    CategoryTabButton(
-                        text = zone.name,
-                        selected = selectedCategory == zone,
-                        onClick = { viewModel.selectCategory(zone) }
-                    )
-                }
-            }
+            )
         }
 
         // 内容区域
@@ -404,7 +401,7 @@ fun CategoryScreen(
                         onLoadMore = { viewModel.loadMore() },
                         horizontalSpacing = 12.dp,
                         verticalSpacing = 12.dp,
-                        contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp, start = 12.dp, end = 12.dp)
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp, start = 12.dp, end = 12.dp) // 统一顶部间距
                     )
                 }
             }
@@ -413,37 +410,6 @@ fun CategoryScreen(
     }
 }
 
-@Composable
-private fun CategoryTabButton(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (isFocused) 1.1f else 1.0f, label = "scale")
-
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primary 
-                            else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary 
-                          else MaterialTheme.colorScheme.onSurfaceVariant
-        ),
-        border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null,
-        modifier = modifier
-            .width(80.dp)
-            .height(32.dp)
-            .onFocusChanged { isFocused = it.isFocused }
-            .scale(scale),
-        contentPadding = PaddingValues(0.dp)
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelMedium
-        )
-    }
-}
+// 使用通用选项卡组件，无需重复定义
 
 
