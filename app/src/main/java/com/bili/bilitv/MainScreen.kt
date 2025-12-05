@@ -39,6 +39,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -52,6 +53,8 @@ import androidx.compose.ui.platform.LocalContext
 @Serializable
 data class UserInfoData(
     val mid: Long = 0,
+    @SerialName("name")
+    val name: String? = null,
     val uname: String = "",
     val face: String = "",
     val isLogin: Boolean = false,
@@ -684,7 +687,7 @@ fun UserLoginScreen(
                                         verticalArrangement = Arrangement.spacedBy(4.dp) // 减少信息项之间的间距
                                     ) {
                                     Text(
-                                        text = userInfo!!.uname,
+                                        text = userInfo!!.uname.ifEmpty { userInfo!!.name ?: "" },
                                         style = MaterialTheme.typography.headlineMedium,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
