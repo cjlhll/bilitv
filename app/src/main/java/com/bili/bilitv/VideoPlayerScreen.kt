@@ -551,7 +551,10 @@ fun VideoPlayerScreen(
 
                                 // 预览窗口容器 + 进度条
                                 Box(
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(20.dp),
+                                    contentAlignment = Alignment.CenterStart
                                 ) {
                                     var sliderWidth by remember { mutableStateOf(0) }
                                     
@@ -639,8 +642,8 @@ fun VideoPlayerScreen(
                                         Box(
                                             modifier = Modifier
                                                 .align(Alignment.TopStart)
-                                                .offset(y = (-previewHeight - 10.dp), x = constrainedOffsetX)
-                                                .size(previewWidth, previewHeight)
+                                                .offset(y = (-previewHeight + 20.dp), x = constrainedOffsetX)
+                                                .requiredSize(previewWidth, previewHeight) // 使用 requiredSize 确保不受父容器高度限制
                                                 .border(2.dp, Color.White, RoundedCornerShape(4.dp))
                                                 .clip(RoundedCornerShape(4.dp))
                                                 .background(Color.Black)
