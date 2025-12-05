@@ -40,8 +40,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.C
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import coil.ImageLoader
@@ -911,7 +914,7 @@ private fun createExoPlayer(
     onError: (String) -> Unit
 ): ExoPlayer {
     // 配置请求头
-    val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     val headers = mapOf(
         "Referer" to if (videoPlayInfo.bvid.startsWith("live_")) "https://live.bilibili.com" else "https://www.bilibili.com",
         "User-Agent" to userAgent,
@@ -921,12 +924,27 @@ private fun createExoPlayer(
     val dataSourceFactory = DefaultHttpDataSource.Factory()
         .setUserAgent(userAgent)
         .setDefaultRequestProperties(headers)
+        .setConnectTimeoutMs(30000) // 增加连接超时到30秒
+        .setReadTimeoutMs(30000)    // 增加读取超时到30秒
+        .setAllowCrossProtocolRedirects(true) // 允许跨协议重定向
 
     // 创建支持多种格式的MediaSourceFactory
     val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
+    // 配置LoadControl以优化缓冲策略
+    val loadControl = DefaultLoadControl.Builder()
+        .setAllocator(DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
+        .setBufferDurationsMs(
+            50000,  // minBufferMs: 最小缓冲50秒
+            120000, // maxBufferMs: 最大缓冲120秒
+            2500,   // bufferForPlaybackMs: 开始播放需缓冲2.5秒
+            5000    // bufferForPlaybackAfterRebufferMs: 卡顿后恢复需缓冲5秒
+        )
+        .build()
+
     val exoPlayer = ExoPlayer.Builder(context)
         .setMediaSourceFactory(mediaSourceFactory)
+        .setLoadControl(loadControl)
         .build()
     
     exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
@@ -939,7 +957,15 @@ private fun createExoPlayer(
         }
         
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-            onError("播放失败: ${error.message}")
+            Log.e("BiliTV", "ExoPlayer error: ${error.errorCodeName} - ${error.message}", error)
+            // 尝试解析更详细的错误信息
+            val cause = error.cause
+            val errorMsg = if (cause != null) {
+                "${error.message} (${cause.javaClass.simpleName}: ${cause.message})"
+            } else {
+                error.message ?: "未知错误"
+            }
+            onError("播放失败: $errorMsg")
         }
     })
     

@@ -204,7 +204,7 @@ object VideoPlayUrlFetcher {
                 
                 val requestBuilder = Request.Builder()
                     .url(url)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                     .header("Referer", "https://www.bilibili.com")
                 
                 // 添加Cookie（如果已登录）
@@ -232,11 +232,19 @@ object VideoPlayUrlFetcher {
 
                             // 优先使用DASH
                             if (data.dash != null) {
-                                val video = data.dash.video.firstOrNull { it.id == data.quality } 
-                                    ?: data.dash.video.firstOrNull()
+                                // 筛选出目标清晰度的所有视频流
+                                val targetQualityVideos = data.dash.video.filter { it.id == data.quality }
+                                
+                                // 优先选择AVC/H.264编码以提高兼容性（解决卡顿问题）
+                                val video = targetQualityVideos.find { 
+                                    it.codecs.startsWith("avc") || it.codecs.startsWith("h264") 
+                                } ?: targetQualityVideos.firstOrNull()
+                                  ?: data.dash.video.firstOrNull() // 如果没有目标清晰度，回退到第一个可用的
+                                
                                 val audio = data.dash.audio?.firstOrNull()
                                 
                                 if (video != null) {
+                                    Log.i("BiliTV", "Selected DASH video: ${video.codecs} (${video.width}x${video.height})")
                                     return@withContext VideoPlayInfo(
                                         aid = aid,
                                         bvid = bvid,
