@@ -126,6 +126,7 @@ fun VideoPlayerScreen(
 
     // 弹幕分段加载状态
     var currentCid by remember { mutableLongStateOf(0L) }
+    val loadingSegments = remember { mutableSetOf<Int>() }
 
     // 请求焦点，确保能接收按键事件
     LaunchedEffect(Unit) {
@@ -137,6 +138,7 @@ fun VideoPlayerScreen(
         danmakuManager.release() // Always release previous danmaku resources
         danmakuManager.pause() // Ensure danmaku is paused before new loading
         danmakuManager.clearLoadedSegments() // 清空已加载分段
+        loadingSegments.clear()
         currentCid = videoPlayInfo.cid
 
         if (!isLiveStream) {
@@ -156,10 +158,15 @@ fun VideoPlayerScreen(
             
             // Fetch VOD Danmaku (will prepare danmakuView internally)
             launch(kotlinx.coroutines.Dispatchers.Main) {
-                val danmakuData = DanmakuRepository.fetchDanmaku(videoPlayInfo.cid, 1)
-                if (danmakuData != null) {
-                    danmakuManager.loadDanmaku(danmakuData, 1) // 加载第一个分段
-                    danmakuManager.resume() // Resume drawing after loading
+                loadingSegments.add(1)
+                try {
+                    val danmakuData = DanmakuRepository.fetchDanmaku(videoPlayInfo.cid, 1)
+                    if (danmakuData != null) {
+                        danmakuManager.loadDanmaku(danmakuData, 1) // 加载第一个分段
+                        danmakuManager.resume() // Resume drawing after loading
+                    }
+                } finally {
+                    loadingSegments.remove(1)
                 }
             }
             danmakuLiveManager.stop() // Stop live danmaku if playing
@@ -221,22 +228,32 @@ fun VideoPlayerScreen(
                 val nextSegment = currentSegment + 1 // 预加载下一个分段
                 
                 // 加载当前分段
-                if (!danmakuManager.isSegmentLoaded(currentSegment.toInt())) {
+                if (!danmakuManager.isSegmentLoaded(currentSegment.toInt()) && !loadingSegments.contains(currentSegment.toInt())) {
+                    loadingSegments.add(currentSegment.toInt())
                     launch(kotlinx.coroutines.Dispatchers.Main) {
-                        val danmakuData = DanmakuRepository.fetchDanmaku(currentCid, currentSegment.toInt())
-                        if (danmakuData != null) {
-                            danmakuManager.loadDanmaku(danmakuData, currentSegment.toInt())
+                        try {
+                            val danmakuData = DanmakuRepository.fetchDanmaku(currentCid, currentSegment.toInt())
+                            if (danmakuData != null) {
+                                danmakuManager.loadDanmaku(danmakuData, currentSegment.toInt())
+                            }
+                        } finally {
+                            loadingSegments.remove(currentSegment.toInt())
                         }
                     }
                 }
                 
                 // 预加载下一个分段（当当前分段播放超过一半时）
                 val segmentProgress = (currentTime % (6 * 60 * 1000)).toFloat() / (6 * 60 * 1000)
-                if (segmentProgress > 0.5f && !danmakuManager.isSegmentLoaded(nextSegment.toInt())) {
+                if (segmentProgress > 0.5f && !danmakuManager.isSegmentLoaded(nextSegment.toInt()) && !loadingSegments.contains(nextSegment.toInt())) {
+                    loadingSegments.add(nextSegment.toInt())
                     launch(kotlinx.coroutines.Dispatchers.Main) {
-                        val danmakuData = DanmakuRepository.fetchDanmaku(currentCid, nextSegment.toInt())
-                        if (danmakuData != null) {
-                            danmakuManager.loadDanmaku(danmakuData, nextSegment.toInt())
+                        try {
+                            val danmakuData = DanmakuRepository.fetchDanmaku(currentCid, nextSegment.toInt())
+                            if (danmakuData != null) {
+                                danmakuManager.loadDanmaku(danmakuData, nextSegment.toInt())
+                            }
+                        } finally {
+                            loadingSegments.remove(nextSegment.toInt())
                         }
                     }
                 }

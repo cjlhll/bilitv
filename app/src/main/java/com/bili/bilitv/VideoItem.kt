@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import androidx.compose.ui.draw.scale
+import androidx.compose.foundation.Image
 
 /**
  * 视频数据模型
@@ -82,25 +84,37 @@ fun VideoItem(
                         .background(Color.LightGray),
                     contentAlignment = Alignment.Center
                 ) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(video.coverUrl)
-                            // 使用统一配置的图片尺寸
-                            .size(ImageConfig.VIDEO_COVER_SIZE)
-                            // 缓存key使用URL，确保缓存命中
-                            .memoryCacheKey(video.coverUrl)
-                            .diskCacheKey(video.coverUrl)
-                            // 启用内存缓存和磁盘缓存
-                            .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-                            .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = video.title,
-                        modifier = Modifier.fillMaxSize(0.8f),
-                        contentScale = ContentScale.Fit,
-                        placeholder = painterResource(id = R.drawable.video_placeholder),
-                        error = painterResource(id = R.drawable.video_placeholder)
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // 占位图：始终显示，缩小居中
+                        Image(
+                            painter = painterResource(id = R.drawable.video_placeholder),
+                            contentDescription = video.title,
+                            modifier = Modifier.fillMaxSize(0.8f),
+                            contentScale = ContentScale.Fit
+                        )
+                        
+                        // 实际图片：加载成功后覆盖占位图，铺满容器
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(video.coverUrl)
+                                // 使用统一配置的图片尺寸
+                                .size(ImageConfig.VIDEO_COVER_SIZE)
+                                // 缓存key使用URL，确保缓存命中
+                                .memoryCacheKey(video.coverUrl)
+                                .diskCacheKey(video.coverUrl)
+                                // 启用内存缓存和磁盘缓存
+                                .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                                .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = video.title,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
                 }
                 
                 Text(
