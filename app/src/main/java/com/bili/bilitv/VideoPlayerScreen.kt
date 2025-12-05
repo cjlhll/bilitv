@@ -112,6 +112,18 @@ fun VideoPlayerScreen(
     val danmakuManager = remember { DanmakuManager(danmakuView) }
     val danmakuLiveManager = remember { DanmakuLiveManager(danmakuManager) } // Live Danmaku Manager
     
+    // Playback Reporter
+    val reporter = remember(videoPlayInfo.bvid, videoPlayInfo.cid) {
+        if (!isLiveStream) {
+            PlaybackReporter(
+                aid = videoPlayInfo.aid,
+                bvid = videoPlayInfo.bvid,
+                cid = videoPlayInfo.cid,
+                currentPositionProvider = { currentTime / 1000 }
+            )
+        } else null
+    }
+
     // 弹幕分段加载状态
     var currentCid by remember { mutableLongStateOf(0L) }
 
@@ -187,6 +199,7 @@ fun VideoPlayerScreen(
                 isLoading = false 
                 duration = it.duration
                 danmakuManager.resume() // Resume danmaku drawing regardless of type
+                reporter?.start() // Start reporting
             },
             onError = { error -> 
                 isLoading = false
@@ -241,6 +254,8 @@ fun VideoPlayerScreen(
                     exoPlayer.release()
                     danmakuManager.release()
                     danmakuLiveManager.stop()
+                    reporter?.stop()
+                    reporter?.release()
                     Log.d("BiliTV", "ExoPlayer and Danmaku resources released")
                 } catch (e: Exception) {
                     Log.e("BiliTV", "Error releasing resources", e)
@@ -306,9 +321,11 @@ fun VideoPlayerScreen(
                                             if (exoPlayer.isPlaying) {
                                                 exoPlayer.pause()
                                                 danmakuManager.pause()
+                                                reporter?.pause()
                                             } else {
                                                 exoPlayer.play()
                                                 danmakuManager.resume()
+                                                reporter?.start()
                                             }
                                             isPlaying = !isPlaying
                                         }
@@ -391,6 +408,7 @@ fun VideoPlayerScreen(
                                     // 松开后跳转播放
                                     exoPlayer.seekTo(previewTime)
                                     danmakuManager.seekTo(previewTime) // Sync Danmaku
+                                    reporter?.reportSeek(previewTime / 1000) // Report seek with target position
                                     currentTime = previewTime
                                     
                                     // 延迟退出seeking状态，给播放器一点缓冲时间
@@ -403,6 +421,7 @@ fun VideoPlayerScreen(
                                     // 短按结束
                                     exoPlayer.seekTo(previewTime)
                                     danmakuManager.seekTo(previewTime) // Sync Danmaku
+                                    reporter?.reportSeek(previewTime / 1000) // Report seek
                                     currentTime = previewTime
                                     
                                     seekJob?.cancel()
@@ -533,6 +552,7 @@ fun VideoPlayerScreen(
                                         onValueChangeFinished = {
                                             exoPlayer.seekTo(previewTime)
                                             currentTime = previewTime
+                                            reporter?.reportSeek(previewTime / 1000)
                                             coroutineScope.launch {
                                                 delay(1000)
                                                 isSeeking = false
@@ -929,6 +949,11 @@ private fun createExoPlayer(
         
         val mediaItem = mediaItemBuilder.build()
         exoPlayer.setMediaItem(mediaItem)
+    }
+    
+    if (videoPlayInfo.lastPlayTime > 0) {
+        exoPlayer.seekTo(videoPlayInfo.lastPlayTime)
+        Log.i("BiliTV", "Resuming playback from ${videoPlayInfo.lastPlayTime}ms")
     }
     
     exoPlayer.prepare()

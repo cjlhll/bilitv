@@ -51,9 +51,9 @@ import androidx.compose.ui.platform.LocalContext
 
 @Serializable
 data class UserInfoData(
-    val mid: Long,
-    val uname: String,
-    val face: String,
+    val mid: Long = 0,
+    val uname: String = "",
+    val face: String = "",
     val isLogin: Boolean = false,
     val wbi_img: com.bili.bilitv.WbiImg? = null,
     val level: Int = 0,

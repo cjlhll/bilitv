@@ -52,6 +52,7 @@ data class PopularVideoData(
 
 @Serializable
 data class VideoItemData(
+    val aid: Long = 0, // 视频AV号
     val bvid: String,
     val cid: Long,
     val title: String,
@@ -111,6 +112,7 @@ fun HomeScreen(
             Log.d("BiliTV", "Video clicked: ${video.title} (bvid=${video.bvid}, cid=${video.cid})")
             coroutineScope.launch {
                 val playInfo = VideoPlayUrlFetcher.fetchPlayUrl(
+                    aid = video.aid,
                     bvid = video.bvid,
                     cid = video.cid,
                     qn = 80, // 1080P - 非大会员最高清晰度
@@ -259,6 +261,7 @@ private fun getVideosForTab(tabType: TabType): List<Video> {
 private fun mapVideoItemDataToVideo(videoItemData: VideoItemData): Video {
     return Video(
         id = videoItemData.bvid,
+        aid = videoItemData.aid,
         bvid = videoItemData.bvid,
         cid = videoItemData.cid,
         title = videoItemData.title,

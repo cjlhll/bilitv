@@ -48,7 +48,9 @@ data class PlayUrlData(
     val accept_description: List<String>, // 清晰度描述
     val video_codecid: Int, // 视频编码ID
     val durl: List<DurlItem>? = null, // MP4/FLV格式的视频流
-    val dash: DashData? = null // DASH格式的视频流
+    val dash: DashData? = null, // DASH格式的视频流
+    val last_play_time: Long = 0, // 上次播放时间（毫秒）
+    val last_play_cid: Long = 0 // 上次播放的分P CID
 )
 
 /**
@@ -122,13 +124,15 @@ data class FlacData(
  * 视频播放信息
  */
 data class VideoPlayInfo(
+    val aid: Long = 0,
     val bvid: String,
     val cid: Long,
     val quality: Int,
     val format: String,
     val duration: Long,
     val videoUrl: String,
-    val audioUrl: String? = null
+    val audioUrl: String? = null,
+    val lastPlayTime: Long = 0
 )
 
 /**
@@ -169,7 +173,7 @@ object VideoPlayUrlFetcher {
      * @param fnval 格式标记 (1: MP4, 16: DASH, 4048: DASH + 4K)
      * @param cookie 登录Cookie (可选，用于获取高清晰度)
      */
-    suspend fun fetchPlayUrl(bvid: String, cid: Long, qn: Int = 64, fnval: Int = 4048, cookie: String? = null): VideoPlayInfo? {
+    suspend fun fetchPlayUrl(bvid: String, cid: Long, qn: Int = 64, fnval: Int = 4048, cookie: String? = null, aid: Long = 0): VideoPlayInfo? {
         return withContext(Dispatchers.IO) {
             try {
                 // 确保有WBI keys
@@ -218,7 +222,14 @@ object VideoPlayUrlFetcher {
                         
                         if (playUrlResponse.code == 0 && playUrlResponse.data != null) {
                             val data = playUrlResponse.data
+                            Log.i("BiliTV", "PlayUrl data: last_play_time=${data.last_play_time}, last_play_cid=${data.last_play_cid}")
                             
+                            // 检查是否需要切换分P (Resume Logic)
+                            if (data.last_play_cid > 0 && data.last_play_cid != cid) {
+                                Log.i("BiliTV", "Resume playback: Switching to last played CID: ${data.last_play_cid} (requested: $cid)")
+                                return@withContext fetchPlayUrl(bvid, data.last_play_cid, qn, fnval, cookie, aid)
+                            }
+
                             // 优先使用DASH
                             if (data.dash != null) {
                                 val video = data.dash.video.firstOrNull { it.id == data.quality } 
@@ -227,13 +238,15 @@ object VideoPlayUrlFetcher {
                                 
                                 if (video != null) {
                                     return@withContext VideoPlayInfo(
+                                        aid = aid,
                                         bvid = bvid,
                                         cid = cid,
                                         quality = video.id,
                                         format = "dash",
                                         duration = data.timelength / 1000,
                                         videoUrl = video.baseUrl.ifEmpty { video.base_url ?: "" },
-                                        audioUrl = audio?.baseUrl?.ifEmpty { audio.base_url ?: "" }
+                                        audioUrl = audio?.baseUrl?.ifEmpty { audio.base_url ?: "" },
+                                        lastPlayTime = data.last_play_time
                                     )
                                 }
                             }
@@ -242,12 +255,14 @@ object VideoPlayUrlFetcher {
                             if (data.durl != null && data.durl.isNotEmpty()) {
                                 val item = data.durl[0]
                                 return@withContext VideoPlayInfo(
+                                    aid = aid,
                                     bvid = bvid,
                                     cid = cid,
                                     quality = data.quality,
                                     format = "mp4",
                                     duration = data.timelength / 1000,
-                                    videoUrl = item.url
+                                    videoUrl = item.url,
+                                    lastPlayTime = data.last_play_time
                                 )
                             }
                         } else {

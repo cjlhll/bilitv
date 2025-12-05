@@ -32,6 +32,7 @@ import coil.request.ImageRequest
  */
 data class Video(
     val id: String,
+    val aid: Long = 0, // 视频AV号
     val bvid: String = "", // B站视频BV号
     val cid: Long = 0, // 视频CID
     val title: String,
