@@ -53,6 +53,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import android.util.Log
+import com.bili.bilitv.BuildConfig
 
 // --- Data Models ---
 
@@ -313,7 +314,9 @@ private fun LiveAreaItemView(
                 indication = null
             ) { 
                 onClick()
-                Log.d("LiveAreaScreen", "Clicked area: ${area.name}")
+                if (BuildConfig.DEBUG) {
+                    Log.d("LiveAreaScreen", "Clicked area: ${area.name}")
+                }
             }
             .padding(4.dp)
             .zIndex(if (isFocused) 1f else 0f)

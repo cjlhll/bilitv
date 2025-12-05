@@ -6,6 +6,7 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.view.View
+import com.bili.bilitv.BuildConfig
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
@@ -61,6 +62,12 @@ import master.flame.danmaku.ui.widget.DanmakuView
 import com.bilibili.community.service.dm.v1.DmSegMobileReply // For dummy parser
 import com.bili.bilitv.danmaku.BiliDanmakuParser // For dummy parser
 import com.bili.bilitv.danmaku.BiliDanmakuDataSource // For dummy parser
+
+private fun debugLog(tag: String, message: String) {
+    if (BuildConfig.DEBUG) {
+        Log.d(tag, message)
+    }
+}
 
 /**
  * 视频播放页面（使用ExoPlayer）
@@ -147,14 +154,14 @@ fun VideoPlayerScreen(
         if (!isLiveStream) {
             // VOD Video logic
             videoshotData = VideoPlayUrlFetcher.fetchVideoshot(videoPlayInfo.bvid, videoPlayInfo.cid)
-            Log.d("BiliTV", "Fetched videoshotData: ${videoshotData != null}")
+            debugLog("BiliTV", "Fetched videoshotData: ${videoshotData != null}")
             if (videoshotData == null) {
                 Log.e("BiliTV", "Videoshot data is null for bvid=${videoPlayInfo.bvid}, cid=${videoPlayInfo.cid}")
             } else {
                 videoshotData?.let { data ->
-                    Log.d("BiliTV", "VideoshotData details: image count=${data.image?.size}, img_x_len=${data.img_x_len}, img_y_len=${data.img_y_len}, img_x_size=${data.img_x_size}, img_y_size=${data.img_y_size}")
+                    debugLog("BiliTV", "VideoshotData details: image count=${data.image?.size}, img_x_len=${data.img_x_len}, img_y_len=${data.img_y_len}, img_x_size=${data.img_x_size}, img_y_size=${data.img_y_size}")
                     data.image?.forEachIndexed { index, url ->
-                        Log.d("BiliTV", "Videoshot image $index: $url")
+                        debugLog("BiliTV", "Videoshot image $index: $url")
                     }
                 }
             }
@@ -276,7 +283,7 @@ fun VideoPlayerScreen(
                     danmakuLiveManager.stop()
                     reporter?.stop()
                     reporter?.release()
-                    Log.d("BiliTV", "ExoPlayer and Danmaku resources released")
+                    debugLog("BiliTV", "ExoPlayer and Danmaku resources released")
                 } catch (e: Exception) {
                     Log.e("BiliTV", "Error releasing resources", e)
                 }
@@ -361,7 +368,7 @@ fun VideoPlayerScreen(
                                         if (previewTime == -1L) previewTime = currentTime
                                     }
                                     isOverlayVisible = true
-                                    Log.d("BiliTV", "DPAD_LEFT DOWN: isSeeking=$isSeeking, previewTime=$previewTime")
+                                    debugLog("BiliTV", "DPAD_LEFT DOWN: isSeeking=$isSeeking, previewTime=$previewTime")
                                     
                                     // 长按逻辑
                                     if (event.nativeKeyEvent.repeatCount > 0) {
@@ -372,7 +379,7 @@ fun VideoPlayerScreen(
                                             seekJob = coroutineScope.launch {
                                                 while (isLongPressing) {
                                                     previewTime = (previewTime - 5000).coerceAtLeast(0)
-                                                    Log.d("BiliTV", "DPAD_LEFT LONG PRESS: previewTime=$previewTime")
+                                                    debugLog("BiliTV", "DPAD_LEFT LONG PRESS: previewTime=$previewTime")
                                                     delay(100) // 100ms 刷新一次
                                                 }
                                             }
@@ -380,7 +387,7 @@ fun VideoPlayerScreen(
                                     } else {
                                         // 短按逻辑 - 立即步进
                                         previewTime = (previewTime - 5000).coerceAtLeast(0)
-                                        Log.d("BiliTV", "DPAD_LEFT SHORT PRESS: previewTime=$previewTime")
+                                        debugLog("BiliTV", "DPAD_LEFT SHORT PRESS: previewTime=$previewTime")
                                     }
                                 }
                                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
@@ -393,7 +400,7 @@ fun VideoPlayerScreen(
                                         if (previewTime == -1L) previewTime = currentTime
                                     }
                                     isOverlayVisible = true
-                                    Log.d("BiliTV", "DPAD_RIGHT DOWN: isSeeking=$isSeeking, previewTime=$previewTime")
+                                    debugLog("BiliTV", "DPAD_RIGHT DOWN: isSeeking=$isSeeking, previewTime=$previewTime")
                                     
                                     // 长按逻辑
                                     if (event.nativeKeyEvent.repeatCount > 0) {
@@ -404,7 +411,7 @@ fun VideoPlayerScreen(
                                             seekJob = coroutineScope.launch {
                                                 while (isLongPressing) {
                                                     previewTime = (previewTime + 5000).coerceAtMost(duration)
-                                                    Log.d("BiliTV", "DPAD_RIGHT LONG PRESS: previewTime=$previewTime")
+                                                    debugLog("BiliTV", "DPAD_RIGHT LONG PRESS: previewTime=$previewTime")
                                                     delay(100) // 100ms 刷新一次
                                                 }
                                             }
@@ -412,7 +419,7 @@ fun VideoPlayerScreen(
                                     } else {
                                         // 短按逻辑 - 立即步进
                                         previewTime = (previewTime + 5000).coerceAtMost(duration)
-                                        Log.d("BiliTV", "DPAD_RIGHT SHORT PRESS: previewTime=$previewTime")
+                                        debugLog("BiliTV", "DPAD_RIGHT SHORT PRESS: previewTime=$previewTime")
                                     }
                                 }
                             }
@@ -639,7 +646,7 @@ fun VideoPlayerScreen(
                                         // 限制边界
                                         val constrainedOffsetX = minOf(maxOf(offsetX, 0.dp), sliderWidthDp - previewWidth)
                                         
-                                        Log.d("BiliTV", "VideoshotPreview visible check: isSeeking=$isSeeking, previewTime=$previewTime, videoshotData=${videoshotData != null}")
+                                        debugLog("BiliTV", "VideoshotPreview visible check: isSeeking=$isSeeking, previewTime=$previewTime, videoshotData=${videoshotData != null}")
                                         
                                         // 使用绝对定位，将预览窗口放在进度条上方
                                         Box(
@@ -793,7 +800,7 @@ fun VideoshotPreview(
     
     // 计算当前时间对应的图片索引
     val totalImages = (data.image?.size ?: 0) * data.img_x_len * data.img_y_len
-    Log.d("BiliTV", "VideoshotPreview: totalImages=$totalImages, time=$time, totalDuration=$totalDuration")
+    debugLog("BiliTV", "VideoshotPreview: totalImages=$totalImages, time=$time, totalDuration=$totalDuration")
     if (totalImages == 0) {
         Log.e("BiliTV", "VideoshotPreview: totalImages is 0, returning early")
         return
@@ -803,7 +810,7 @@ fun VideoshotPreview(
         ((time.toDouble() / totalDuration) * totalImages).toInt().coerceIn(0, totalImages - 1)
     } else 0
     
-    Log.d("BiliTV", "VideoshotPreview: index=$index, totalImages=$totalImages")
+    debugLog("BiliTV", "VideoshotPreview: index=$index, totalImages=$totalImages")
     
     // 计算所在的拼图索引
     val sheetSize = data.img_x_len * data.img_y_len
@@ -814,8 +821,8 @@ fun VideoshotPreview(
     val row = internalIndex / data.img_x_len
     val col = internalIndex % data.img_x_len
     
-    Log.d("BiliTV", "VideoshotPreview: sheetIndex=$sheetIndex, internalIndex=$internalIndex, row=$row, col=$col")
-    Log.d("BiliTV", "VideoshotPreview: img_x_len=${data.img_x_len}, img_y_len=${data.img_y_len}, img_x_size=${data.img_x_size}, img_y_size=${data.img_y_size}")
+    debugLog("BiliTV", "VideoshotPreview: sheetIndex=$sheetIndex, internalIndex=$internalIndex, row=$row, col=$col")
+    debugLog("BiliTV", "VideoshotPreview: img_x_len=${data.img_x_len}, img_y_len=${data.img_y_len}, img_x_size=${data.img_x_size}, img_y_size=${data.img_y_size}")
     
     // 使用缓存加载图片
     val cachedBitmap = remember(sheetIndex) {
@@ -825,13 +832,13 @@ fun VideoshotPreview(
     // 如果缓存中有，直接使用
     if (cachedBitmap.value != null) {
         bitmap = cachedBitmap.value
-        Log.d("BiliTV", "VideoshotPreview: Using cached bitmap for sheetIndex=$sheetIndex")
+        debugLog("BiliTV", "VideoshotPreview: Using cached bitmap for sheetIndex=$sheetIndex")
     } else {
         // 加载图片
         LaunchedEffect(sheetIndex) {
             if (data.image != null && sheetIndex < data.image.size) {
                 val url = if (data.image[sheetIndex].startsWith("//")) "https:${data.image[sheetIndex]}" else data.image[sheetIndex]
-                Log.d("BiliTV", "VideoshotPreview: Loading image for sheetIndex=$sheetIndex, URL=$url")
+                debugLog("BiliTV", "VideoshotPreview: Loading image for sheetIndex=$sheetIndex, URL=$url")
                 val loader = ImageLoader(context)
                 val request = ImageRequest.Builder(context)
                     .data(url)
@@ -842,7 +849,7 @@ fun VideoshotPreview(
                     val result = loader.execute(request)
                     if (result is SuccessResult) {
                         val loadedBitmap = (result.drawable as BitmapDrawable).bitmap.asImageBitmap()
-                        Log.d("BiliTV", "VideoshotPreview: Bitmap loaded successfully, size=${loadedBitmap.width}x${loadedBitmap.height}")
+                        debugLog("BiliTV", "VideoshotPreview: Bitmap loaded successfully, size=${loadedBitmap.width}x${loadedBitmap.height}")
                         cachedBitmap.value = loadedBitmap
                         bitmap = loadedBitmap
                     } else {
@@ -869,8 +876,8 @@ fun VideoshotPreview(
             val dstWidth = size.width.roundToInt()
             val dstHeight = size.height.roundToInt()
 
-            Log.d("BiliTV", "VideoshotPreview: Drawing image. srcOffset=($srcX,$srcY), srcSize=($actualImgWidth,$actualImgHeight), dstSize=($dstWidth,$dstHeight)")
-            Log.d("BiliTV", "VideoshotPreview: Bitmap size=${bitmap!!.width}x${bitmap!!.height}, actual tile size=${actualImgWidth}x${actualImgHeight}")
+            debugLog("BiliTV", "VideoshotPreview: Drawing image. srcOffset=($srcX,$srcY), srcSize=($actualImgWidth,$actualImgHeight), dstSize=($dstWidth,$dstHeight)")
+            debugLog("BiliTV", "VideoshotPreview: Bitmap size=${bitmap!!.width}x${bitmap!!.height}, actual tile size=${actualImgWidth}x${actualImgHeight}")
             
             // 检查裁剪区域是否在bitmap范围内
             if (srcX + actualImgWidth <= bitmap!!.width && srcY + actualImgHeight <= bitmap!!.height) {
@@ -880,7 +887,7 @@ fun VideoshotPreview(
                     srcSize = IntSize(actualImgWidth, actualImgHeight),
                     dstSize = IntSize(dstWidth, dstHeight)
                 )
-                Log.d("BiliTV", "VideoshotPreview: Image drawn successfully")
+                debugLog("BiliTV", "VideoshotPreview: Image drawn successfully")
             } else {
                 Log.e("BiliTV", "VideoshotPreview: Crop region out of bounds! srcX=$srcX, srcY=$srcY, actualImgWidth=$actualImgWidth, actualImgHeight=$actualImgHeight, bitmap size=${bitmap!!.width}x${bitmap!!.height}")
                 // 绘制错误占位符
@@ -888,7 +895,7 @@ fun VideoshotPreview(
             }
         }
     } else {
-        Log.d("BiliTV", "VideoshotPreview: Bitmap is null, not drawing Canvas.")
+        debugLog("BiliTV", "VideoshotPreview: Bitmap is null, not drawing Canvas.")
         // 显示加载状态
         Box(
             modifier = modifier.size(160.dp, 90.dp),

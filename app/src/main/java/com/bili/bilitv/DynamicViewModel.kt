@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.bili.bilitv.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -220,7 +221,9 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
                         val url = urlBuilder.toString().trimEnd('&')
 
                         val response = withContext(Dispatchers.IO) {
-                            Log.d("BiliTV", "Requesting followings list (WBI): $url")
+                            if (BuildConfig.DEBUG) {
+                                Log.d("BiliTV", "Requesting followings list (WBI): $url")
+                            }
                             val request = Request.Builder()
                                 .url(url)
                                 .addHeader("Cookie", cookie)
@@ -241,7 +244,9 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
                 // Fallback to original
                  val response = withContext(Dispatchers.IO) {
                     val url = "https://api.bilibili.com/x/relation/followings?vmid=$mid&pn=1&ps=50&order=desc"
-                    Log.d("BiliTV", "Requesting followings list (Fallback): $url")
+                    if (BuildConfig.DEBUG) {
+                        Log.d("BiliTV", "Requesting followings list (Fallback): $url")
+                    }
                     val request = Request.Builder()
                         .url(url)
                         .addHeader("Cookie", cookie)
@@ -264,13 +269,17 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
     private fun handleFollowingsResponse(response: okhttp3.Response): Boolean {
         if (response.isSuccessful) {
             val body = response.body?.string()
-            Log.d("BiliTV", "Response body: $body")
+            if (BuildConfig.DEBUG) {
+                Log.d("BiliTV", "Response body: $body")
+            }
             if (body != null) {
                 try {
                     val apiResp = json.decodeFromString<FollowingListResponse>(body)
                     if (apiResp.code == 0) {
                         followingList = apiResp.data?.list ?: emptyList()
-                        Log.d("BiliTV", "Parsed ${followingList.size} followings")
+                        if (BuildConfig.DEBUG) {
+                            Log.d("BiliTV", "Parsed ${followingList.size} followings")
+                        }
                         // If no user selected and not showing all dynamics, select all dynamics
                         if (selectedUser == null && !isAllDynamicsSelected) {
                             selectAllDynamics()
@@ -341,7 +350,9 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
                 }
                 val url = urlBuilder.toString()
 
-                Log.d("BiliTV", "Requesting all dynamics: $url")
+                if (BuildConfig.DEBUG) {
+                    Log.d("BiliTV", "Requesting all dynamics: $url")
+                }
 
                 val response = withContext(Dispatchers.IO) {
                     val request = Request.Builder()
@@ -384,7 +395,9 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
                             } else {
                                 userVideos = userVideos + newVideos
                             }
-                            Log.d("BiliTV", "Parsed ${newVideos.size} videos from dynamics")
+                            if (BuildConfig.DEBUG) {
+                                Log.d("BiliTV", "Parsed ${newVideos.size} videos from dynamics")
+                            }
                         } else {
                             Log.e("BiliTV", "All Dynamics API Error: ${apiResp.message}")
                         }
@@ -431,7 +444,9 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
                 }
                 val url = urlBuilder.toString().trimEnd('&')
                 
-                Log.d("BiliTV", "Requesting user videos: $url")
+                if (BuildConfig.DEBUG) {
+                    Log.d("BiliTV", "Requesting user videos: $url")
+                }
                 
                 val response = withContext(Dispatchers.IO) {
                     val request = Request.Builder()
@@ -461,7 +476,9 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
                                     userVideos = userVideos + newVideos
                                 }
                             }
-                            Log.d("BiliTV", "Parsed ${newVideos.size} videos for user $mid page $page")
+                            if (BuildConfig.DEBUG) {
+                                Log.d("BiliTV", "Parsed ${newVideos.size} videos for user $mid page $page")
+                            }
                         } else {
                             Log.e("BiliTV", "Space API Error: ${apiResp.message}")
                         }
@@ -500,7 +517,9 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
                         
                         cachedImgKey = getKeyFromUrl(imgUrl)
                         cachedSubKey = getKeyFromUrl(subUrl)
-                        Log.d("BiliTV", "Got WBI keys: $cachedImgKey, $cachedSubKey")
+                        if (BuildConfig.DEBUG) {
+                            Log.d("BiliTV", "Got WBI keys: $cachedImgKey, $cachedSubKey")
+                        }
                     }
                 }
             }

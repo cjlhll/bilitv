@@ -119,7 +119,7 @@ fun <T> CommonVideoGrid(
             }
     }
 
-    // 监听滚动位置，提前触发加载更多（还剩50个item时触发）
+    // 监听滚动位置，提前触发加载更多
     if (onLoadMore != null) {
         LaunchedEffect(listState) {
             var lastLoadTime = 0L
@@ -136,8 +136,8 @@ fun <T> CommonVideoGrid(
             }
             .collect { (_, _, shouldLoad) ->
                 val currentTime = System.currentTimeMillis()
-                // 防止频繁触发：至少间隔500ms
-                if (shouldLoad && currentTime - lastLoadTime > 500) {
+                // 防止频繁触发：至少间隔1200ms
+                if (shouldLoad && currentTime - lastLoadTime > 1200) {
                     lastLoadTime = currentTime
                     
                     // 直接调用，ViewModel会在IO线程执行
@@ -209,11 +209,14 @@ fun CommonVideoGrid(
     
     // Scroll-based Image Preloading
     LaunchedEffect(listState, videos) {
+        var lastHandledIndex = -1
         snapshotFlow { 
             val layoutInfo = listState.layoutInfo
             val visibleItems = layoutInfo.visibleItemsInfo
-            visibleItems.lastOrNull()?.index ?: 0
+            visibleItems.lastOrNull()?.index ?: -1
         }.collect { lastIndex ->
+            if (lastIndex < 0 || lastIndex == lastHandledIndex) return@collect
+            lastHandledIndex = lastIndex
             // Calculate preload range: N items AFTER the last visible item
             val start = lastIndex + 1
             val end = min(videos.size, start + ImageConfig.SCROLL_PRELOAD_AHEAD_COUNT)

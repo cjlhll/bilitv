@@ -16,6 +16,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.Inflater
 import kotlin.math.max
+import com.bili.bilitv.BuildConfig
 
 data class LiveDanmakuItem(
     val time: Long,
@@ -57,7 +58,9 @@ class LiveDanmakuWebSocketClient(
         
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.d("LiveDanmaku", "WebSocket Connected")
+                if (BuildConfig.DEBUG) {
+                    Log.d("LiveDanmaku", "WebSocket Connected")
+                }
                 isConnected = true
                 retryCount = 0
                 sendAuth()
@@ -73,12 +76,16 @@ class LiveDanmakuWebSocketClient(
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d("LiveDanmaku", "WebSocket Closing: $reason")
+                if (BuildConfig.DEBUG) {
+                    Log.d("LiveDanmaku", "WebSocket Closing: $reason")
+                }
                 webSocket.close(1000, null)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d("LiveDanmaku", "WebSocket Closed")
+                if (BuildConfig.DEBUG) {
+                    Log.d("LiveDanmaku", "WebSocket Closed")
+                }
                 isConnected = false
                 reconnect()
             }
@@ -97,7 +104,9 @@ class LiveDanmakuWebSocketClient(
             scope.launch {
                 delay(3000)
                 retryCount++
-                Log.d("LiveDanmaku", "Reconnecting... ($retryCount)")
+                if (BuildConfig.DEBUG) {
+                    Log.d("LiveDanmaku", "Reconnecting... ($retryCount)")
+                }
                 internalConnect()
             }
         }

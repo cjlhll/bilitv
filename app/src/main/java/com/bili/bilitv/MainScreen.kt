@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.BackHandler
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bili.bilitv.BuildConfig
 import com.bili.bilitv.utils.QRCodeGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -151,7 +152,9 @@ object SessionManager {
     
     fun setSession(session: LoggedInSession?) {
         currentSession = session
-        Log.d("BiliTV", "Session updated: ${session?.dedeUserID ?: "null"}")
+        if (BuildConfig.DEBUG) {
+            Log.d("BiliTV", "Session updated: ${session?.dedeUserID ?: "null"}")
+        }
         // 保存到SharedPreferences
         if (session != null) {
             saveSessionToStorage(session)
@@ -171,7 +174,9 @@ object SessionManager {
             val sharedPref = it.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val json = Json.encodeToString(LoggedInSession.serializer(), session)
             sharedPref.edit().putString(SESSION_KEY, json).apply()
-            Log.d("BiliTV", "Session saved to storage")
+            if (BuildConfig.DEBUG) {
+                Log.d("BiliTV", "Session saved to storage")
+            }
         }
     }
     
@@ -182,7 +187,9 @@ object SessionManager {
             if (json != null) {
                 try {
                     currentSession = Json.decodeFromString(LoggedInSession.serializer(), json)
-                    Log.d("BiliTV", "Session loaded from storage: ${currentSession?.dedeUserID}")
+                    if (BuildConfig.DEBUG) {
+                        Log.d("BiliTV", "Session loaded from storage: ${currentSession?.dedeUserID}")
+                    }
                 } catch (e: Exception) {
                     Log.e("BiliTV", "Failed to load session from storage", e)
                     currentSession = null
@@ -195,7 +202,9 @@ object SessionManager {
         context?.let {
             val sharedPref = it.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             sharedPref.edit().remove(SESSION_KEY).apply()
-            Log.d("BiliTV", "Session cleared from storage")
+            if (BuildConfig.DEBUG) {
+                Log.d("BiliTV", "Session cleared from storage")
+            }
         }
     }
 }
@@ -270,7 +279,9 @@ fun MainScreen() {
                                     navApiResp.data?.wbi_img?.let { wbi ->
                                         SessionManager.wbiImgKey = wbi.img_url.substringAfterLast("/").substringBefore(".")
                                         SessionManager.wbiSubKey = wbi.sub_url.substringAfterLast("/").substringBefore(".")
-                                        Log.d("BiliTV", "WBI Keys extracted: ${SessionManager.wbiImgKey}, ${SessionManager.wbiSubKey}")
+                                        if (BuildConfig.DEBUG) {
+                                            Log.d("BiliTV", "WBI Keys extracted: ${SessionManager.wbiImgKey}, ${SessionManager.wbiSubKey}")
+                                        }
                                         
                                         // 使用WBI签名获取详细用户信息
                                         if (SessionManager.wbiImgKey != null && SessionManager.wbiSubKey != null) {
@@ -297,7 +308,9 @@ fun MainScreen() {
                                                         val detailApiResp = json.decodeFromString<UserInfoResponse>(detailBody)
                                                         if (detailApiResp.code == 0) {
                                                             userInfo = detailApiResp.data
-                                                            Log.d("BiliTV", "Detailed user info loaded successfully")
+                                                                if (BuildConfig.DEBUG) {
+                                                                    Log.d("BiliTV", "Detailed user info loaded successfully")
+                                                                }
                                                         } else {
                                                             Log.e("BiliTV", "Failed to get detailed user info: ${detailApiResp.message}")
                                                             // 如果详细信息获取失败，使用基本信息
@@ -589,7 +602,9 @@ fun UserLoginScreen(
 
                         if (response.isSuccessful) {
                             response.body?.string()?.let { responseBody ->
-                                Log.d("BiliTV", "Poll Response: $responseBody")
+                                if (BuildConfig.DEBUG) {
+                                    Log.d("BiliTV", "Poll Response: $responseBody")
+                                }
                                 val pollResponse = json.decodeFromString<QrCodePollResponse>(responseBody)
 
                                 // Check for login success code (0 in data.code)
@@ -618,7 +633,9 @@ fun UserLoginScreen(
                                     isPollingActive = false // Stop polling on success
                                     qrCodeBitmap = null // Hide QR code
                                     error = null // Clear any errors
-                                    Log.d("BiliTV", "Login successful! Session: $session")
+                                    if (BuildConfig.DEBUG) {
+                                        Log.d("BiliTV", "Login successful! Session: $session")
+                                    }
                                 } else if (pollResponse.data?.code == 86038) { // Expired
                                     error = "QR Code expired. Please refresh."
                                     isPollingActive = false

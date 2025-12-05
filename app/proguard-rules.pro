@@ -19,3 +19,19 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# --- Protobuf Lite / Generated messages ---
+-dontwarn com.google.protobuf.**
+-keep class com.google.protobuf.** { *; }
+-keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite {
+    <fields>;
+    <methods>;
+}
+-keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite$Builder {
+    <fields>;
+    <methods>;
+}
+-keepclassmembers class com.google.protobuf.GeneratedMessageLite {
+    <fields>;
+    <methods>;
+}

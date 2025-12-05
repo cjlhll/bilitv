@@ -5,6 +5,7 @@ import kotlinx.coroutines.*
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import com.bili.bilitv.BuildConfig
 
 class PlaybackReporter(
     private val aid: Long,
@@ -69,7 +70,9 @@ class PlaybackReporter(
     private suspend fun reportStart() {
         try {
              val csrf = getCsrf()
-             Log.d("PlaybackReporter", "Reporting start: aid=$aid, cid=$cid")
+             if (BuildConfig.DEBUG) {
+                 Log.d("PlaybackReporter", "Reporting start: aid=$aid, cid=$cid")
+             }
              val body = FormBody.Builder()
                  .add("aid", aid.toString())
                  .add("bvid", bvid)
@@ -111,7 +114,9 @@ class PlaybackReporter(
              val now = System.currentTimeMillis() / 1000
              val realTime = now - startRealTime
              
-             Log.d("PlaybackReporter", "Heartbeat: pos=$playedTime, type=$playType")
+             if (BuildConfig.DEBUG) {
+                 Log.d("PlaybackReporter", "Heartbeat: pos=$playedTime, type=$playType")
+             }
 
              val body = FormBody.Builder()
                  .add("aid", aid.toString())
@@ -141,7 +146,9 @@ class PlaybackReporter(
     private suspend fun reportHistory(progress: Long) {
         try {
              val csrf = getCsrf()
-             Log.d("PlaybackReporter", "Reporting history: progress=$progress")
+             if (BuildConfig.DEBUG) {
+                 Log.d("PlaybackReporter", "Reporting history: progress=$progress")
+             }
              val body = FormBody.Builder()
                  .add("aid", aid.toString())
                  .add("cid", cid.toString())

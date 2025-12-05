@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.bili.bilitv.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -95,7 +96,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                                 val uniqueNewVideos = newVideos.filter { !currentBvids.contains(it.bvid) }
                                 
                                 recommendFreshIdx++
-                                Log.d("BiliTV", "Loaded ${uniqueNewVideos.size} recommend videos.")
+                                if (BuildConfig.DEBUG) {
+                                    Log.d("BiliTV", "Loaded ${uniqueNewVideos.size} recommend videos.")
+                                }
 
                                 withContext(Dispatchers.Main) {
                                     if (uniqueNewVideos.isNotEmpty()) {
@@ -132,7 +135,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                 val currentBvids = withContext(Dispatchers.Main) { hotVideos.map { it.bvid }.toSet() }
                 
                 // Fetch just ONE page (20 items)
-                Log.d("BiliTV", "Fetching popular videos page $hotPage...")
+                if (BuildConfig.DEBUG) {
+                    Log.d("BiliTV", "Fetching popular videos page $hotPage...")
+                }
                 val url = "https://api.bilibili.com/x/web-interface/popular?pn=$hotPage&ps=20"
                 val requestBuilder = Request.Builder()
                     .url(url)
@@ -154,7 +159,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                                 val uniqueNewVideos = newVideos.filter { !currentBvids.contains(it.bvid) }
                                 
                                 hotPage++
-                                Log.d("BiliTV", "Loaded ${uniqueNewVideos.size} popular videos.")
+                                if (BuildConfig.DEBUG) {
+                                    Log.d("BiliTV", "Loaded ${uniqueNewVideos.size} popular videos.")
+                                }
 
                                 withContext(Dispatchers.Main) {
                                     if (uniqueNewVideos.isNotEmpty()) {

@@ -29,6 +29,7 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 
 import android.util.Log
+import com.bili.bilitv.BuildConfig
 
 @Composable
 fun DynamicScreen(
@@ -45,7 +46,9 @@ fun DynamicScreen(
     }
 
     LaunchedEffect(loggedInSession) {
-        Log.d("BiliTV", "DynamicScreen: loggedInSession is ${if (loggedInSession == null) "null" else "not null"}")
+        if (BuildConfig.DEBUG) {
+            Log.d("BiliTV", "DynamicScreen: loggedInSession is ${if (loggedInSession == null) "null" else "not null"}")
+        }
         if (loggedInSession != null) {
             viewModel.fetchFollowings(loggedInSession.dedeUserID, loggedInSession.toCookieString())
             if (viewModel.selectedUser == null && !viewModel.isAllDynamicsSelected) {

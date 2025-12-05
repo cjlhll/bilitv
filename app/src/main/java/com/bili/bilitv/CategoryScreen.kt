@@ -41,6 +41,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import android.util.Log
+import com.bili.bilitv.BuildConfig
 
 data class MainZone(
     val name: String,
@@ -358,7 +359,9 @@ fun CategoryScreen(
     // 处理视频点击
     val handleVideoClick: (Video) -> Unit = { video ->
         if (video.bvid.isNotEmpty() && video.cid != 0L) {
-            Log.d("BiliTV", "Video clicked: ${video.title} (bvid=${video.bvid}, cid=${video.cid})")
+            if (BuildConfig.DEBUG) {
+                Log.d("BiliTV", "Video clicked: ${video.title} (bvid=${video.bvid}, cid=${video.cid})")
+            }
             coroutineScope.launch {
                 val playInfo = VideoPlayUrlFetcher.fetchPlayUrl(
                     bvid = video.bvid,

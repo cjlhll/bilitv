@@ -25,6 +25,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.bili.bilitv.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -110,7 +111,9 @@ fun HomeScreen(
     // 处理视频点击
     val handleVideoClick: (Video) -> Unit = { video ->
         if (video.bvid.isNotEmpty() && video.cid != 0L) {
-            Log.d("BiliTV", "Video clicked: ${video.title} (bvid=${video.bvid}, cid=${video.cid})")
+            if (BuildConfig.DEBUG) {
+                Log.d("BiliTV", "Video clicked: ${video.title} (bvid=${video.bvid}, cid=${video.cid})")
+            }
             coroutineScope.launch {
                 val playInfo = VideoPlayUrlFetcher.fetchPlayUrl(
                     aid = video.aid,
@@ -122,13 +125,15 @@ fun HomeScreen(
                 )
                 
                 if (playInfo != null) {
-                    Log.d("BiliTV", "Play URL fetched successfully:")
-                    Log.d("BiliTV", "  Format: ${playInfo.format}")
-                    Log.d("BiliTV", "  Quality: ${playInfo.quality}")
-                    Log.d("BiliTV", "  Duration: ${playInfo.duration}s")
-                    Log.d("BiliTV", "  Video URL: ${playInfo.videoUrl.take(100)}...")
-                    if (playInfo.audioUrl != null) {
-                        Log.d("BiliTV", "  Audio URL: ${playInfo.audioUrl.take(100)}...")
+                    if (BuildConfig.DEBUG) {
+                        Log.d("BiliTV", "Play URL fetched successfully:")
+                        Log.d("BiliTV", "  Format: ${playInfo.format}")
+                        Log.d("BiliTV", "  Quality: ${playInfo.quality}")
+                        Log.d("BiliTV", "  Duration: ${playInfo.duration}s")
+                        Log.d("BiliTV", "  Video URL: ${playInfo.videoUrl.take(100)}...")
+                        if (playInfo.audioUrl != null) {
+                            Log.d("BiliTV", "  Audio URL: ${playInfo.audioUrl.take(100)}...")
+                        }
                     }
                     // 记录进入全屏状态，以便返回时恢复焦点
                     viewModel.onEnterFullScreen()

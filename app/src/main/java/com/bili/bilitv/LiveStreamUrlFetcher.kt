@@ -7,6 +7,7 @@ import okhttp3.Request
 import com.bili.bilitv.utils.WbiUtil
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import com.bili.bilitv.BuildConfig
 
 /**
  * 直播流URL获取工具
@@ -69,7 +70,9 @@ object LiveStreamUrlFetcher {
                 val query = queryBuilder.toString()
 
                 val url = "https://api.live.bilibili.com/xlive/web-room/v2/index/getRoomPlayInfo?$query"
-                Log.d("LiveStreamUrlFetcher", "Request URL: $url")
+                if (BuildConfig.DEBUG) {
+                    Log.d("LiveStreamUrlFetcher", "Request URL: $url")
+                }
 
                 val requestBuilder = Request.Builder()
                     .url(url)
@@ -87,7 +90,9 @@ object LiveStreamUrlFetcher {
                 if (response.isSuccessful) {
                     val body = response.body?.string()
                     if (body != null) {
-                        Log.d("LiveStreamUrlFetcher", "API Response: $body")
+                        if (BuildConfig.DEBUG) {
+                            Log.d("LiveStreamUrlFetcher", "API Response: $body")
+                        }
                         try {
                             val apiResp = json.decodeFromString<LiveStreamResponse>(body)
                             if (apiResp.code == 0 && apiResp.data != null) {
@@ -121,7 +126,9 @@ object LiveStreamUrlFetcher {
                                             val urlInfo = selectedCodec.url_info?.firstOrNull()
                                             if (urlInfo != null) {
                                                 val fullUrl = urlInfo.host + selectedCodec.base_url + urlInfo.extra
-                                                Log.d("LiveStreamUrlFetcher", "获取到直播流URL: $fullUrl")
+                                                if (BuildConfig.DEBUG) {
+                                                    Log.d("LiveStreamUrlFetcher", "获取到直播流URL: $fullUrl")
+                                                }
                                                 return@withContext fullUrl
                                             }
                                         }

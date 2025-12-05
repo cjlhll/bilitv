@@ -42,6 +42,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import android.util.Log
+import com.bili.bilitv.BuildConfig
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
@@ -196,7 +197,9 @@ class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
                 val query = queryBuilder.toString()
                 
                 val url = "https://api.live.bilibili.com/room/v1/Area/getRoomList?$query"
-                Log.d("LiveRoomListViewModel", "Request URL: $url")
+                if (BuildConfig.DEBUG) {
+                    Log.d("LiveRoomListViewModel", "Request URL: $url")
+                }
 
                 val requestBuilder = Request.Builder()
                     .url(url)
@@ -335,7 +338,9 @@ fun LiveRoomListScreen(
                 stateKey = "live_room_${area.id}",
                 columns = 4,
                 onItemClick = { room ->
-                    Log.d("LiveRoomList", "Clicked room: ${room.title}")
+                    if (BuildConfig.DEBUG) {
+                        Log.d("LiveRoomList", "Clicked room: ${room.title}")
+                    }
                     // 获取直播流信息并跳转到播放页
                     viewModel.enterLiveRoom(room.roomid, room.title, room.uname, onEnterLiveRoom)
                 },
@@ -347,7 +352,9 @@ fun LiveRoomListScreen(
                 LiveRoomCard(
                     room = room,
                     onClick = {
-                        Log.d("LiveRoomList", "Clicked room: ${room.title}")
+                        if (BuildConfig.DEBUG) {
+                            Log.d("LiveRoomList", "Clicked room: ${room.title}")
+                        }
                         viewModel.enterLiveRoom(room.roomid, room.title, room.uname, onEnterLiveRoom)
                     },
                     modifier = itemModifier
