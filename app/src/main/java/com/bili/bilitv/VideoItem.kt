@@ -96,8 +96,8 @@ fun VideoItem(
                             .crossfade(true)
                             .build(),
                         contentDescription = video.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(0.8f),
+                        contentScale = ContentScale.Fit,
                         placeholder = painterResource(id = R.drawable.video_placeholder),
                         error = painterResource(id = R.drawable.video_placeholder)
                     )
