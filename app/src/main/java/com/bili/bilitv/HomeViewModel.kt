@@ -282,11 +282,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         return !isCurrentlyLoading(tabType) && hasMoreData(tabType)
     }
 
-    fun refreshCurrentTab() {
+    fun refreshCurrentTab(restoreFocusToGrid: Boolean = true) {
         if (isRefreshing) return
         val targetTab = selectedTab
         isRefreshing = true
-        shouldRestoreFocusToGrid = true
+        shouldRestoreFocusToGrid = restoreFocusToGrid
         viewModelScope.launch {
             setLoading(targetTab, true)
             try {

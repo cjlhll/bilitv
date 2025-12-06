@@ -215,11 +215,11 @@ class CategoryViewModel : ViewModel(), VideoGridStateManager {
         fetchVideos(zone.tid, isRefresh = true)
     }
 
-    fun refreshCurrentCategory() {
+    fun refreshCurrentCategory(restoreFocusToGrid: Boolean = true) {
         val currentZone = _selectedCategory.value ?: return
         if (isRefreshing || _isLoading.value) return
         isRefreshing = true
-        shouldRestoreFocusToGrid = true
+        shouldRestoreFocusToGrid = restoreFocusToGrid
         refreshSignal++
         scrollStates[currentZone.tid] = 0 to 0
         focusedIndices[currentZone.tid] = 0
@@ -429,7 +429,7 @@ fun CategoryScreen(
                     val selectedZone = categories.find { it.tid == tid }
                     selectedZone?.let {
                         if (it.tid == selectedCategory?.tid) {
-                            viewModel.refreshCurrentCategory()
+                            viewModel.refreshCurrentCategory(restoreFocusToGrid = false)
                         } else {
                             viewModel.selectCategory(it)
                         }

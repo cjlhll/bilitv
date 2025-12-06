@@ -197,7 +197,7 @@ fun HomeScreen(
                 selectedTab = viewModel.selectedTab,
                 onTabSelected = {
                     if (it == viewModel.selectedTab) {
-                        viewModel.refreshCurrentTab()
+                        viewModel.refreshCurrentTab(restoreFocusToGrid = false)
                     } else {
                         viewModel.onTabChanged(it)
                     }
