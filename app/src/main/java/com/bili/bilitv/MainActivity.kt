@@ -10,12 +10,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import android.graphics.Bitmap
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import coil.decode.DecodeUtils
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import coil.request.CachePolicy
 import coil.util.DebugLogger
+import okhttp3.Dispatcher
+import okhttp3.OkHttpClient
+import java.util.concurrent.Executors
 import kotlin.system.exitProcess
 
 /**
@@ -60,36 +65,35 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
         }
     }
 
-    /**
-     * 自定义Coil ImageLoader配置
-     * 优化视频列表滚动性能：
-     * 1. 增加内存缓存大小到设备内存的25%
-     * 2. 配置磁盘缓存为250MB
-     * 3. 禁用crossfade动画，减少滚动时的重绘开销
-     * 4. 启用所有缓存策略，优先使用缓存
-     */
     override fun newImageLoader(): ImageLoader {
+        val diskCache = DiskCache.Builder()
+            .directory(cacheDir.resolve("image_cache"))
+            .maxSizeBytes(ImageConfig.DISK_CACHE_SIZE_BYTES.toLong())
+            .build()
+        
+        val memoryCache = MemoryCache.Builder(this)
+            .maxSizeBytes(ImageConfig.MEMORY_CACHE_SIZE_BYTES)
+            .strongReferencesEnabled(true)
+            .weakReferencesEnabled(true)
+            .build()
+        
+        val okHttpClient = OkHttpClient.Builder()
+            .dispatcher(Dispatcher(Executors.newFixedThreadPool(4)).apply {
+                maxRequests = 64
+                maxRequestsPerHost = 8
+            })
+            .build()
+        
         return ImageLoader.Builder(this)
-            .memoryCache {
-                MemoryCache.Builder(this)
-                    // 内存缓存大小为设备内存的25% (默认是25%,这里显式设置)
-                    .maxSizePercent(0.25)
-                    .build()
-            }
-            .diskCache {
-                DiskCache.Builder()
-                    .directory(cacheDir.resolve("image_cache"))
-                    // 磁盘缓存250MB
-                    .maxSizeBytes(250 * 1024 * 1024)
-                    .build()
-            }
-            // 禁用crossfade动画，减少滚动时的重绘
+            .memoryCache(memoryCache)
+            .diskCache(diskCache)
+            .okHttpClient(okHttpClient)
             .crossfade(false)
-            // 启用所有缓存策略
+            .allowHardware(true)
+            .bitmapConfig(Bitmap.Config.RGB_565)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
             .networkCachePolicy(CachePolicy.ENABLED)
-            // 不尊重缓存头，总是使用缓存
             .respectCacheHeaders(false)
             .build()
     }

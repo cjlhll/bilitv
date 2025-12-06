@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -153,7 +154,8 @@ fun <T> CommonVideoGrid(
         modifier = modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(horizontalSpacing),
         verticalArrangement = Arrangement.spacedBy(verticalSpacing),
-        contentPadding = contentPadding
+        contentPadding = contentPadding,
+        userScrollEnabled = true
     ) {
         itemsIndexed(items) { index, item ->
             val focusRequester = remember { FocusRequester() }

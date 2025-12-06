@@ -33,10 +33,9 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.runtime.Stable
 
-/**
- * 通用图标+文字组件（用于视频卡片和直播卡片的统计信息显示）
- */
+@Stable
 @Composable
 fun IconWithText(
     icon: ImageVector,
@@ -67,34 +66,28 @@ fun IconWithText(
     }
 }
 
-/**
- * 视频数据模型
- */
+@Stable
 data class Video(
     val id: String,
-    val aid: Long = 0, // 视频AV号
-    val bvid: String = "", // B站视频BV号
-    val cid: Long = 0, // 视频CID
+    val aid: Long = 0,
+    val bvid: String = "",
+    val cid: Long = 0,
     val title: String,
     val coverUrl: String,
     val author: String = "",
     val playCount: String = "",
-    val danmakuCount: String = "", // Add danmakuCount field
-    val duration: String = "", // Add duration field
-    val pubDate: Long? = null // Add pubDate field
+    val danmakuCount: String = "",
+    val duration: String = "",
+    val pubDate: Long? = null
 )
 
 private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
-/**
- * 视频列表项组件
- * @param video 视频数据
- * @param onClick 点击事件
- */
+@Stable
 @Composable
 fun VideoItem(
     video: Video,
-    onClick: (Video) -> Unit = {},
+    onClick: (Video) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -102,18 +95,18 @@ fun VideoItem(
 
     Box(
         modifier = modifier
-            .onFocusChanged { isFocused = it.isFocused }
+            .onFocusChanged { focusState ->
+                isFocused = focusState.isFocused
+            }
             .clickable { onClick(video) }
     ) {
         Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .zIndex(if (isFocused) 1f else 0f),
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(8.dp),
             elevation = CardDefaults.cardElevation(
-                defaultElevation = if (isFocused) 8.dp else 2.dp
+                defaultElevation = 0.dp
             ),
-            border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null
+            border = if (isFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null
         ) {
             Column {
                 // 视频封面
@@ -128,31 +121,28 @@ fun VideoItem(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        // 占位图：始终显示，缩小居中
-                        Image(
-                            painter = painterResource(id = R.drawable.video_placeholder),
-                            contentDescription = video.title,
-                            modifier = Modifier.fillMaxSize(0.8f),
-                            contentScale = ContentScale.Fit
-                        )
+                        val placeholderPainter = painterResource(id = R.drawable.video_placeholder)
                         
-                        // 实际图片：加载成功后覆盖占位图，铺满容器
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
+                        val imageModel = remember(video.coverUrl) {
+                            ImageRequest.Builder(context)
                                 .data(video.coverUrl)
-                                // 使用统一配置的图片尺寸
                                 .size(ImageConfig.VIDEO_COVER_SIZE)
-                                // 缓存key使用URL，确保缓存命中
                                 .memoryCacheKey(video.coverUrl)
                                 .diskCacheKey(video.coverUrl)
-                                // 启用内存缓存和磁盘缓存
                                 .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
                                 .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                                .crossfade(true)
-                                .build(),
+                                .allowHardware(true)
+                                .crossfade(false)
+                                .build()
+                        }
+                        
+                        AsyncImage(
+                            model = imageModel,
                             contentDescription = video.title,
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
+                            contentScale = ContentScale.Crop,
+                            placeholder = placeholderPainter,
+                            error = placeholderPainter
                         )
                         
                         // 底部渐变和信息展示
