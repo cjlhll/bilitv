@@ -1,5 +1,6 @@
 package com.bili.bilitv
 
+import android.view.KeyEvent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -26,6 +27,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -42,6 +44,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import android.util.Log
 import com.bili.bilitv.BuildConfig
+import com.bili.bilitv.RefreshingIndicator
 
 data class MainZone(
     val name: String,
@@ -122,6 +125,8 @@ class CategoryViewModel : ViewModel(), VideoGridStateManager {
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    var isRefreshing by mutableStateOf(false)
+    var refreshSignal by mutableStateOf(0)
 
     // Scroll State Management
     private val scrollStates = mutableMapOf<Int, Pair<Int, Int>>() // tid -> (index, offset)
@@ -210,12 +215,26 @@ class CategoryViewModel : ViewModel(), VideoGridStateManager {
         fetchVideos(zone.tid, isRefresh = true)
     }
 
+    fun refreshCurrentCategory() {
+        val currentZone = _selectedCategory.value ?: return
+        if (isRefreshing || _isLoading.value) return
+        isRefreshing = true
+        shouldRestoreFocusToGrid = true
+        refreshSignal++
+        scrollStates[currentZone.tid] = 0 to 0
+        focusedIndices[currentZone.tid] = 0
+        _isLoading.value = true
+        fetchVideos(currentZone.tid, isRefresh = true) {
+            isRefreshing = false
+        }
+    }
+
     fun loadMore() {
         val currentZone = _selectedCategory.value ?: return
         fetchVideos(currentZone.tid, isRefresh = false)
     }
 
-    private fun fetchVideos(regionId: Int, isRefresh: Boolean) {
+    private fun fetchVideos(regionId: Int, isRefresh: Boolean, onComplete: (() -> Unit)? = null) {
         if (isRefresh) {
             currentPage = 1
         }
@@ -274,6 +293,7 @@ class CategoryViewModel : ViewModel(), VideoGridStateManager {
                 Log.e("CategoryViewModel", "Error fetching videos", e)
             } finally {
                 if (isRefresh) _isLoading.value = false
+                onComplete?.invoke()
             }
         }
     }
@@ -389,6 +409,16 @@ fun CategoryScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .onPreviewKeyEvent { event ->
+                if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MENU &&
+                    event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN
+                ) {
+                    viewModel.refreshCurrentCategory()
+                    true
+                } else {
+                    false
+                }
+            }
     ) {
         // 横向滚动Tabs
         if (categories.isNotEmpty()) {
@@ -401,6 +431,10 @@ fun CategoryScreen(
                 },
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
             )
+        }
+
+        if (viewModel.isRefreshing) {
+            RefreshingIndicator()
         }
 
         // 内容区域
@@ -424,7 +458,8 @@ fun CategoryScreen(
                         onLoadMore = { viewModel.loadMore() },
                         horizontalSpacing = 12.dp,
                         verticalSpacing = 12.dp,
-                        contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp)
+                        contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp),
+                        scrollToTopSignal = viewModel.refreshSignal
                     )
                 }
             }

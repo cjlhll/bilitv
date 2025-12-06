@@ -1,5 +1,6 @@
 package com.bili.bilitv
 
+import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -23,6 +24,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -43,6 +45,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import android.util.Log
 import com.bili.bilitv.BuildConfig
+import com.bili.bilitv.RefreshingIndicator
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
@@ -82,6 +85,8 @@ class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    var isRefreshing by mutableStateOf(false)
+    var refreshSignal by mutableStateOf(0)
 
     private val httpClient = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
@@ -172,7 +177,22 @@ class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
         loadData()
     }
 
-    private fun loadData() {
+    fun refreshCurrent() {
+        if (isRefreshing || _isLoading.value || currentAreaId == null) return
+        isRefreshing = true
+        refreshSignal++
+        shouldRestoreFocusToGrid = true
+        scrollIndex = 0
+        scrollOffset = 0
+        focusedIndex = 0
+        currentPage = 1
+        isLastPage = false
+        loadData(isRefresh = true) {
+            isRefreshing = false
+        }
+    }
+
+    private fun loadData(isRefresh: Boolean = false, onComplete: (() -> Unit)? = null) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
@@ -225,7 +245,7 @@ class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
                                 if (newItems.isEmpty()) {
                                     isLastPage = true
                                 } else {
-                                    _rooms.value = _rooms.value + newItems
+                                    _rooms.value = if (isRefresh) newItems else _rooms.value + newItems
                                 }
                             } else {
                                 Log.e("LiveRoomListViewModel", "API Error: ${apiResp.message}")
@@ -241,6 +261,7 @@ class LiveRoomListViewModel : ViewModel(), VideoGridStateManager {
                 Log.e("LiveRoomListViewModel", "Exception loading rooms", e)
             } finally {
                 _isLoading.value = false
+                onComplete?.invoke()
             }
         }
     }
@@ -295,6 +316,16 @@ fun LiveRoomListScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .padding(top = 8.dp) // 统一顶部间距
+            .onPreviewKeyEvent { event ->
+                if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MENU &&
+                    event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN
+                ) {
+                    viewModel.refreshCurrent()
+                    true
+                } else {
+                    false
+                }
+            }
     ) {
         // Header
         Row(
@@ -306,6 +337,10 @@ fun LiveRoomListScreen(
                 text = area.name,
                 style = MaterialTheme.typography.headlineSmall // 减小字体大小
             )
+        }
+
+        if (viewModel.isRefreshing) {
+            RefreshingIndicator()
         }
 
         // Grid
@@ -347,7 +382,8 @@ fun LiveRoomListScreen(
                 onLoadMore = { viewModel.loadMore() },
                 horizontalSpacing = 12.dp,
                 verticalSpacing = 12.dp,
-                contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp, start = 12.dp, end = 12.dp) // 统一顶部间距
+                contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp, start = 12.dp, end = 12.dp), // 统一顶部间距
+                scrollToTopSignal = viewModel.refreshSignal
             ) { room, itemModifier ->
                 LiveRoomCard(
                     room = room,

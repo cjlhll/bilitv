@@ -1,6 +1,7 @@
 package com.bili.bilitv
 
 import android.util.Log
+import android.view.KeyEvent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -24,8 +25,10 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
 import com.bili.bilitv.BuildConfig
+import com.bili.bilitv.RefreshingIndicator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -177,6 +180,16 @@ fun HomeScreen(
             modifier = modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
+                .onPreviewKeyEvent { event ->
+                    if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MENU &&
+                        event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN
+                    ) {
+                        viewModel.refreshCurrentTab()
+                        true
+                    } else {
+                        false
+                    }
+                }
         ) {
             // Tab栏
             CommonTabRowWithEnum(
@@ -184,6 +197,10 @@ fun HomeScreen(
                 selectedTab = viewModel.selectedTab,
                 onTabSelected = { viewModel.onTabChanged(it) }
             )
+
+            if (viewModel.isRefreshing) {
+                RefreshingIndicator()
+            }
 
             // 视频列表
             // 使用 derivedStateOf 避免滚动时重计算
@@ -241,7 +258,8 @@ fun HomeScreen(
                             },
                             horizontalSpacing = 12.dp,
                             verticalSpacing = 12.dp,
-                            contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp)
+                            contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp),
+                            scrollToTopSignal = viewModel.refreshSignal
                         )
                     }
                 }

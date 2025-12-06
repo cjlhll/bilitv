@@ -6,9 +6,13 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -23,6 +27,22 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlin.math.min
+
+@Composable
+fun RefreshingIndicator() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = "刷新中…", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
 
 /**
  * 通用视频网格组件接口，用于管理滚动位置和焦点状态
@@ -90,12 +110,13 @@ fun <T> CommonVideoGrid(
     verticalSpacing: Dp = 12.dp,
     contentPadding: PaddingValues = PaddingValues(top = 16.dp, bottom = 32.dp, start = 12.dp, end = 12.dp),
     state: androidx.compose.foundation.lazy.grid.LazyGridState? = null,
+    scrollToTopSignal: Int = 0,
     itemContent: @Composable (item: T, modifier: Modifier) -> Unit
 ) {
-    val (initialIndex, initialOffset) = remember(stateKey) { 
+    val (initialIndex, initialOffset) = remember(stateKey, scrollToTopSignal) { 
         stateManager.getScrollState(stateKey) 
     }
-    val initialFocusIndex = remember(stateKey) { 
+    val initialFocusIndex = remember(stateKey, scrollToTopSignal) { 
         stateManager.getFocusedIndex(stateKey) 
     }
     val shouldRestoreFocus = stateManager.shouldRestoreFocusToGrid
@@ -226,6 +247,13 @@ fun <T> CommonVideoGrid(
         }
     }
 
+    LaunchedEffect(scrollToTopSignal) {
+        if (scrollToTopSignal > 0) {
+            listState.scrollToItem(0)
+            stateManager.updateScrollState(stateKey, 0, 0)
+        }
+    }
+
     LazyVerticalGrid(
         state = listState,
         columns = GridCells.Fixed(columns),
@@ -284,7 +312,8 @@ fun CommonVideoGrid(
     modifier: Modifier = Modifier,
     horizontalSpacing: Dp = 12.dp,
     verticalSpacing: Dp = 12.dp,
-    contentPadding: PaddingValues = PaddingValues(top = 16.dp, bottom = 32.dp, start = 12.dp, end = 12.dp)
+    contentPadding: PaddingValues = PaddingValues(top = 16.dp, bottom = 32.dp, start = 12.dp, end = 12.dp),
+    scrollToTopSignal: Int = 0
 ) {
     val context = LocalContext.current
     val (initialIndex, initialOffset) = remember(stateKey) { 
@@ -328,7 +357,8 @@ fun CommonVideoGrid(
         horizontalSpacing = horizontalSpacing,
         verticalSpacing = verticalSpacing,
         contentPadding = contentPadding,
-        state = listState
+        state = listState,
+        scrollToTopSignal = scrollToTopSignal
     ) { video, itemModifier ->
         VideoItem(
             video = video,

@@ -150,6 +150,8 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
     
     var userVideos by mutableStateOf<List<Video>>(emptyList())
     var isVideoLoading by mutableStateOf(false)
+    var isRefreshing by mutableStateOf(false)
+    var refreshSignal by mutableStateOf(0)
     
     // Scroll and Focus State Persistence
     var videoListScrollIndex by mutableStateOf(0)
@@ -311,7 +313,7 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
         videoListScrollOffset = 0
         lastFocusedVideoId = null
         shouldRestoreFocusToGrid = false // Don't auto-focus when switching user
-        fetchUserVideos(user.mid, 1)
+        fetchUserVideos(user.mid, 1, isRefresh = true)
     }
 
     fun selectAllDynamics() {
@@ -325,7 +327,27 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
         videoListScrollOffset = 0
         lastFocusedVideoId = null
         shouldRestoreFocusToGrid = false // Don't auto-focus when switching to all dynamics
-        fetchAllDynamics()
+        fetchAllDynamics(isRefresh = true)
+    }
+
+    fun refreshCurrent() {
+        if (isRefreshing || isVideoLoading) return
+        if (!isAllDynamicsSelected && selectedUser == null) return
+        isRefreshing = true
+        shouldRestoreFocusToGrid = true
+        refreshSignal++
+        currentPage = 1
+        dynamicOffset = ""
+        hasMoreVideos = true
+        videoListScrollIndex = 0
+        videoListScrollOffset = 0
+        lastFocusedVideoId = null
+        if (isAllDynamicsSelected) {
+            fetchAllDynamics(isRefresh = true) { isRefreshing = false }
+        } else {
+            selectedUser?.let { fetchUserVideos(it.mid, 1, isRefresh = true) { isRefreshing = false } }
+                ?: run { isRefreshing = false }
+        }
     }
 
     fun loadMoreVideos() {
@@ -338,14 +360,14 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
         }
     }
 
-    private fun fetchAllDynamics() {
+    private fun fetchAllDynamics(isRefresh: Boolean = false, onComplete: (() -> Unit)? = null) {
         if (isVideoLoading) return
         isVideoLoading = true
 
         viewModelScope.launch {
             try {
                 val urlBuilder = StringBuilder("https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all?timezone_offset=-480&type=all")
-                if (dynamicOffset.isNotEmpty()) {
+                if (!isRefresh && dynamicOffset.isNotEmpty()) {
                     urlBuilder.append("&offset=").append(dynamicOffset)
                 }
                 val url = urlBuilder.toString()
@@ -393,7 +415,7 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
                             if (apiResp.data?.items.isNullOrEmpty()) {
                                 hasMoreVideos = false
                             } else {
-                                userVideos = userVideos + newVideos
+                                userVideos = if (isRefresh) newVideos else userVideos + newVideos
                             }
                             if (BuildConfig.DEBUG) {
                                 Log.d("BiliTV", "Parsed ${newVideos.size} videos from dynamics")
@@ -409,11 +431,12 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
                 Log.e("BiliTV", "Error fetching all dynamics", e)
             } finally {
                 isVideoLoading = false
+                onComplete?.invoke()
             }
         }
     }
 
-    private fun fetchUserVideos(mid: Long, page: Int) {
+    private fun fetchUserVideos(mid: Long, page: Int, isRefresh: Boolean = false, onComplete: (() -> Unit)? = null) {
         if (isVideoLoading) return
         isVideoLoading = true
         
@@ -470,7 +493,7 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
                             if (newVideos.isEmpty()) {
                                 hasMoreVideos = false
                             } else {
-                                if (page == 1) {
+                                if (page == 1 || isRefresh) {
                                     userVideos = newVideos
                                 } else {
                                     userVideos = userVideos + newVideos
@@ -490,6 +513,7 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
                 Log.e("BiliTV", "Error fetching user videos", e)
             } finally {
                 isVideoLoading = false
+                onComplete?.invoke()
             }
         }
     }

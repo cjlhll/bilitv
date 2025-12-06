@@ -37,6 +37,8 @@ data class RecommendVideoData(
 
 class HomeViewModel(application: Application) : AndroidViewModel(application), VideoGridStateManager {
     var selectedTab by mutableStateOf(TabType.RECOMMEND)
+    var isRefreshing by mutableStateOf(false)
+    var refreshSignal by mutableStateOf(0)
     
     // Hot states - 使用 SnapshotStateList 提高性能
     private val _hotVideos = mutableStateListOf<VideoItemData>()
@@ -133,8 +135,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
     /**
      * 获取推荐视频页面数据
      */
-    private suspend fun fetchRecommendPage(): List<VideoItemData>? {
-        val currentBvids = _recommendVideos.map { it.bvid }.toSet()
+    private suspend fun fetchRecommendPage(dedup: Boolean = true): List<VideoItemData>? {
+        val currentBvids = if (dedup) _recommendVideos.map { it.bvid }.toSet() else emptySet()
         
         val url = "https://api.bilibili.com/x/web-interface/wbi/index/top/feed/rcmd?fresh_idx=$recommendFreshIdx&ps=30"
         val requestBuilder = Request.Builder()
@@ -168,8 +170,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
     /**
      * 获取热门视频页面数据
      */
-    private suspend fun fetchHotPage(): List<VideoItemData>? {
-        val currentBvids = _hotVideos.map { it.bvid }.toSet()
+    private suspend fun fetchHotPage(dedup: Boolean = true): List<VideoItemData>? {
+        val currentBvids = if (dedup) _hotVideos.map { it.bvid }.toSet() else emptySet()
         
         if (BuildConfig.DEBUG) {
             Log.d("BiliTV", "Fetching popular videos page $hotPage...")
@@ -278,5 +280,56 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
     // 检查是否可以加载更多数据
     fun canLoadMore(tabType: TabType): Boolean {
         return !isCurrentlyLoading(tabType) && hasMoreData(tabType)
+    }
+
+    fun refreshCurrentTab() {
+        if (isRefreshing) return
+        val targetTab = selectedTab
+        isRefreshing = true
+        shouldRestoreFocusToGrid = true
+        viewModelScope.launch {
+            setLoading(targetTab, true)
+            try {
+                when (targetTab) {
+                    TabType.RECOMMEND -> {
+                        recommendFreshIdx = 1
+                        recommendHasMore = true
+                        val result = withContext(Dispatchers.IO) { fetchRecommendPage(dedup = false) }
+                        withContext(Dispatchers.Main) {
+                            result?.let { newVideos ->
+                                _recommendVideos.clear()
+                                _recommendVideos.addAll(newVideos)
+                                recommendFreshIdx = 2
+                                recommendHasMore = newVideos.size >= 30
+                                _tabScrollStates[targetTab] = 0 to 0
+                                _tabFocusStates[targetTab] = 0
+                                refreshSignal++
+                            }
+                        }
+                    }
+                    TabType.HOT -> {
+                        hotPage = 1
+                        hotHasMore = true
+                        val result = withContext(Dispatchers.IO) { fetchHotPage(dedup = false) }
+                        withContext(Dispatchers.Main) {
+                            result?.let { newVideos ->
+                                _hotVideos.clear()
+                                _hotVideos.addAll(newVideos)
+                                hotPage = 2
+                                hotHasMore = newVideos.size >= 20
+                                _tabScrollStates[targetTab] = 0 to 0
+                                _tabFocusStates[targetTab] = 0
+                                refreshSignal++
+                            }
+                        }
+                    }
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    setLoading(targetTab, false)
+                    isRefreshing = false
+                }
+            }
+        }
     }
 }

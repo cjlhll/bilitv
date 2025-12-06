@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -22,6 +23,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -30,6 +32,7 @@ import kotlinx.coroutines.launch
 
 import android.util.Log
 import com.bili.bilitv.BuildConfig
+import com.bili.bilitv.RefreshingIndicator
 
 @Composable
 fun DynamicScreen(
@@ -76,7 +79,20 @@ fun DynamicScreen(
         exit = fadeOut(animationSpec = tween(200))
     ) {
 
-    Row(modifier = Modifier.fillMaxSize()) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MENU &&
+                    event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN
+                ) {
+                    viewModel.refreshCurrent()
+                    true
+                } else {
+                    false
+                }
+            }
+    ) {
         // Left Side: Following List
         Box(
             modifier = Modifier
@@ -131,6 +147,10 @@ fun DynamicScreen(
             if (viewModel.isAllDynamicsSelected || viewModel.selectedUser != null) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     
+                    if (viewModel.isRefreshing) {
+                        RefreshingIndicator()
+                    }
+                    
                     if (viewModel.isVideoLoading && viewModel.userVideos.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
@@ -173,7 +193,8 @@ fun DynamicScreen(
                             onLoadMore = { viewModel.loadMoreVideos() },
                             horizontalSpacing = 12.dp,
                             verticalSpacing = 12.dp,
-                            contentPadding = PaddingValues(top = 8.dp, bottom = 56.dp, start = 12.dp, end = 12.dp) // 统一顶部间距
+                            contentPadding = PaddingValues(top = 8.dp, bottom = 56.dp, start = 12.dp, end = 12.dp), // 统一顶部间距
+                            scrollToTopSignal = viewModel.refreshSignal
                         )
                     }
                 }
