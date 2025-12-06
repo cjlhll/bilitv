@@ -152,12 +152,16 @@ fun HomeScreen(
         when (viewModel.selectedTab) {
             TabType.HOT -> {
                 if (viewModel.hotVideos.isEmpty() && viewModel.canLoadMore(TabType.HOT)) {
-                    viewModel.loadMoreHot()
+                    coroutineScope.launch {
+                        viewModel.loadNextPage(TabType.HOT)
+                    }
                 }
             }
             TabType.RECOMMEND -> {
                 if (viewModel.recommendVideos.isEmpty() && viewModel.canLoadMore(TabType.RECOMMEND)) {
-                    viewModel.loadMoreRecommend()
+                    coroutineScope.launch {
+                        viewModel.loadNextPage(TabType.RECOMMEND)
+                    }
                 }
             }
         }
@@ -182,11 +186,14 @@ fun HomeScreen(
             )
 
             // 视频列表
-            val videosToDisplay = remember(viewModel.selectedTab, viewModel.hotVideos, viewModel.recommendVideos) {
-                when (viewModel.selectedTab) {
-                    TabType.HOT -> viewModel.hotVideos.map { mapVideoItemDataToVideo(it) }
-                    TabType.RECOMMEND -> viewModel.recommendVideos.map { mapVideoItemDataToVideo(it) }
-                    else -> getVideosForTab(viewModel.selectedTab)
+            // 使用 derivedStateOf 避免滚动时重计算
+            val videosToDisplay by remember {
+                derivedStateOf {
+                    when (viewModel.selectedTab) {
+                        TabType.HOT -> viewModel.hotVideos.map { mapVideoItemDataToVideo(it) }
+                        TabType.RECOMMEND -> viewModel.recommendVideos.map { mapVideoItemDataToVideo(it) }
+                        else -> getVideosForTab(viewModel.selectedTab)
+                    }
                 }
             }
             
@@ -218,14 +225,16 @@ fun HomeScreen(
                                 when (viewModel.selectedTab) {
                                     TabType.RECOMMEND -> {
                                         if (viewModel.canLoadMore(TabType.RECOMMEND)) {
-                                            viewModel.resetTargetCount(TabType.RECOMMEND)
-                                            viewModel.loadMoreRecommend()
+                                            coroutineScope.launch {
+                                                viewModel.loadNextPage(TabType.RECOMMEND)
+                                            }
                                         }
                                     }
                                     TabType.HOT -> {
                                         if (viewModel.canLoadMore(TabType.HOT)) {
-                                            viewModel.resetTargetCount(TabType.HOT)
-                                            viewModel.loadMoreHot()
+                                            coroutineScope.launch {
+                                                viewModel.loadNextPage(TabType.HOT)
+                                            }
                                         }
                                     }
                                 }

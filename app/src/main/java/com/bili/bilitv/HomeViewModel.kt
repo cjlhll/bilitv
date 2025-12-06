@@ -6,12 +6,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.toMutableStateList
+import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bili.bilitv.BuildConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -33,17 +38,19 @@ data class RecommendVideoData(
 class HomeViewModel(application: Application) : AndroidViewModel(application), VideoGridStateManager {
     var selectedTab by mutableStateOf(TabType.RECOMMEND)
     
-    // Hot states
-    var hotVideos by mutableStateOf<List<VideoItemData>>(emptyList())
+    // Hot states - 使用 SnapshotStateList 提高性能
+    private val _hotVideos = mutableStateListOf<VideoItemData>()
+    val hotVideos: List<VideoItemData> = _hotVideos
     var isHotLoading by mutableStateOf(false)
     private var hotPage = 1
-    private var hotTargetCount = 100  // 目标加载100条数据
+    private var hotHasMore = true
 
-    // Recommend states
-    var recommendVideos by mutableStateOf<List<VideoItemData>>(emptyList())
+    // Recommend states - 使用 SnapshotStateList 提高性能
+    private val _recommendVideos = mutableStateListOf<VideoItemData>()
+    val recommendVideos: List<VideoItemData> = _recommendVideos
     var isRecommendLoading by mutableStateOf(false)
     private var recommendFreshIdx = 1
-    private var recommendTargetCount = 100  // 目标加载100条数据
+    private var recommendHasMore = true
 
     private val httpClient = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
@@ -60,131 +67,171 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
     override var shouldRestoreFocusToGrid by mutableStateOf(false)
 
     init {
-        // 初始加载推荐视频，目标100条
+        // 初始加载推荐视频，确保数据充足
         if (canLoadMore(TabType.RECOMMEND)) {
-            loadMoreRecommend()
+            viewModelScope.launch {
+                loadNextPage(TabType.RECOMMEND)
+            }
         }
     }
 
-    fun loadMoreRecommend() {
-        if (isRecommendLoading) return
-        isRecommendLoading = true
+    /**
+     * 优化的分页加载函数 - 使用后台IO线程和SnapshotStateList
+     */
+    suspend fun loadNextPage(tabType: TabType) {
+        if (isCurrentlyLoading(tabType) || !hasMoreData(tabType)) return
         
-        // 使用低优先级协程，避免影响UI渲染
-        viewModelScope.launch(Dispatchers.IO + kotlinx.coroutines.CoroutineName("RecommendLoader") + kotlinx.coroutines.NonCancellable) {
+        setLoading(tabType, true)
+        
+        // 使用后台IO线程执行网络请求
+        withContext(Dispatchers.IO) {
             try {
-                val currentBvids = withContext(Dispatchers.Main) { recommendVideos.map { it.bvid }.toSet() }
-                
-                // Fetch just ONE page (20 items)
-                val url = "https://api.bilibili.com/x/web-interface/wbi/index/top/feed/rcmd?fresh_idx=$recommendFreshIdx&ps=20"
-                
-                val requestBuilder = Request.Builder()
-                    .url(url)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
-                
-                SessionManager.getCookieString()?.let {
-                    requestBuilder.header("Cookie", it)
+                val result = when (tabType) {
+                    TabType.RECOMMEND -> fetchRecommendPage()
+                    TabType.HOT -> fetchHotPage()
                 }
-
-                val response = httpClient.newCall(requestBuilder.build()).execute()
-                if (response.isSuccessful) {
-                    response.body?.string()?.let { body ->
-                        try {
-                            val resp = json.decodeFromString<RecommendVideoResponse>(body)
-                            if (resp.code == 0 && resp.data?.item != null) {
-                                val newVideos = resp.data.item
-                                val uniqueNewVideos = newVideos.filter { !currentBvids.contains(it.bvid) }
-                                
-                                recommendFreshIdx++
-                                if (BuildConfig.DEBUG) {
-                                    Log.d("BiliTV", "Loaded ${uniqueNewVideos.size} recommend videos.")
+                
+                // 在主线程更新UI状态
+                withContext(Dispatchers.Main) {
+                    result?.let { newVideos ->
+                        if (newVideos.isNotEmpty()) {
+                            when (tabType) {
+                                TabType.RECOMMEND -> {
+                                    _recommendVideos.addAll(newVideos)
+                                    recommendFreshIdx++
+                                    recommendHasMore = newVideos.size >= 30
                                 }
-
-                                withContext(Dispatchers.Main) {
-                                    if (uniqueNewVideos.isNotEmpty()) {
-                                        recommendVideos = recommendVideos + uniqueNewVideos
-                                    }
+                                TabType.HOT -> {
+                                    _hotVideos.addAll(newVideos)
+                                    hotPage++
+                                    hotHasMore = newVideos.size >= 20
                                 }
-                            } else {
-                                Log.e("BiliTV", "Recommend API error: ${resp.message} (Code: ${resp.code})")
                             }
-                        } catch (e: Exception) {
-                            Log.e("BiliTV", "Failed to parse recommend response", e)
+                            
+                            if (BuildConfig.DEBUG) {
+                                Log.d("BiliTV", "Loaded ${newVideos.size} ${tabType.name} videos, total: ${getCurrentVideoCount(tabType)}")
+                            }
+                        } else {
+                            // 没有更多数据
+                            when (tabType) {
+                                TabType.RECOMMEND -> recommendHasMore = false
+                                TabType.HOT -> hotHasMore = false
+                            }
                         }
                     }
-                } else {
-                    Log.e("BiliTV", "Recommend HTTP error: ${response.code}")
                 }
             } catch (e: Exception) {
-                Log.e("BiliTV", "Recommend Network error", e)
+                Log.e("BiliTV", "Failed to load ${tabType.name} page", e)
             } finally {
                 withContext(Dispatchers.Main) {
-                    isRecommendLoading = false
+                    setLoading(tabType, false)
                 }
             }
         }
     }
 
-    fun loadMoreHot() {
-        if (isHotLoading) return
-        isHotLoading = true
+    /**
+     * 获取推荐视频页面数据
+     */
+    private suspend fun fetchRecommendPage(): List<VideoItemData>? {
+        val currentBvids = _recommendVideos.map { it.bvid }.toSet()
+        
+        val url = "https://api.bilibili.com/x/web-interface/wbi/index/top/feed/rcmd?fresh_idx=$recommendFreshIdx&ps=30"
+        val requestBuilder = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
+        
+        SessionManager.getCookieString()?.let {
+            requestBuilder.header("Cookie", it)
+        }
 
-        // 使用低优先级协程，避免影响UI渲染
-        viewModelScope.launch(Dispatchers.IO + kotlinx.coroutines.CoroutineName("HotLoader") + kotlinx.coroutines.NonCancellable) {
-            try {
-                val currentBvids = withContext(Dispatchers.Main) { hotVideos.map { it.bvid }.toSet() }
-                
-                // Fetch just ONE page (20 items)
-                if (BuildConfig.DEBUG) {
-                    Log.d("BiliTV", "Fetching popular videos page $hotPage...")
-                }
-                val url = "https://api.bilibili.com/x/web-interface/popular?pn=$hotPage&ps=20"
-                val requestBuilder = Request.Builder()
-                    .url(url)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
-
-                SessionManager.getCookieString()?.let {
-                    requestBuilder.header("Cookie", it)
-                }
-
-                val request = requestBuilder.build()
-                val response = httpClient.newCall(request).execute()
-
-                if (response.isSuccessful) {
-                    response.body?.string()?.let { responseBody ->
-                        try {
-                            val popularResponse = json.decodeFromString<PopularVideoResponse>(responseBody)
-                            if (popularResponse.code == 0 && popularResponse.data != null) {
-                                val newVideos = popularResponse.data.list
-                                val uniqueNewVideos = newVideos.filter { !currentBvids.contains(it.bvid) }
-                                
-                                hotPage++
-                                if (BuildConfig.DEBUG) {
-                                    Log.d("BiliTV", "Loaded ${uniqueNewVideos.size} popular videos.")
-                                }
-
-                                withContext(Dispatchers.Main) {
-                                    if (uniqueNewVideos.isNotEmpty()) {
-                                        hotVideos = hotVideos + uniqueNewVideos
-                                    }
-                                }
-                            } else {
-                                Log.e("BiliTV", "Popular Videos API error: ${popularResponse.message}")
-                            }
-                        } catch (e: Exception) {
-                            Log.e("BiliTV", "Popular Videos JSON parse error", e)
-                        }
+        val response = httpClient.newCall(requestBuilder.build()).execute()
+        if (response.isSuccessful) {
+            response.body?.string()?.let { body ->
+                try {
+                    val resp = json.decodeFromString<RecommendVideoResponse>(body)
+                    if (resp.code == 0 && resp.data?.item != null) {
+                        return resp.data.item.filter { !currentBvids.contains(it.bvid) }
+                    } else {
+                        Log.e("BiliTV", "Recommend API error: ${resp.message} (Code: ${resp.code})")
                     }
-                } else {
-                    Log.e("BiliTV", "Popular Videos HTTP error: ${response.code}")
-                }
-            } catch (e: Exception) {
-                Log.e("BiliTV", "Popular Videos Network error: ${e.localizedMessage}")
-            } finally {
-                withContext(Dispatchers.Main) {
-                    isHotLoading = false
+                } catch (e: Exception) {
+                    Log.e("BiliTV", "Failed to parse recommend response", e)
                 }
             }
+        } else {
+            Log.e("BiliTV", "Recommend HTTP error: ${response.code}")
+        }
+        return null
+    }
+
+    /**
+     * 获取热门视频页面数据
+     */
+    private suspend fun fetchHotPage(): List<VideoItemData>? {
+        val currentBvids = _hotVideos.map { it.bvid }.toSet()
+        
+        if (BuildConfig.DEBUG) {
+            Log.d("BiliTV", "Fetching popular videos page $hotPage...")
+        }
+        
+        val url = "https://api.bilibili.com/x/web-interface/popular?pn=$hotPage&ps=50"
+        val requestBuilder = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
+
+        SessionManager.getCookieString()?.let {
+            requestBuilder.header("Cookie", it)
+        }
+
+        val request = requestBuilder.build()
+        val response = httpClient.newCall(request).execute()
+
+        if (response.isSuccessful) {
+            response.body?.string()?.let { responseBody ->
+                try {
+                    val popularResponse = json.decodeFromString<PopularVideoResponse>(responseBody)
+                    if (popularResponse.code == 0 && popularResponse.data != null) {
+                        return popularResponse.data.list.filter { !currentBvids.contains(it.bvid) }
+                    } else {
+                        Log.e("BiliTV", "Popular Videos API error: ${popularResponse.message}")
+                    }
+                } catch (e: Exception) {
+                    Log.e("BiliTV", "Popular Videos JSON parse error", e)
+                }
+            }
+        } else {
+            Log.e("BiliTV", "Popular Videos HTTP error: ${response.code}")
+        }
+        return null
+    }
+
+    // 辅助函数
+    private fun isCurrentlyLoading(tabType: TabType): Boolean {
+        return when (tabType) {
+            TabType.HOT -> isHotLoading
+            TabType.RECOMMEND -> isRecommendLoading
+        }
+    }
+
+    private fun hasMoreData(tabType: TabType): Boolean {
+        return when (tabType) {
+            TabType.HOT -> hotHasMore
+            TabType.RECOMMEND -> recommendHasMore
+        }
+    }
+
+    private fun setLoading(tabType: TabType, loading: Boolean) {
+        when (tabType) {
+            TabType.HOT -> isHotLoading = loading
+            TabType.RECOMMEND -> isRecommendLoading = loading
+        }
+    }
+
+    private fun getCurrentVideoCount(tabType: TabType): Int {
+        return when (tabType) {
+            TabType.HOT -> _hotVideos.size
+            TabType.RECOMMEND -> _recommendVideos.size
         }
     }
 
@@ -228,20 +275,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         shouldRestoreFocusToGrid = true
     }
     
-    // 检查是否可以加载更多数据（不限制100条上限）
+    // 检查是否可以加载更多数据
     fun canLoadMore(tabType: TabType): Boolean {
-        return when (tabType) {
-            TabType.HOT -> !isHotLoading
-            TabType.RECOMMEND -> !isRecommendLoading
-            else -> false
-        }
-    }
-    
-    // 重置目标数量，用于加载更多时
-    fun resetTargetCount(tabType: TabType) {
-        when (tabType) {
-            TabType.HOT -> hotTargetCount = hotVideos.size + 20
-            TabType.RECOMMEND -> recommendTargetCount = recommendVideos.size + 20
-        }
+        return !isCurrentlyLoading(tabType) && hasMoreData(tabType)
     }
 }

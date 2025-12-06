@@ -1,6 +1,7 @@
 package com.bili.bilitv
 
 import android.os.Bundle
+import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -28,6 +29,15 @@ import kotlin.system.exitProcess
  * 使用Jetpack Compose构建 UI
  */
 class MainActivity : ComponentActivity(), ImageLoaderFactory {
+
+    private val keyEventThrottle = KeyEventThrottle()
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (!keyEventThrottle.allowEvent(event)) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
 
     private var backPressedTime: Long = 0
     private var backToast: Toast? = null

@@ -1,5 +1,6 @@
 package com.bili.bilitv
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -16,7 +17,11 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bili.bilitv.BuildConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import kotlin.math.min
 
 /**
@@ -120,29 +125,95 @@ fun <T> CommonVideoGrid(
             }
     }
 
-    // 监听滚动位置，提前触发加载更多
+    // 优化的提前加载触发逻辑 - 滚动到底部时加载下一页
     if (onLoadMore != null) {
+        // 使用 derivedStateOf 避免滚动时重计算
+        val shouldLoadMore by remember {
+            derivedStateOf {
+                val layoutInfo = listState.layoutInfo
+                val totalItems = layoutInfo.totalItemsCount
+                val lastVisibleItemIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                
+                // 触发条件：当滚动到倒数第二行时加载下一页
+                // 一行4个，所以当最后可见项索引 >= 总数 - 8 时触发
+                val shouldPreload = totalItems > 0 && lastVisibleItemIndex >= totalItems - 8
+                
+                if (BuildConfig.DEBUG) {
+                    // 仅在调试时记录，避免生产环境性能影响
+                    if (shouldPreload) {
+                        Log.d("BiliTV", "Preload triggered: lastVisibleItemIndex=$lastVisibleItemIndex, totalItems=$totalItems")
+                    }
+                }
+                
+                shouldPreload
+            }
+        }
+
+        // 使用 LaunchedEffect + snapshotFlow 监听滚动状态
         LaunchedEffect(listState) {
             var lastLoadTime = 0L
             
-            snapshotFlow {
-                val layoutInfo = listState.layoutInfo
-                val totalItems = layoutInfo.totalItemsCount
-                val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-                val lastIndex = lastVisibleItem?.index ?: 0
-                val shouldLoad = totalItems > 0 && lastIndex >= totalItems - ImageConfig.SCROLL_PRELOAD_THRESHOLD
-                
-                // Emit current state including index to ensure we keep checking as user scrolls
-                Triple(totalItems, lastIndex, shouldLoad)
-            }
-            .collect { (_, _, shouldLoad) ->
-                val currentTime = System.currentTimeMillis()
-                // 防止频繁触发：至少间隔1200ms
-                if (shouldLoad && currentTime - lastLoadTime > 1200) {
-                    lastLoadTime = currentTime
+            snapshotFlow { shouldLoadMore }
+                .collect { shouldLoad ->
+                    val currentTime = System.currentTimeMillis()
                     
-                    // 直接调用，ViewModel会在IO线程执行
-                    onLoadMore()
+                    // 防止频繁触发：至少间隔500ms
+                    if (shouldLoad && currentTime - lastLoadTime > 500) {
+                        lastLoadTime = currentTime
+                        
+                        // 在后台协程中调用，避免阻塞UI
+                        launch(Dispatchers.IO) {
+                            try {
+                                onLoadMore()
+                                if (BuildConfig.DEBUG) {
+                                    Log.d("BiliTV", "Load more executed successfully")
+                                }
+                            } catch (e: Exception) {
+                                Log.e("BiliTV", "Error in preload", e)
+                            }
+                        }
+                    }
+                }
+        }
+
+        // 兜底逻辑：当滚动停止且接近底部时也触发加载
+        LaunchedEffect(listState) {
+            var fallbackLastLoadTime = 0L
+            var wasScrolling = false
+            
+            snapshotFlow { 
+                val layoutInfo = listState.layoutInfo
+                val isScrollingInProgress = layoutInfo.viewportStartOffset != 0 || layoutInfo.viewportEndOffset != 0
+                val lastVisibleItemIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                val totalItems = layoutInfo.totalItemsCount
+                
+                Triple(lastVisibleItemIndex, isScrollingInProgress, wasScrolling)
+            }
+            .collect { (lastIndex, isScrolling, wasScrollingBefore) ->
+                // 记录滚动状态
+                if (isScrolling) {
+                    wasScrolling = true
+                }
+                
+                // 当滚动停止且接近底部时触发
+                val totalItems = listState.layoutInfo.totalItemsCount
+                if (!isScrolling && wasScrollingBefore && lastIndex >= totalItems - 4) {
+                    val currentTime = System.currentTimeMillis()
+                    if (currentTime - fallbackLastLoadTime > 1000) {
+                        fallbackLastLoadTime = currentTime
+                        wasScrolling = false
+                        
+                        launch(Dispatchers.IO) {
+                            try {
+                                onLoadMore()
+                                if (BuildConfig.DEBUG) {
+                                    Log.d("BiliTV", "Fallback load more executed")
+                                }
+                            } catch (e: Exception) {
+                                Log.e("BiliTV", "Error in fallback preload", e)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -157,7 +228,16 @@ fun <T> CommonVideoGrid(
         contentPadding = contentPadding,
         userScrollEnabled = true
     ) {
-        itemsIndexed(items) { index, item ->
+        itemsIndexed(
+            items = items,
+            key = { index, item -> 
+                // 使用稳定的 key 确保列表项正确重组
+                when (item) {
+                    is Video -> item.id
+                    else -> "${index}_${item.hashCode()}"
+                }
+            }
+        ) { index, item ->
             val focusRequester = remember { FocusRequester() }
             
             // 恢复焦点 - 监听shouldRestoreFocus和items列表变化
