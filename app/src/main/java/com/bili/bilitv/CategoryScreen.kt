@@ -389,7 +389,6 @@ fun CategoryScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(top = 8.dp) // 统一顶部间距
     ) {
         // 横向滚动Tabs
         if (categories.isNotEmpty()) {
@@ -400,7 +399,7 @@ fun CategoryScreen(
                     val selectedZone = categories.find { it.tid == tid }
                     selectedZone?.let { viewModel.selectCategory(it) }
                 },
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 8.dp)
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
             )
         }
 
@@ -425,7 +424,7 @@ fun CategoryScreen(
                         onLoadMore = { viewModel.loadMore() },
                         horizontalSpacing = 12.dp,
                         verticalSpacing = 12.dp,
-                        contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp, start = 12.dp, end = 12.dp) // 统一顶部间距
+                        contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp)
                     )
                 }
             }

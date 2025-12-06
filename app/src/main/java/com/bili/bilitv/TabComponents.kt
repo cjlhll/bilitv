@@ -49,8 +49,8 @@ fun CommonTabButton(
         ),
         border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null,
         modifier = modifier
-            .width(80.dp)
-            .height(32.dp)
+            .width(68.dp)
+            .height(26.dp)
             .onFocusChanged { isFocused = it.isFocused }
             .scale(scale),
         contentPadding = PaddingValues(0.dp)
@@ -77,12 +77,12 @@ fun <T> CommonTabRow(
     selectedTab: T,
     onTabSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 4.dp)
+    contentPadding: PaddingValues = PaddingValues(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 8.dp)
 ) {
     LazyRow(
         modifier = modifier
             .fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = contentPadding
     ) {
         items(tabs) { tab ->
@@ -113,12 +113,12 @@ fun <T : Enum<T>> CommonTabRowWithEnum(
     selectedTab: T,
     onTabSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 4.dp)
+    contentPadding: PaddingValues = PaddingValues(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 8.dp)
 ) {
     LazyRow(
         modifier = modifier
             .fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = contentPadding
     ) {
         items(tabs.toList()) { tab ->

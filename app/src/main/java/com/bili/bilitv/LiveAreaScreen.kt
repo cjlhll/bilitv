@@ -196,7 +196,6 @@ fun LiveAreaScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(top = 8.dp) // 统一顶部间距
     ) {
         // Tabs (Main Areas)
         if (areaGroups.isNotEmpty()) {
@@ -207,7 +206,7 @@ fun LiveAreaScreen(
                     val selectedGroupItem = areaGroups.find { it.id == groupId }
                     selectedGroupItem?.let { viewModel.selectGroup(it) }
                 },
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 4.dp)
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
             )
         }
 
@@ -269,7 +268,7 @@ private fun LiveAreaGrid(
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 32.dp) // 统一顶部间距
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 32.dp)
     ) {
         itemsIndexed(areas) { index, area ->
             val focusRequester = remember { FocusRequester() }

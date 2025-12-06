@@ -173,7 +173,6 @@ fun HomeScreen(
             modifier = modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
-                .padding(top = 8.dp) // 统一顶部间距
         ) {
             // Tab栏
             CommonTabRowWithEnum(
@@ -233,7 +232,7 @@ fun HomeScreen(
                             },
                             horizontalSpacing = 12.dp,
                             verticalSpacing = 12.dp,
-                            contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp, start = 12.dp, end = 12.dp) // 统一顶部间距
+                            contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp)
                         )
                     }
                 }

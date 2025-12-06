@@ -85,7 +85,7 @@ fun DynamicScreen(
         // Left Side: Following List
         Box(
             modifier = Modifier
-                .width(200.dp)
+                .width(170.dp)
                 .fillMaxHeight()
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 .focusRequester(containerRequester)
@@ -232,16 +232,16 @@ fun FollowingItem(
                 if (isSelected) MaterialTheme.colorScheme.primaryContainer
                 else Color.Transparent
             )
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 8.dp, vertical = 5.dp)
     ) {
         AsyncImage(
             model = user.face,
             contentDescription = user.uname,
             modifier = Modifier
-                .size(32.dp)
+                .size(24.dp)
                 .clip(CircleShape)
         )
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(4.dp))
         Text(
             text = user.uname,
             style = MaterialTheme.typography.bodySmall,
@@ -268,19 +268,19 @@ fun AllDynamicsItem(
                 if (isSelected) MaterialTheme.colorScheme.primaryContainer
                 else Color.Transparent
             )
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 8.dp, vertical = 5.dp)
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.List,
             contentDescription = "全部动态",
             modifier = Modifier
-                .size(32.dp)
+                .size(24.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.secondaryContainer)
-                .padding(6.dp),
+                .padding(4.dp),
             tint = MaterialTheme.colorScheme.onSecondaryContainer
         )
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(4.dp))
         Text(
             text = "全部动态",
             style = MaterialTheme.typography.bodySmall,
