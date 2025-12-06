@@ -109,6 +109,7 @@ fun VideoPlayerScreen(
     var previewTime by remember { mutableLongStateOf(-1L) } // -1表示不显示预览
     var isSeeking by remember { mutableStateOf(false) }
     var isLongPressing by remember { mutableStateOf(false) }
+    var longPressStartTime by remember { mutableLongStateOf(0L) } // 长按开始时间
     
     // 长按Seek协程
     val coroutineScope = rememberCoroutineScope()
@@ -368,26 +369,29 @@ fun VideoPlayerScreen(
                                         if (previewTime == -1L) previewTime = currentTime
                                     }
                                     isOverlayVisible = true
-                                    debugLog("BiliTV", "DPAD_LEFT DOWN: isSeeking=$isSeeking, previewTime=$previewTime")
                                     
                                     // 长按逻辑
                                     if (event.nativeKeyEvent.repeatCount > 0) {
                                         if (!isLongPressing) {
                                             isLongPressing = true
+                                            longPressStartTime = System.currentTimeMillis()
                                             
                                             seekJob?.cancel()
                                             seekJob = coroutineScope.launch {
                                                 while (isLongPressing) {
-                                                    previewTime = (previewTime - 5000).coerceAtLeast(0)
-                                                    debugLog("BiliTV", "DPAD_LEFT LONG PRESS: previewTime=$previewTime")
+                                                    val longPressDuration = System.currentTimeMillis() - longPressStartTime
+                                                    val seekStep = calculateSeekStep(duration, longPressDuration)
+                                                    previewTime = (previewTime - seekStep).coerceAtLeast(0)
+                                                    debugLog("BiliTV", "DPAD_LEFT LONG PRESS: previewTime=$previewTime, seekStep=$seekStep, longPressDuration=$longPressDuration")
                                                     delay(100) // 100ms 刷新一次
                                                 }
                                             }
                                         }
                                     } else {
                                         // 短按逻辑 - 立即步进
-                                        previewTime = (previewTime - 5000).coerceAtLeast(0)
-                                        debugLog("BiliTV", "DPAD_LEFT SHORT PRESS: previewTime=$previewTime")
+                                        val seekStep = calculateSeekStep(duration)
+                                        previewTime = (previewTime - seekStep).coerceAtLeast(0)
+                                        debugLog("BiliTV", "DPAD_LEFT SHORT PRESS: previewTime=$previewTime, seekStep=$seekStep")
                                     }
                                 }
                                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
@@ -400,26 +404,29 @@ fun VideoPlayerScreen(
                                         if (previewTime == -1L) previewTime = currentTime
                                     }
                                     isOverlayVisible = true
-                                    debugLog("BiliTV", "DPAD_RIGHT DOWN: isSeeking=$isSeeking, previewTime=$previewTime")
                                     
                                     // 长按逻辑
                                     if (event.nativeKeyEvent.repeatCount > 0) {
                                         if (!isLongPressing) {
                                             isLongPressing = true
+                                            longPressStartTime = System.currentTimeMillis()
                                             
                                             seekJob?.cancel()
                                             seekJob = coroutineScope.launch {
                                                 while (isLongPressing) {
-                                                    previewTime = (previewTime + 5000).coerceAtMost(duration)
-                                                    debugLog("BiliTV", "DPAD_RIGHT LONG PRESS: previewTime=$previewTime")
+                                                    val longPressDuration = System.currentTimeMillis() - longPressStartTime
+                                                    val seekStep = calculateSeekStep(duration, longPressDuration)
+                                                    previewTime = (previewTime + seekStep).coerceAtMost(duration)
+                                                    debugLog("BiliTV", "DPAD_RIGHT LONG PRESS: previewTime=$previewTime, seekStep=$seekStep, longPressDuration=$longPressDuration")
                                                     delay(100) // 100ms 刷新一次
                                                 }
                                             }
                                         }
                                     } else {
                                         // 短按逻辑 - 立即步进
-                                        previewTime = (previewTime + 5000).coerceAtMost(duration)
-                                        debugLog("BiliTV", "DPAD_RIGHT SHORT PRESS: previewTime=$previewTime")
+                                        val seekStep = calculateSeekStep(duration)
+                                        previewTime = (previewTime + seekStep).coerceAtMost(duration)
+                                        debugLog("BiliTV", "DPAD_RIGHT SHORT PRESS: previewTime=$previewTime, seekStep=$seekStep")
                                     }
                                 }
                             }
@@ -431,6 +438,7 @@ fun VideoPlayerScreen(
                                 if (isLongPressing) {
                                     // 长按结束
                                     isLongPressing = false
+                                    longPressStartTime = 0L
                                     seekJob?.cancel()
                                     // 松开后跳转播放
                                     exoPlayer.seekTo(previewTime)
@@ -1037,4 +1045,49 @@ private fun formatDuration(seconds: Long): String {
     } else {
         String.format("%02d:%02d", minutes, secs)
     }
+}
+
+/**
+ * 根据视频总时长和长按时间计算动态快进步长
+ * 使用总时长的百分比，长按时速度递增
+ */
+private fun calculateSeekStep(duration: Long, longPressDuration: Long = 0): Long {
+    // 基础步长为总时长的1%
+    val baseStep = (duration * 0.01).toLong().coerceAtLeast(1000L) // 最小1秒
+    
+    // 长按时间递增系数，每500ms增加10%的速度，最高增加到基础步长的20倍
+    val speedMultiplier = when {
+        longPressDuration <= 0 -> 1.0f
+        longPressDuration < 500 -> 1.0f
+        longPressDuration < 1000 -> 1.5f
+        longPressDuration < 1500 -> 2.0f
+        longPressDuration < 2000 -> 2.5f
+        longPressDuration < 2500 -> 3.0f
+        longPressDuration < 3000 -> 3.5f
+        longPressDuration < 3500 -> 4.0f
+        longPressDuration < 4000 -> 4.5f
+        longPressDuration < 4500 -> 5.0f
+        longPressDuration < 5000 -> 5.5f
+        longPressDuration < 5500 -> 6.0f
+        longPressDuration < 6000 -> 6.5f
+        longPressDuration < 6500 -> 7.0f
+        longPressDuration < 7000 -> 7.5f
+        longPressDuration < 7500 -> 8.0f
+        longPressDuration < 8000 -> 8.5f
+        longPressDuration < 8500 -> 9.0f
+        longPressDuration < 9000 -> 9.5f
+        longPressDuration < 9500 -> 10.0f
+        longPressDuration < 10000 -> 11.0f
+        longPressDuration < 10500 -> 12.0f
+        longPressDuration < 11000 -> 13.0f
+        longPressDuration < 11500 -> 14.0f
+        longPressDuration < 12000 -> 15.0f
+        longPressDuration < 12500 -> 16.0f
+        longPressDuration < 13000 -> 17.0f
+        longPressDuration < 13500 -> 18.0f
+        longPressDuration < 14000 -> 19.0f
+        else -> 20.0f
+    }
+    
+    return (baseStep * speedMultiplier).toLong()
 }
