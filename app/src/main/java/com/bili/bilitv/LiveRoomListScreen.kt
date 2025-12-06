@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -408,17 +409,22 @@ fun LiveRoomCard(
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val cardShape = RoundedCornerShape(8.dp)
 
     Box(
         modifier = modifier
             .onFocusChanged { isFocused = it.isFocused }
-            .clickable { onClick() }
+            .clip(cardShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onClick() }
     ) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .zIndex(if (isFocused) 1f else 0f),
-            shape = RoundedCornerShape(8.dp),
+            shape = cardShape,
             elevation = CardDefaults.cardElevation(
                 defaultElevation = if (isFocused) 8.dp else 2.dp
             ),

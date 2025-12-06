@@ -1,5 +1,6 @@
 package com.bili.bilitv
 
+import android.media.AudioManager
 import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.Toast
@@ -23,6 +24,7 @@ import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import java.util.concurrent.Executors
 import kotlin.system.exitProcess
+import androidx.core.content.getSystemService
 
 /**
  * 主 Activity - 应用入口
@@ -31,12 +33,34 @@ import kotlin.system.exitProcess
 class MainActivity : ComponentActivity(), ImageLoaderFactory {
 
     private val keyEventThrottle = KeyEventThrottle()
+    private val audioManager by lazy { getSystemService<AudioManager>() }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (!keyEventThrottle.allowEvent(event)) {
             return true
         }
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            playNavigationSound(event.keyCode)
+        }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun playNavigationSound(keyCode: Int) {
+        val effect = when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> AudioManager.FX_FOCUS_NAVIGATION_UP
+            KeyEvent.KEYCODE_DPAD_DOWN -> AudioManager.FX_FOCUS_NAVIGATION_DOWN
+            KeyEvent.KEYCODE_DPAD_LEFT -> AudioManager.FX_FOCUS_NAVIGATION_LEFT
+            KeyEvent.KEYCODE_DPAD_RIGHT -> AudioManager.FX_FOCUS_NAVIGATION_RIGHT
+            KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_BACK,
+            KeyEvent.KEYCODE_MENU,
+            KeyEvent.KEYCODE_MEDIA_PLAY,
+            KeyEvent.KEYCODE_MEDIA_PAUSE,
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> AudioManager.FX_KEY_CLICK
+            else -> null
+        }
+        effect?.let { audioManager?.playSoundEffect(it) }
     }
 
     private var backPressedTime: Long = 0

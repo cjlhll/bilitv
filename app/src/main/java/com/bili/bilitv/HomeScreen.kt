@@ -195,7 +195,13 @@ fun HomeScreen(
             CommonTabRowWithEnum(
                 tabs = TabType.entries.toTypedArray(),
                 selectedTab = viewModel.selectedTab,
-                onTabSelected = { viewModel.onTabChanged(it) }
+                onTabSelected = {
+                    if (it == viewModel.selectedTab) {
+                        viewModel.refreshCurrentTab()
+                    } else {
+                        viewModel.onTabChanged(it)
+                    }
+                }
             )
 
             if (viewModel.isRefreshing) {

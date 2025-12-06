@@ -427,7 +427,13 @@ fun CategoryScreen(
                 selectedTab = selectedCategory?.tid ?: 0,
                 onTabSelected = { tid ->
                     val selectedZone = categories.find { it.tid == tid }
-                    selectedZone?.let { viewModel.selectCategory(it) }
+                    selectedZone?.let {
+                        if (it.tid == selectedCategory?.tid) {
+                            viewModel.refreshCurrentCategory()
+                        } else {
+                            viewModel.selectCategory(it)
+                        }
+                    }
                 },
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
             )

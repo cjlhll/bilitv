@@ -7,6 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -17,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -92,17 +94,22 @@ fun VideoItem(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val cardShape = RoundedCornerShape(8.dp)
 
     Box(
         modifier = modifier
             .onFocusChanged { focusState ->
                 isFocused = focusState.isFocused
             }
-            .clickable { onClick(video) }
+            .clip(cardShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onClick(video) }
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
+            shape = cardShape,
             elevation = CardDefaults.cardElevation(
                 defaultElevation = 0.dp
             ),
