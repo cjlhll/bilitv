@@ -7,7 +7,7 @@ import android.view.KeyEvent
  * 主要用于限制遥控器长按时的事件分发速度
  */
 class KeyEventThrottle(
-    private val throttleMs: Long = 200L
+    private val throttleMs: Long = 100L
 ) {
     private var lastEventTime = 0L
 

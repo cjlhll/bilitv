@@ -76,11 +76,6 @@ fun DynamicScreen(
         exit = fadeOut(animationSpec = tween(200))
     ) {
 
-    // Focus handling for the "Left Side" container to prevent focus skipping
-    val itemFocusRequesters = remember { mutableMapOf<Long, FocusRequester>() }
-    val allDynamicsRequester = remember { FocusRequester() }
-    val containerRequester = remember { FocusRequester() }
-
     Row(modifier = Modifier.fillMaxSize()) {
         // Left Side: Following List
         Box(
@@ -88,22 +83,6 @@ fun DynamicScreen(
                 .width(170.dp)
                 .fillMaxHeight()
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                .focusRequester(containerRequester)
-                .onFocusChanged { state ->
-                    if (state.isFocused) {
-                        // When the container itself gets focus (e.g. from geometric search hitting empty space),
-                        // redirect focus to the selected user or the first user.
-                        if (viewModel.isAllDynamicsSelected) {
-                            allDynamicsRequester.requestFocus()
-                        } else {
-                            val targetUser = viewModel.selectedUser ?: viewModel.followingList.firstOrNull()
-                            targetUser?.let { user ->
-                                itemFocusRequesters[user.mid]?.requestFocus()
-                            }
-                        }
-                    }
-                }
-                .focusable()
         ) {
             if (viewModel.isLoading && viewModel.followingList.isEmpty()) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
@@ -126,22 +105,17 @@ fun DynamicScreen(
                 item {
                     AllDynamicsItem(
                         isSelected = viewModel.isAllDynamicsSelected,
-                        onClick = { viewModel.selectAllDynamics() },
-                        modifier = Modifier.focusRequester(allDynamicsRequester)
+                        onClick = { viewModel.selectAllDynamics() }
                     )
                 }
                 items(
                     items = viewModel.followingList,
                     key = { it.mid }
                 ) { user ->
-                    val requester = remember(user.mid) {
-                        itemFocusRequesters.getOrPut(user.mid) { FocusRequester() }
-                    }
                     FollowingItem(
                         user = user,
                         isSelected = viewModel.selectedUser?.mid == user.mid,
-                        onClick = { viewModel.selectUser(user) },
-                        modifier = Modifier.focusRequester(requester)
+                        onClick = { viewModel.selectUser(user) }
                     )
                 }
             }

@@ -127,16 +127,16 @@ fun <T> CommonVideoGrid(
 
     // 优化的提前加载触发逻辑 - 滚动到底部时加载下一页
     if (onLoadMore != null) {
-        // 使用 derivedStateOf 避免滚动时重计算
+        // 使用 derivedStateOf 避免滚动时重计算，优化快速滚动场景
         val shouldLoadMore by remember {
             derivedStateOf {
                 val layoutInfo = listState.layoutInfo
                 val totalItems = layoutInfo.totalItemsCount
                 val lastVisibleItemIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
                 
-                // 触发条件：当滚动到倒数第二行时加载下一页
-                // 一行4个，所以当最后可见项索引 >= 总数 - 8 时触发
-                val shouldPreload = totalItems > 0 && lastVisibleItemIndex >= totalItems - 8
+                // 增大预加载阈值：当滚动到倒数第三行时就触发，适应快速滚动
+                // 一行4个，所以当最后可见项索引 >= 总数 - 12 时触发
+                val shouldPreload = totalItems > 0 && lastVisibleItemIndex >= totalItems - 12
                 
                 if (BuildConfig.DEBUG) {
                     // 仅在调试时记录，避免生产环境性能影响
@@ -149,7 +149,7 @@ fun <T> CommonVideoGrid(
             }
         }
 
-        // 使用 LaunchedEffect + snapshotFlow 监听滚动状态
+        // 使用 LaunchedEffect + snapshotFlow 监听滚动状态，优化时间间隔
         LaunchedEffect(listState) {
             var lastLoadTime = 0L
             
@@ -157,8 +157,8 @@ fun <T> CommonVideoGrid(
                 .collect { shouldLoad ->
                     val currentTime = System.currentTimeMillis()
                     
-                    // 防止频繁触发：至少间隔500ms
-                    if (shouldLoad && currentTime - lastLoadTime > 500) {
+                    // 减少时间间隔限制：从500ms改为200ms，适应快速滚动
+                    if (shouldLoad && currentTime - lastLoadTime > 200) {
                         lastLoadTime = currentTime
                         
                         // 在后台协程中调用，避免阻塞UI
@@ -176,30 +176,37 @@ fun <T> CommonVideoGrid(
                 }
         }
 
-        // 兜底逻辑：当滚动停止且接近底部时也触发加载
+        // 兜底逻辑：当滚动停止且接近底部时也触发加载，优化检测逻辑
         LaunchedEffect(listState) {
             var fallbackLastLoadTime = 0L
             var wasScrolling = false
+            var scrollVelocity = 0f
+            var lastScrollIndex = 0
             
             snapshotFlow { 
                 val layoutInfo = listState.layoutInfo
-                val isScrollingInProgress = layoutInfo.viewportStartOffset != 0 || layoutInfo.viewportEndOffset != 0
                 val lastVisibleItemIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
                 val totalItems = layoutInfo.totalItemsCount
                 
-                Triple(lastVisibleItemIndex, isScrollingInProgress, wasScrolling)
+                // 计算滚动速度
+                val currentVelocity = (lastVisibleItemIndex - lastScrollIndex).toFloat()
+                lastScrollIndex = lastVisibleItemIndex
+                
+                Triple(lastVisibleItemIndex, currentVelocity, wasScrolling)
             }
-            .collect { (lastIndex, isScrolling, wasScrollingBefore) ->
+            .collect { (lastIndex, currentVelocity, wasScrollingBefore) ->
                 // 记录滚动状态
-                if (isScrolling) {
+                if (currentVelocity != 0f) {
                     wasScrolling = true
+                    scrollVelocity = currentVelocity
                 }
                 
-                // 当滚动停止且接近底部时触发
+                // 当滚动停止且接近底部时触发，降低阈值
                 val totalItems = listState.layoutInfo.totalItemsCount
-                if (!isScrolling && wasScrollingBefore && lastIndex >= totalItems - 4) {
+                if (currentVelocity == 0f && wasScrollingBefore && lastIndex >= totalItems - 6) {
                     val currentTime = System.currentTimeMillis()
-                    if (currentTime - fallbackLastLoadTime > 1000) {
+                    // 减少时间间隔：从1000ms改为500ms
+                    if (currentTime - fallbackLastLoadTime > 500) {
                         fallbackLastLoadTime = currentTime
                         wasScrolling = false
                         
@@ -207,7 +214,7 @@ fun <T> CommonVideoGrid(
                             try {
                                 onLoadMore()
                                 if (BuildConfig.DEBUG) {
-                                    Log.d("BiliTV", "Fallback load more executed")
+                                    Log.d("BiliTV", "Fallback load more executed, velocity=$scrollVelocity")
                                 }
                             } catch (e: Exception) {
                                 Log.e("BiliTV", "Error in fallback preload", e)

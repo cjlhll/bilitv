@@ -7,7 +7,7 @@ import kotlinx.coroutines.*
 
 class TvFocusThrottle {
     private var lastFocusChangeTime = 0L
-    private val throttleMs = 180L
+    private val throttleMs = 90L
     
     fun shouldProcessFocusChange(): Boolean {
         val currentTime = System.currentTimeMillis()
