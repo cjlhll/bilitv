@@ -114,15 +114,13 @@ fun VideoItem(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(112.dp)
-                        .background(Color.LightGray),
+                        .background(MaterialTheme.colorScheme.surface),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        val placeholderPainter = painterResource(id = R.drawable.video_placeholder)
-                        
                         val imageModel = remember(video.coverUrl) {
                             ImageRequest.Builder(context)
                                 .data(video.coverUrl)
@@ -140,9 +138,7 @@ fun VideoItem(
                             model = imageModel,
                             contentDescription = video.title,
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                            placeholder = placeholderPainter,
-                            error = placeholderPainter
+                            contentScale = ContentScale.Crop
                         )
                         
                         // 底部渐变和信息展示
