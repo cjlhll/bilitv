@@ -149,6 +149,7 @@ data class VideoshotResponse(
 @Serializable
 data class VideoshotData(
     val image: List<String>? = null, // 缩略图拼图URL列表
+    val index: List<Long>? = null, // 截取时间表（秒），为空时需均匀分布
     val img_x_len: Int = 10, // 每张拼图横向图片数量
     val img_y_len: Int = 10, // 每张拼图纵向图片数量
     val img_x_size: Int = 160, // 单张缩略图宽度
@@ -365,7 +366,8 @@ object VideoPlayUrlFetcher {
     suspend fun fetchVideoshot(bvid: String, cid: Long): VideoshotData? {
         return withContext(Dispatchers.IO) {
             try {
-                val url = "https://api.bilibili.com/x/player/videoshot?bvid=$bvid&cid=$cid"
+                // 添加index=1参数请求时间表数据
+                val url = "https://api.bilibili.com/x/player/videoshot?bvid=$bvid&cid=$cid&index=1"
                 if (BuildConfig.DEBUG) {
                     Log.d("BiliTV", "fetchVideoshot: Requesting URL: $url")
                 }
@@ -390,6 +392,12 @@ object VideoPlayUrlFetcher {
                         val resp = json.decodeFromString<VideoshotResponse>(body)
                         if (BuildConfig.DEBUG) {
                             Log.d("BiliTV", "fetchVideoshot: Response code: ${resp.code}, data: ${resp.data}")
+                            resp.data?.let { data ->
+                                Log.d("BiliTV", "fetchVideoshot: image count=${data.image?.size}, index count=${data.index?.size}")
+                                data.index?.take(10)?.forEachIndexed { index, time ->
+                                    Log.d("BiliTV", "fetchVideoshot: index[$index]=$time")
+                                }
+                            }
                         }
                         if (resp.code == 0) {
                             return@withContext resp.data

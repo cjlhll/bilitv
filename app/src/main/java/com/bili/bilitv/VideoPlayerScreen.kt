@@ -160,9 +160,12 @@ fun VideoPlayerScreen(
                 Log.e("BiliTV", "Videoshot data is null for bvid=${videoPlayInfo.bvid}, cid=${videoPlayInfo.cid}")
             } else {
                 videoshotData?.let { data ->
-                    debugLog("BiliTV", "VideoshotData details: image count=${data.image?.size}, img_x_len=${data.img_x_len}, img_y_len=${data.img_y_len}, img_x_size=${data.img_x_size}, img_y_size=${data.img_y_size}")
+                    debugLog("BiliTV", "VideoshotData details: image count=${data.image?.size}, index count=${data.index?.size}, img_x_len=${data.img_x_len}, img_y_len=${data.img_y_len}, img_x_size=${data.img_x_size}, img_y_size=${data.img_y_size}")
                     data.image?.forEachIndexed { index, url ->
                         debugLog("BiliTV", "Videoshot image $index: $url")
+                    }
+                    data.index?.take(10)?.forEachIndexed { index, time ->
+                        debugLog("BiliTV", "Videoshot index[$index]=${time}s")
                     }
                 }
             }
@@ -654,7 +657,7 @@ fun VideoPlayerScreen(
                                         // 限制边界
                                         val constrainedOffsetX = minOf(maxOf(offsetX, 0.dp), sliderWidthDp - previewWidth)
                                         
-                                        debugLog("BiliTV", "VideoshotPreview visible check: isSeeking=$isSeeking, previewTime=$previewTime, videoshotData=${videoshotData != null}")
+                                        debugLog("BiliTV", "VideoshotPreview: isSeeking=$isSeeking, previewTime=${previewTime}ms, progress=$progress, videoshotData=${videoshotData != null}")
                                         
                                         // 使用绝对定位，将预览窗口放在进度条上方
                                         Box(
@@ -666,26 +669,12 @@ fun VideoPlayerScreen(
                                                 .clip(RoundedCornerShape(4.dp))
                                                 .background(Color.Black)
                                         ) {
-                                            // 添加调试信息显示
-                                            if (videoshotData != null) {
-                                                VideoshotPreview(
-                                                    data = videoshotData!!,
-                                                    time = previewTime,
-                                                    totalDuration = duration,
-                                                    modifier = Modifier.fillMaxSize()
-                                                )
-                                            } else {
-                                                Box(
-                                                    modifier = Modifier.fillMaxSize(),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Text(
-                                                        text = "No preview data",
-                                                        color = Color.White,
-                                                        fontSize = 12.sp
-                                                    )
-                                                }
-                                            }
+                                            VideoshotPreview(
+                                                data = videoshotData!!,
+                                                time = previewTime,
+                                                totalDuration = duration,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
                                         }
                                     }
                                 }
@@ -794,7 +783,7 @@ fun VideoPlayerScreen(
 }
 
 /**
- * 视频预览组件（带缓存优化）
+ * 视频预览组件（支持多张拼图和精确时间匹配）
  */
 @Composable
 fun VideoshotPreview(
@@ -805,112 +794,163 @@ fun VideoshotPreview(
 ) {
     val context = LocalContext.current
     var bitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    var imageIndex by remember { mutableStateOf(-1) } // 当前加载的图片索引
     
-    // 计算当前时间对应的图片索引
+    // 计算总帧数（所有拼图的总格子数）
     val totalImages = (data.image?.size ?: 0) * data.img_x_len * data.img_y_len
     debugLog("BiliTV", "VideoshotPreview: totalImages=$totalImages, time=$time, totalDuration=$totalDuration")
-    if (totalImages == 0) {
-        Log.e("BiliTV", "VideoshotPreview: totalImages is 0, returning early")
+    
+    if (totalImages == 0 || data.image == null) {
+        Log.e("BiliTV", "VideoshotPreview: No images available")
+        Box(
+            modifier = modifier.size(160.dp, 90.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "无预览图",
+                color = Color.White,
+                fontSize = 12.sp
+            )
+        }
         return
     }
     
-    val index = if (totalDuration > 0) {
-        ((time.toDouble() / totalDuration) * totalImages).toInt().coerceIn(0, totalImages - 1)
-    } else 0
+    // 计算目标帧索引
+    val targetFrameIndex = remember(time, totalDuration, data.index) {
+        if (data.index != null && data.index.isNotEmpty()) {
+            // 使用index数组进行精确匹配
+            val timeInSeconds = time / 1000
+            // 找到最接近的时间点
+            var bestIndex = 0
+            var minDiff = Long.MAX_VALUE
+            
+            data.index.forEachIndexed { idx, frameTime ->
+                val diff = kotlin.math.abs(frameTime - timeInSeconds)
+                if (diff < minDiff) {
+                    minDiff = diff
+                    bestIndex = idx
+                }
+            }
+            bestIndex.coerceIn(0, totalImages - 1)
+        } else {
+            // index为空时，使用均匀分布
+            if (totalDuration > 0) {
+                ((time.toDouble() / totalDuration) * totalImages).toInt().coerceIn(0, totalImages - 1)
+            } else 0
+        }
+    }
     
-    debugLog("BiliTV", "VideoshotPreview: index=$index, totalImages=$totalImages")
+    debugLog("BiliTV", "VideoshotPreview: targetFrameIndex=$targetFrameIndex")
     
-    // 计算所在的拼图索引
+    // 计算所在拼图索引和内部位置
     val sheetSize = data.img_x_len * data.img_y_len
-    val sheetIndex = index / sheetSize
-    val internalIndex = index % sheetSize
+    val sheetIndex = targetFrameIndex / sheetSize
+    val internalIndex = targetFrameIndex % sheetSize
     
     // 计算在拼图中的行列
     val row = internalIndex / data.img_x_len
     val col = internalIndex % data.img_x_len
     
     debugLog("BiliTV", "VideoshotPreview: sheetIndex=$sheetIndex, internalIndex=$internalIndex, row=$row, col=$col")
-    debugLog("BiliTV", "VideoshotPreview: img_x_len=${data.img_x_len}, img_y_len=${data.img_y_len}, img_x_size=${data.img_x_size}, img_y_size=${data.img_y_size}")
     
-    // 使用缓存加载图片
-    val cachedBitmap = remember(sheetIndex) {
-        mutableStateOf<ImageBitmap?>(null)
+    // 检查拼图索引是否有效
+    if (sheetIndex >= data.image.size) {
+        Log.e("BiliTV", "VideoshotPreview: sheetIndex out of bounds: $sheetIndex >= ${data.image.size}")
+        Box(
+            modifier = modifier.size(160.dp, 90.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "预览图超出范围",
+                color = Color.White,
+                fontSize = 12.sp
+            )
+        }
+        return
     }
     
-    // 如果缓存中有，直接使用
-    if (cachedBitmap.value != null) {
-        bitmap = cachedBitmap.value
+    // 缓存已加载的图片
+    val imageCache = remember { mutableMapOf<Int, ImageBitmap>() }
+    
+    // 加载或获取缓存的图片
+    if (imageCache.containsKey(sheetIndex)) {
+        bitmap = imageCache[sheetIndex]
+        imageIndex = sheetIndex
         debugLog("BiliTV", "VideoshotPreview: Using cached bitmap for sheetIndex=$sheetIndex")
     } else {
-        // 加载图片
+        // 异步加载图片
         LaunchedEffect(sheetIndex) {
-            if (data.image != null && sheetIndex < data.image.size) {
-                val url = if (data.image[sheetIndex].startsWith("//")) "https:${data.image[sheetIndex]}" else data.image[sheetIndex]
-                debugLog("BiliTV", "VideoshotPreview: Loading image for sheetIndex=$sheetIndex, URL=$url")
+            val url = if (data.image[sheetIndex].startsWith("//")) {
+                "https:${data.image[sheetIndex]}"
+            } else {
+                data.image[sheetIndex]
+            }
+            
+            debugLog("BiliTV", "VideoshotPreview: Loading image for sheetIndex=$sheetIndex, URL=$url")
+            
+            try {
                 val loader = ImageLoader(context)
                 val request = ImageRequest.Builder(context)
                     .data(url)
                     .allowHardware(false)
                     .build()
                 
-                try {
-                    val result = loader.execute(request)
-                    if (result is SuccessResult) {
-                        val loadedBitmap = (result.drawable as BitmapDrawable).bitmap.asImageBitmap()
-                        debugLog("BiliTV", "VideoshotPreview: Bitmap loaded successfully, size=${loadedBitmap.width}x${loadedBitmap.height}")
-                        cachedBitmap.value = loadedBitmap
-                        bitmap = loadedBitmap
-                    } else {
-                        Log.e("BiliTV", "VideoshotPreview: Failed to load bitmap, result=$result")
-                    }
-                } catch (e: Exception) {
-                    Log.e("BiliTV", "VideoshotPreview: Exception loading image", e)
+                val result = loader.execute(request)
+                if (result is SuccessResult) {
+                    val loadedBitmap = (result.drawable as BitmapDrawable).bitmap.asImageBitmap()
+                    debugLog("BiliTV", "VideoshotPreview: Bitmap loaded successfully, size=${loadedBitmap.width}x${loadedBitmap.height}")
+                    imageCache[sheetIndex] = loadedBitmap
+                    bitmap = loadedBitmap
+                    imageIndex = sheetIndex
+                } else {
+                    Log.e("BiliTV", "VideoshotPreview: Failed to load bitmap, result=$result")
                 }
-            } else {
-                Log.e("BiliTV", "VideoshotPreview: data.image is null or sheetIndex out of bounds. data.image=${data.image}, sheetIndex=$sheetIndex")
+            } catch (e: Exception) {
+                Log.e("BiliTV", "VideoshotPreview: Exception loading image", e)
             }
         }
     }
     
-    if (bitmap != null) {
+    // 绘制预览图
+    if (bitmap != null && imageIndex == sheetIndex) {
         Canvas(modifier = modifier.size(160.dp, 90.dp)) {
-            // 根据实际bitmap尺寸重新计算小图尺寸
-            val actualImgWidth = bitmap!!.width / data.img_x_len
-            val actualImgHeight = bitmap!!.height / data.img_y_len
+            // 根据实际bitmap尺寸计算每个小图的实际尺寸
+            val actualTileWidth = bitmap!!.width / data.img_x_len
+            val actualTileHeight = bitmap!!.height / data.img_y_len
             
-            val srcX = col * actualImgWidth
-            val srcY = row * actualImgHeight
+            // 计算源图像中的裁剪区域
+            val srcX = col * actualTileWidth
+            val srcY = row * actualTileHeight
             
             val dstWidth = size.width.roundToInt()
             val dstHeight = size.height.roundToInt()
 
-            debugLog("BiliTV", "VideoshotPreview: Drawing image. srcOffset=($srcX,$srcY), srcSize=($actualImgWidth,$actualImgHeight), dstSize=($dstWidth,$dstHeight)")
-            debugLog("BiliTV", "VideoshotPreview: Bitmap size=${bitmap!!.width}x${bitmap!!.height}, actual tile size=${actualImgWidth}x${actualImgHeight}")
+            debugLog("BiliTV", "VideoshotPreview: Drawing image. srcOffset=($srcX,$srcY), srcSize=($actualTileWidth,$actualTileHeight), dstSize=($dstWidth,$dstHeight)")
             
             // 检查裁剪区域是否在bitmap范围内
-            if (srcX + actualImgWidth <= bitmap!!.width && srcY + actualImgHeight <= bitmap!!.height) {
+            if (srcX + actualTileWidth <= bitmap!!.width && srcY + actualTileHeight <= bitmap!!.height && 
+                srcX >= 0 && srcY >= 0) {
                 drawImage(
                     image = bitmap!!,
                     srcOffset = IntOffset(srcX, srcY),
-                    srcSize = IntSize(actualImgWidth, actualImgHeight),
+                    srcSize = IntSize(actualTileWidth, actualTileHeight),
                     dstSize = IntSize(dstWidth, dstHeight)
                 )
                 debugLog("BiliTV", "VideoshotPreview: Image drawn successfully")
             } else {
-                Log.e("BiliTV", "VideoshotPreview: Crop region out of bounds! srcX=$srcX, srcY=$srcY, actualImgWidth=$actualImgWidth, actualImgHeight=$actualImgHeight, bitmap size=${bitmap!!.width}x${bitmap!!.height}")
+                Log.e("BiliTV", "VideoshotPreview: Crop region out of bounds! srcX=$srcX, srcY=$srcY, actualTileWidth=$actualTileWidth, actualTileHeight=$actualTileHeight, bitmap size=${bitmap!!.width}x${bitmap!!.height}")
                 // 绘制错误占位符
                 drawRect(Color.DarkGray.copy(alpha = 0.8f))
             }
         }
     } else {
-        debugLog("BiliTV", "VideoshotPreview: Bitmap is null, not drawing Canvas.")
         // 显示加载状态
         Box(
             modifier = modifier.size(160.dp, 90.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "加载中...",
+                text = if (imageIndex != sheetIndex) "切换中..." else "加载中...",
                 color = Color.White,
                 fontSize = 12.sp
             )
