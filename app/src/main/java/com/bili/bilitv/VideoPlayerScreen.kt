@@ -452,10 +452,12 @@ fun VideoPlayerScreen(
                                     longPressStartTime = 0L
                                     seekJob?.cancel()
                                     // 松开后跳转播放
-                                    exoPlayer.seekTo(previewTime)
-                                    danmakuManager.seekTo(previewTime) // Sync Danmaku
-                                    reporter?.reportSeek(previewTime / 1000) // Report seek with target position
-                                    currentTime = previewTime
+                                    val seekTarget = snapToIndex(previewTime, videoshotData, duration)
+                                    exoPlayer.seekTo(seekTarget)
+                                    danmakuManager.seekTo(seekTarget)
+                                    reporter?.reportSeek(seekTarget / 1000)
+                                    currentTime = seekTarget
+                                    previewTime = seekTarget
                                     
                                     // 延迟退出seeking状态，给播放器一点缓冲时间
                                     coroutineScope.launch {
@@ -465,10 +467,12 @@ fun VideoPlayerScreen(
                                     }
                                 } else if (isSeeking) {
                                     // 短按结束
-                                    exoPlayer.seekTo(previewTime)
-                                    danmakuManager.seekTo(previewTime) // Sync Danmaku
-                                    reporter?.reportSeek(previewTime / 1000) // Report seek
-                                    currentTime = previewTime
+                                    val seekTarget = snapToIndex(previewTime, videoshotData, duration)
+                                    exoPlayer.seekTo(seekTarget)
+                                    danmakuManager.seekTo(seekTarget)
+                                    reporter?.reportSeek(seekTarget / 1000)
+                                    currentTime = seekTarget
+                                    previewTime = seekTarget
                                     
                                     seekJob?.cancel()
                                     seekJob = coroutineScope.launch {
@@ -825,23 +829,19 @@ fun VideoshotPreview(
     
     // 计算目标帧索引
     val targetFrameIndex = remember(time, totalDuration, data.index) {
-        if (data.index != null && data.index.isNotEmpty()) {
-            // 使用index数组进行精确匹配
-            val timeInSeconds = time / 1000
-            // 找到最接近的时间点
-            var bestIndex = 0
-            var minDiff = Long.MAX_VALUE
-            
-            data.index.forEachIndexed { idx, frameTime ->
-                val diff = kotlin.math.abs(frameTime - timeInSeconds)
-                if (diff < minDiff) {
-                    minDiff = diff
-                    bestIndex = idx
+        val indexList = data.index
+        if (indexList != null && indexList.size > 1) {
+            val timeInSeconds = time / 1000.0
+            var frameIdx = 0
+            for (idx in 1 until indexList.size) {
+                if (timeInSeconds <= indexList[idx].toDouble()) {
+                    frameIdx = (idx - 1).coerceAtMost(totalImages - 1)
+                    return@remember frameIdx
                 }
+                frameIdx = (idx - 1).coerceAtMost(totalImages - 1)
             }
-            bestIndex.coerceIn(0, totalImages - 1)
+            frameIdx
         } else {
-            // index为空时，使用均匀分布
             if (totalDuration > 0) {
                 ((time.toDouble() / totalDuration) * totalImages).toInt().coerceIn(0, totalImages - 1)
             } else 0
@@ -1138,4 +1138,21 @@ private fun calculateSeekStep(duration: Long, longPressDuration: Long = 0): Long
     }
     
     return (baseStep * speedMultiplier).toLong()
+}
+
+private fun snapToIndex(previewTime: Long, data: VideoshotData?, duration: Long): Long {
+    val indexList = data?.index ?: return previewTime
+    if (indexList.size <= 1) return previewTime
+    val timeInSeconds = previewTime / 1000.0
+    var snapped = previewTime
+    for (idx in 1 until indexList.size) {
+        val end = indexList[idx].toDouble()
+        val start = indexList[idx - 1].toDouble()
+        if (timeInSeconds <= end) {
+            snapped = (start * 1000).toLong()
+            break
+        }
+        snapped = (start * 1000).toLong()
+    }
+    return snapped.coerceIn(0, duration)
 }
