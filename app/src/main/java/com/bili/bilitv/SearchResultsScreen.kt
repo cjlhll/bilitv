@@ -26,9 +26,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -169,6 +173,9 @@ fun SearchResultsScreen(
         TabItem("user", "用户")
     )
     var selectedTabId by remember { mutableStateOf(tabs[0].id) }
+    var filterExpanded by remember { mutableStateOf(false) }
+    var selectedFilter by remember { mutableStateOf("综合排序") }
+    val filterOptions = listOf("综合排序", "最多播放", "最新发布", "时长较短")
 
     // State Manager
     val stateManager = remember { SimpleVideoGridStateManager() }
@@ -199,13 +206,52 @@ fun SearchResultsScreen(
             onSearch = onSearch
         )
 
-        // Tab Row
-        CommonTabRow(
-            tabs = tabs,
-            selectedTab = selectedTabId,
-            onTabSelected = { selectedTabId = it },
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CommonTabRow(
+                tabs = tabs,
+                selectedTab = selectedTabId,
+                onTabSelected = { selectedTabId = it },
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(start = 0.dp, end = 8.dp)
+            )
+
+            Box {
+                OutlinedButton(
+                    onClick = { filterExpanded = true },
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text(text = "筛选", fontSize = 13.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = selectedFilter, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = filterExpanded,
+                    onDismissRequest = { filterExpanded = false }
+                ) {
+                    filterOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            onClick = {
+                                selectedFilter = option
+                                filterExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
 
         // Video Grid
         CommonVideoGrid(
