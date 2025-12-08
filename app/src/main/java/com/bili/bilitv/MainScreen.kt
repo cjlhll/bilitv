@@ -226,6 +226,7 @@ fun parseSessionDataFromUrl(url: String): Map<String, String> {
 
 enum class NavRoute(val title: String, val icon: ImageVector) {
     SEARCH("搜索", Icons.Default.Search),
+    SEARCH_RESULT("搜索结果", Icons.Default.Search),
     HOME("首页", Icons.Default.Home),
     CATEGORY("分类", Icons.AutoMirrored.Filled.List),
     DYNAMIC("动态", Icons.Default.Star),
@@ -237,6 +238,7 @@ enum class NavRoute(val title: String, val icon: ImageVector) {
 @Composable
 fun MainScreen() {
     var currentRoute by remember { mutableStateOf(NavRoute.HOME) }
+    var searchQuery by remember { mutableStateOf("") }
     var isFullScreenPlayer by remember { mutableStateOf(false) }
     var fullScreenPlayInfo by remember { mutableStateOf<VideoPlayInfo?>(null) }
     var fullScreenLivePlayInfo by remember { mutableStateOf<LivePlayInfo?>(null) }
@@ -361,8 +363,13 @@ fun MainScreen() {
         liveAreaViewModel.shouldRestoreFocusToGrid = true
     }
 
-    // 判断是否应该隐藏导航栏（直播列表页面全屏显示）
-    val shouldHideNavigation = currentRoute == NavRoute.LIVE && selectedLiveArea != null
+    // 处理从搜索结果返回搜索页面的逻辑
+    BackHandler(enabled = !isFullScreenPlayer && currentRoute == NavRoute.SEARCH_RESULT) {
+        currentRoute = NavRoute.SEARCH
+    }
+
+    // 判断是否应该隐藏导航栏（直播列表页面全屏显示，或搜索结果页）
+    val shouldHideNavigation = (currentRoute == NavRoute.LIVE && selectedLiveArea != null) || currentRoute == NavRoute.SEARCH_RESULT
 
     // 使用Crossfade实现播放器与列表之间的平滑过渡
     Crossfade(
@@ -418,7 +425,29 @@ fun MainScreen() {
                     label = "nav_transition"
                 ) { route ->
                 when (route) {
-                    NavRoute.SEARCH -> SearchScreen()
+                    NavRoute.SEARCH -> SearchScreen(
+                        onSearch = { query ->
+                            searchQuery = query
+                            currentRoute = NavRoute.SEARCH_RESULT
+                        }
+                    )
+                    NavRoute.SEARCH_RESULT -> SearchResultsScreen(
+                        query = searchQuery,
+                        onVideoClick = { video ->
+                            isFullScreenPlayer = true
+                            fullScreenPlayInfo = VideoPlayInfo(
+                                bvid = video.bvid.ifEmpty { "dummy_bvid" },
+                                cid = video.cid,
+                                videoUrl = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+                                audioUrl = null,
+                                duration = 600,
+                                quality = 0,
+                                format = "mp4"
+                            )
+                            fullScreenVideoTitle = video.title
+                        },
+                        onBack = { currentRoute = NavRoute.SEARCH }
+                    )
                     NavRoute.HOME -> HomeScreen(
                         viewModel = homeViewModel,
                         onEnterFullScreen = { playInfo, title ->

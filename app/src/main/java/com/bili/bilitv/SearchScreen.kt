@@ -58,7 +58,9 @@ import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SearchScreen() {
+fun SearchScreen(
+    onSearch: (String) -> Unit = {}
+) {
     var searchText by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
 
@@ -112,6 +114,7 @@ fun SearchScreen() {
                 onClear = {
                     searchText = ""
                 },
+                onSearch = { onSearch(searchText) },
                 initialFocusRequester = focusRequester
             )
         }
@@ -258,6 +261,7 @@ fun CustomKeyboard(
     onKeyPress: (String) -> Unit,
     onDelete: () -> Unit,
     onClear: () -> Unit,
+    onSearch: () -> Unit,
     initialFocusRequester: FocusRequester
 ) {
     val rows = listOf(
@@ -282,7 +286,7 @@ fun CustomKeyboard(
             KeyboardButton(
                 text = "搜索",
                 modifier = Modifier.weight(1f),
-                onClick = {}
+                onClick = onSearch
             )
         }
         
