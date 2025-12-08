@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material3.*
@@ -880,8 +881,14 @@ fun NavigationRail(
         Column(
             modifier = Modifier.weight(1f), // This pushes the following content to bottom
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            NavButton(
+                icon = Icons.Filled.Search,
+                label = "搜索",
+                selected = false,
+                onClick = { }
+            )
             NavButton(
                 icon = NavRoute.HOME.icon,
                 label = NavRoute.HOME.title,
@@ -911,7 +918,7 @@ fun NavigationRail(
         // Bottom navigation items
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp) // Spacing between bottom items
+            verticalArrangement = Arrangement.spacedBy(12.dp) // Spacing between bottom items
         ) {
             NavButton(
                 icon = NavRoute.USER.icon,
@@ -973,15 +980,6 @@ fun NavButton(
                     modifier = Modifier.size(16.dp) // Further reduced icon size for narrower menu
                 )
             }
-        }
-
-        if (isFocused) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
         }
     }
 }
