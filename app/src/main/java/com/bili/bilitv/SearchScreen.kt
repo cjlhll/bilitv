@@ -10,7 +10,6 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,13 +24,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
+
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
@@ -51,9 +48,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,12 +84,15 @@ fun SearchScreen() {
         // Left Column: Input and Custom Keyboard
         Column(
             modifier = Modifier
-                .weight(2.0f)
+                .weight(1.6f)
                 .fillMaxHeight()
                 .padding(end = 16.dp)
         ) {
             // Search Input Box
-            SearchInputBox(searchText = searchText)
+            SearchInputBox(
+                searchText = searchText,
+                onValueChange = { searchText = it }
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -117,7 +117,7 @@ fun SearchScreen() {
         // Middle Column: Results or History
         Column(
             modifier = Modifier
-                .weight(1.2f)
+                .weight(1.3f)
                 .fillMaxHeight()
                 .padding(horizontal = 16.dp)
         ) {
@@ -131,7 +131,18 @@ fun SearchScreen() {
                 )
 
                 if (searchHistory.isNotEmpty()) {
-                    SearchHistoryList(searchHistory)
+                    // Unified List Style for History
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(searchHistory) { history ->
+                            UnifiedListItem(
+                                text = history,
+                                icon = Icons.AutoMirrored.Filled.List,
+                                iconTint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             } else {
                 // Search Results (Mock)
@@ -146,7 +157,11 @@ fun SearchScreen() {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(5) { index ->
-                        SearchResultItem(text = "$searchText 相关结果 ${index + 1}")
+                        UnifiedListItem(
+                            text = "$searchText 相关结果 ${index + 1}",
+                            icon = Icons.Default.Search,
+                            iconTint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -155,7 +170,7 @@ fun SearchScreen() {
         // Right Column: Hot Search
         Column(
             modifier = Modifier
-                .weight(1.0f)
+                .weight(1.3f)
                 .fillMaxHeight()
                 .padding(start = 16.dp)
         ) {
@@ -170,7 +185,11 @@ fun SearchScreen() {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 itemsIndexed(hotSearches) { index, item ->
-                    HotSearchItem(index = index, text = item)
+                    UnifiedListItem(
+                        text = item,
+                        icon = Icons.Default.Star,
+                        iconTint = if (index < 3) Color(0xFFFF5000) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -178,14 +197,17 @@ fun SearchScreen() {
 }
 
 @Composable
-fun SearchInputBox(searchText: String) {
+fun SearchInputBox(
+    searchText: String,
+    onValueChange: (String) -> Unit
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
     BasicTextField(
         value = searchText,
-        onValueChange = {}, // Read-only from keyboard
-        enabled = false, // Disable direct input for now as per "custom keyboard" requirement
+        onValueChange = onValueChange,
+        enabled = true, // Enabled for focus and input
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp)
@@ -198,6 +220,7 @@ fun SearchInputBox(searchText: String) {
                 color = if (isFocused) MaterialTheme.colorScheme.primary else Color.Transparent,
                 shape = RoundedCornerShape(8.dp)
             )
+            .focusable(interactionSource = interactionSource) // Explicitly focusable
             .padding(horizontal = 16.dp),
         textStyle = TextStyle(
             color = MaterialTheme.colorScheme.onSurface,
@@ -251,9 +274,6 @@ fun CustomKeyboard(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        // Control Row (Clear, Backspace) - Optional based on typical TV interfaces, 
-        // but the prompt implies these might be separate or integrated.
-        // The image shows "清空" (Clear) and "后退" (Backspace) above the grid.
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxWidth()
@@ -302,20 +322,6 @@ fun CustomKeyboard(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun SearchHistoryList(searchHistory: List<String>) {
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        searchHistory.forEach { history ->
-            HistoryChip(text = history)
-        }
-    }
-}
-
 @Composable
 fun KeyboardButton(
     text: String,
@@ -348,36 +354,16 @@ fun KeyboardButton(
     }
 }
 
+/**
+ * Unified List Item Component used for History, Results, and Hot Search
+ */
 @Composable
-fun HistoryChip(text: String) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
-    Surface(
-        onClick = {},
-        shape = RoundedCornerShape(50),
-        color = if (isFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        contentColor = if (isFocused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier
-            .focusable(interactionSource = interactionSource)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.List,
-                contentDescription = null,
-                modifier = Modifier.size(14.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(text = text, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
-
-@Composable
-fun HotSearchItem(index: Int, text: String) {
+fun UnifiedListItem(
+    text: String,
+    icon: ImageVector,
+    iconTint: Color,
+    onClick: () -> Unit = {}
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
@@ -385,20 +371,20 @@ fun HotSearchItem(index: Int, text: String) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(48.dp) // Consistent height
             .clip(RoundedCornerShape(8.dp))
             .background(if (isFocused) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
             .focusable(interactionSource = interactionSource)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null
-            ) { }
+            ) { onClick() }
             .padding(horizontal = 12.dp)
     ) {
         Icon(
-            imageVector = Icons.Default.Star,
+            imageVector = icon,
             contentDescription = null,
-            tint = if (index < 3) Color(0xFFFF5000) else MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = iconTint,
             modifier = Modifier.size(20.dp)
         )
         Spacer(modifier = Modifier.width(12.dp))
@@ -408,40 +394,6 @@ fun HotSearchItem(index: Int, text: String) {
             color = if (isFocused) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-fun SearchResultItem(text: String) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isFocused) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
-            .focusable(interactionSource = interactionSource)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null
-            ) { }
-            .padding(horizontal = 12.dp)
-    ) {
-        Icon(
-            imageVector = Icons.Default.Search,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }

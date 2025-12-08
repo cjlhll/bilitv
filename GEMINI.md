@@ -38,3 +38,7 @@
 - `app/build.gradle.kts`: Module-level build config (enables Compose).
 - `gradle/libs.versions.toml`: Dependency versions.
 - `app/src/main/AndroidManifest.xml`: Manifest.
+
+## Other Rules
+- 任何时候，不要add commit我的git变更，我自己会手动操作
+- 任何时候，请用简体中文和我交流
