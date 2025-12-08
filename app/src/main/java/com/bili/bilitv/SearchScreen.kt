@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -55,6 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SearchScreen() {
     var searchText by remember { mutableStateOf("") }
@@ -131,16 +133,13 @@ fun SearchScreen() {
                 )
 
                 if (searchHistory.isNotEmpty()) {
-                    // Unified List Style for History
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(searchHistory) { history ->
-                            UnifiedListItem(
-                                text = history,
-                                icon = Icons.AutoMirrored.Filled.List,
-                                iconTint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        searchHistory.forEach { history ->
+                            HistoryChip(text = history)
                         }
                     }
                 }
@@ -279,6 +278,18 @@ fun CustomKeyboard(
             modifier = Modifier.fillMaxWidth()
         ) {
             KeyboardButton(
+                text = "搜索",
+                modifier = Modifier.weight(2f),
+                onClick = {},
+                isSearchButton = true
+            )
+        }
+        
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            KeyboardButton(
                 text = "清空",
                 modifier = Modifier.weight(1f),
                 onClick = onClear
@@ -327,7 +338,8 @@ fun KeyboardButton(
     text: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
-    isIcon: Boolean = false
+    isIcon: Boolean = false,
+    isSearchButton: Boolean = false
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
@@ -354,8 +366,30 @@ fun KeyboardButton(
     }
 }
 
+@Composable
+fun HistoryChip(text: String) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    Surface(
+        onClick = {},
+        shape = RoundedCornerShape(50),
+        color = if (isFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        contentColor = if (isFocused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .focusable(interactionSource = interactionSource)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(text = text, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
 /**
- * Unified List Item Component used for History, Results, and Hot Search
+ * Unified List Item Component used for Results and Hot Search
  */
 @Composable
 fun UnifiedListItem(
