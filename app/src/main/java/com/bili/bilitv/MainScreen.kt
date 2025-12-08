@@ -446,7 +446,8 @@ fun MainScreen() {
                             )
                             fullScreenVideoTitle = video.title
                         },
-                        onBack = { currentRoute = NavRoute.SEARCH }
+                        onBack = { currentRoute = NavRoute.SEARCH },
+                        onSearch = { newQuery -> searchQuery = newQuery }
                     )
                     NavRoute.HOME -> HomeScreen(
                         viewModel = homeViewModel,
