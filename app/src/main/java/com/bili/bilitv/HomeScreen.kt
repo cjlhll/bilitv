@@ -141,7 +141,12 @@ fun HomeScreen(
                     // 记录进入全屏状态，以便返回时恢复焦点
                     viewModel.onEnterFullScreen()
                     // 进入全屏播放
-                    onEnterFullScreen(playInfo, video.title)
+                    val targetPlayInfo = if (video.durationSeconds > 0) {
+                        playInfo.copy(duration = video.durationSeconds)
+                    } else {
+                        playInfo
+                    }
+                    onEnterFullScreen(targetPlayInfo, video.title)
                 } else {
                     Log.e("BiliTV", "Failed to fetch play URL")
                 }
@@ -293,7 +298,8 @@ private fun getVideosForTab(tabType: TabType): List<Video> {
             author = "UP主${index + 1}",
             playCount = "${(index + 1) * 1000}",
             danmakuCount = "${(index + 1) * 100}",
-            duration = String.format("%02d:%02d", (index + 1), (index * 10) % 60)
+            duration = String.format("%02d:%02d", (index + 1), (index * 10) % 60),
+            durationSeconds = ((index + 1) * 60L) + ((index * 10) % 60)
         )
     }
 }
@@ -310,6 +316,7 @@ private fun mapVideoItemDataToVideo(videoItemData: VideoItemData): Video {
         playCount = formatCount(videoItemData.stat.view),
         danmakuCount = formatCount(videoItemData.stat.danmaku),
         duration = formatDuration(videoItemData.duration),
+        durationSeconds = videoItemData.duration,
         pubDate = videoItemData.pubdate
     )
 }

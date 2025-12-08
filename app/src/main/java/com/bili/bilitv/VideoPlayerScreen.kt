@@ -85,6 +85,13 @@ fun VideoPlayerScreen(
     val context = LocalContext.current
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val preferredDurationMs = remember(videoPlayInfo.duration, isLiveStream) {
+        if (!isLiveStream && videoPlayInfo.duration in 1..(Long.MAX_VALUE / 1000)) {
+            videoPlayInfo.duration * 1000
+        } else {
+            0L
+        }
+    }
     
     // 设置保持屏幕常亮
     DisposableEffect(Unit) {
@@ -97,7 +104,7 @@ fun VideoPlayerScreen(
     
     // 播放器状态
     var currentTime by remember { mutableLongStateOf(0L) }
-    var duration by remember { mutableLongStateOf(0L) }
+    var duration by remember { mutableLongStateOf(preferredDurationMs) }
     var isPlaying by remember { mutableStateOf(true) }
     
     // 控制器状态
@@ -218,7 +225,7 @@ fun VideoPlayerScreen(
         createExoPlayer(context, videoPlayInfo, 
             onReady = { 
                 isLoading = false 
-                duration = it.duration
+                duration = if (preferredDurationMs > 0) preferredDurationMs else it.duration
                 danmakuManager.resume() // Resume danmaku drawing regardless of type
                 reporter?.start() // Start reporting
             },
@@ -235,7 +242,8 @@ fun VideoPlayerScreen(
             // 只有在不处于seeking状态且不是直播流时才更新currentTime
             if (exoPlayer.isPlaying && !isSeeking && !isLongPressing && !isLiveStream) {
                 currentTime = exoPlayer.currentPosition
-                duration = exoPlayer.duration.coerceAtLeast(0)
+                val playerDuration = exoPlayer.duration.coerceAtLeast(0)
+                duration = if (preferredDurationMs > 0) preferredDurationMs else playerDuration
                 
                 // 动态加载弹幕分段（每6分钟为一个分段）
                 val currentSegment = (currentTime / (6 * 60 * 1000)) + 1 // 分段索引从1开始

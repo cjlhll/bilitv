@@ -80,6 +80,7 @@ data class Video(
     val playCount: String = "",
     val danmakuCount: String = "",
     val duration: String = "",
+    val durationSeconds: Long = 0,
     val pubDate: Long? = null
 )
 

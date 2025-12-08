@@ -275,6 +275,7 @@ class CategoryViewModel : ViewModel(), VideoGridStateManager {
                                     playCount = formatCount(archive.stat.view),
                                     danmakuCount = formatCount(archive.stat.danmaku),
                                     duration = formatDuration(archive.duration.toLong()),
+                                    durationSeconds = archive.duration.toLong(),
                                     pubDate = archive.pubdate
                                 )
                             }
@@ -395,7 +396,12 @@ fun CategoryScreen(
                     // 记录进入全屏状态，以便返回时恢复焦点
                     viewModel.onEnterFullScreen()
                     // 进入全屏播放
-                    onEnterFullScreen(playInfo, video.title)
+                    val targetPlayInfo = if (video.durationSeconds > 0) {
+                        playInfo.copy(duration = video.durationSeconds)
+                    } else {
+                        playInfo
+                    }
+                    onEnterFullScreen(targetPlayInfo, video.title)
                 } else {
                     Log.e("BiliTV", "Failed to fetch play URL")
                 }

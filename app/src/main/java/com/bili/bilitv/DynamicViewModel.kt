@@ -81,8 +81,22 @@ data class SpaceVideoItem(
             author = author,
             playCount = "", // SpaceSearch API doesn't return play count directly in vlist item easily without extra call or fields check, leaving empty or need to update data class
             duration = length,
+            durationSeconds = parseDurationToSeconds(length),
             pubDate = created
         )
+    }
+}
+
+private fun parseDurationToSeconds(text: String): Long {
+    val parts = text.split(":").filter { it.isNotBlank() }
+    if (parts.isEmpty()) return 0
+    val numbers = parts.mapNotNull { it.toLongOrNull() }
+    if (numbers.size != parts.size) return 0
+    return when (numbers.size) {
+        3 -> numbers[0] * 3600 + numbers[1] * 60 + numbers[2]
+        2 -> numbers[0] * 60 + numbers[1]
+        1 -> numbers[0]
+        else -> 0
     }
 }
 
@@ -406,7 +420,8 @@ class DynamicViewModel : ViewModel(), VideoGridStateManager {
                                             pubDate = item.modules.module_author.pub_ts,
                                             playCount = archive.stat.play,
                                             danmakuCount = archive.stat.danmaku,
-                                            duration = archive.duration_text
+                                            duration = archive.duration_text,
+                                            durationSeconds = parseDurationToSeconds(archive.duration_text)
                                         )
                                     } else null
                                 } else null

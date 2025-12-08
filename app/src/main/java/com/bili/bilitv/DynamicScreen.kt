@@ -185,7 +185,12 @@ fun DynamicScreen(
                                         )
                                         if (playInfo != null) {
                                             viewModel.onEnterFullScreen()
-                                            onEnterFullScreen(playInfo, video.title)
+                                            val targetPlayInfo = if (video.durationSeconds > 0) {
+                                                playInfo.copy(duration = video.durationSeconds)
+                                            } else {
+                                                playInfo
+                                            }
+                                            onEnterFullScreen(targetPlayInfo, video.title)
                                         }
                                     }
                                 }
