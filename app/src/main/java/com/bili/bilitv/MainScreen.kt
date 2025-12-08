@@ -225,6 +225,7 @@ fun parseSessionDataFromUrl(url: String): Map<String, String> {
 }
 
 enum class NavRoute(val title: String, val icon: ImageVector) {
+    SEARCH("搜索", Icons.Default.Search),
     HOME("首页", Icons.Default.Home),
     CATEGORY("分类", Icons.AutoMirrored.Filled.List),
     DYNAMIC("动态", Icons.Default.Star),
@@ -417,6 +418,7 @@ fun MainScreen() {
                     label = "nav_transition"
                 ) { route ->
                 when (route) {
+                    NavRoute.SEARCH -> SearchScreen()
                     NavRoute.HOME -> HomeScreen(
                         viewModel = homeViewModel,
                         onEnterFullScreen = { playInfo, title ->
@@ -884,10 +886,10 @@ fun NavigationRail(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             NavButton(
-                icon = Icons.Filled.Search,
-                label = "搜索",
-                selected = false,
-                onClick = { }
+                icon = NavRoute.SEARCH.icon,
+                label = NavRoute.SEARCH.title,
+                selected = currentRoute == NavRoute.SEARCH,
+                onClick = { onNavigate(NavRoute.SEARCH) }
             )
             NavButton(
                 icon = NavRoute.HOME.icon,
