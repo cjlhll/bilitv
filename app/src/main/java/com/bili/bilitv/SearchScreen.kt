@@ -96,7 +96,7 @@ fun SearchScreen() {
                 onValueChange = { searchText = it }
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Custom Keyboard
             // Default focus on 'A' which is the first item in the keyboard
@@ -261,6 +261,7 @@ fun CustomKeyboard(
     initialFocusRequester: FocusRequester
 ) {
     val rows = listOf(
+        listOf("清空", "后退"),
         listOf("A", "B", "C", "D", "E", "F"),
         listOf("G", "H", "I", "J", "K", "L"),
         listOf("M", "N", "O", "P", "Q", "R"),
@@ -273,35 +274,18 @@ fun CustomKeyboard(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
+        // Search Button Row
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             KeyboardButton(
                 text = "搜索",
-                modifier = Modifier.weight(2f),
-                onClick = {},
-                isSearchButton = true
+                modifier = Modifier.weight(1f),
+                onClick = {}
             )
         }
         
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            KeyboardButton(
-                text = "清空",
-                modifier = Modifier.weight(1f),
-                onClick = onClear
-            )
-            KeyboardButton(
-                text = "后退",
-                modifier = Modifier.weight(1f),
-                onClick = onDelete,
-                isIcon = false 
-            )
-        }
-
         // Character Grid
         rows.forEachIndexed { rowIndex, rowKeys ->
             Row(
@@ -310,17 +294,23 @@ fun CustomKeyboard(
             ) {
                 rowKeys.forEachIndexed { colIndex, key ->
                     val modifier = Modifier.weight(1f)
-                    // Request focus for the very first item (Row 0, Col 0 -> 'A')
+                    // Request focus for the first item in the character rows (Row 0, Col 0 -> 'A')
                     val finalModifier = if (rowIndex == 0 && colIndex == 0) {
                         modifier.focusRequester(initialFocusRequester)
                     } else {
                         modifier
                     }
 
+                    val onClick: () -> Unit = when {
+                        rowIndex == 0 && colIndex == 0 -> { onClear } // 清空按钮
+                        rowIndex == 0 && colIndex == 1 -> { onDelete } // 后退按钮
+                        else -> { { onKeyPress(key) } } // 字符按钮
+                    }
+
                     KeyboardButton(
                         text = key,
                         modifier = finalModifier,
-                        onClick = { onKeyPress(key) }
+                        onClick = onClick
                     )
                 }
             }
