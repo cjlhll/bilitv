@@ -147,6 +147,7 @@ fun SearchResultsScreen(
     viewModel: SearchViewModel,
     onVideoClick: (Video) -> Unit,
     onLiveClick: (Video) -> Unit,
+    onMediaClick: (Video) -> Unit,
     onBack: () -> Unit,
     onSearch: (String) -> Unit
 ) {
@@ -295,7 +296,7 @@ fun SearchResultsScreen(
                     stateManager = stateManager,
                     stateKey = selectedTabId,
                     columns = 5,
-                    onItemClick = onVideoClick,
+                    onItemClick = onMediaClick,
                     onLoadMore = if (canLoadMore) ({ viewModel.loadMoreVideos() }) else null,
                     horizontalSpacing = 12.dp,
                     verticalSpacing = 16.dp,
@@ -303,7 +304,7 @@ fun SearchResultsScreen(
                 ) { video, itemModifier ->
                     VerticalMediaCard(
                         video = video,
-                        onClick = onVideoClick,
+                        onClick = onMediaClick,
                         modifier = itemModifier
                     )
                 }

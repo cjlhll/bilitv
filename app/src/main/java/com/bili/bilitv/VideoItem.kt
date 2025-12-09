@@ -63,7 +63,7 @@ fun IconWithText(
             tint = tint,
             modifier = Modifier
                 .size(iconSize)
-                .offset(y = 0.5.dp) // 统一向下偏移0.5dp与文字对齐
+                .offset(y = 0.5.dp)
         )
         Text(
             text = text,
@@ -85,6 +85,18 @@ data class Badge(
     val bgStyle: Int = 0
 )
 
+@Stable
+data class MediaEpisode(
+    val id: Long = 0,
+    val title: String = "",
+    val longTitle: String = "",
+    val indexTitle: String = "",
+    val cover: String = "",
+    val url: String = "",
+    val releaseDate: String = "",
+    val badges: List<String> = emptyList()
+)
+
 data class Video(
     val id: String,
     val aid: Long = 0,
@@ -102,7 +114,20 @@ data class Video(
     val badges: List<Badge> = emptyList(),
     val epSize: Int = 0,
     val mediaScore: Double = 0.0,
-    val mediaScoreUsers: Int = 0
+    val mediaScoreUsers: Int = 0,
+    val mediaType: Int = 0,
+    val seasonId: Long = 0,
+    val mediaId: Long = 0,
+    val seasonType: Int = 0,
+    val seasonTypeName: String = "",
+    val url: String = "",
+    val buttonText: String = "",
+    val isFollow: Boolean = false,
+    val selectionStyle: String = "",
+    val orgTitle: String = "",
+    val cv: String = "",
+    val staff: String = "",
+    val episodes: List<MediaEpisode> = emptyList()
 )
 
 private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())

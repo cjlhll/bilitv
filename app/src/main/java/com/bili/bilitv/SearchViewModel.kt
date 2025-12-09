@@ -818,6 +818,17 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
         val mediaScoreObj = obj["media_score"] as? JsonObject
         val score = mediaScoreObj?.get("score")?.jsonPrimitive?.content?.toDoubleOrNull() ?: 0.0
         val scoreUsers = mediaScoreObj?.get("user_count")?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+        val mediaType = obj.longOrZero("media_type").toInt()
+        val seasonType = obj.longOrZero("season_type").toInt()
+        val seasonTypeName = obj.stringOrEmpty("season_type_name")
+        val url = obj.stringOrEmpty("url")
+        val buttonText = obj.stringOrEmpty("button_text")
+        val isFollow = obj.longOrZero("is_follow") == 1L
+        val selectionStyle = obj.stringOrEmpty("selection_style")
+        val orgTitle = stripTags(obj.stringOrEmpty("org_title"))
+        val cv = obj.stringOrEmpty("cv")
+        val staff = obj.stringOrEmpty("staff")
+        val episodes = parseEpisodes(obj["eps"])
 
         return Video(
             id = id,
@@ -836,7 +847,20 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
             badges = badges,
             epSize = epSize,
             mediaScore = score,
-            mediaScoreUsers = scoreUsers
+            mediaScoreUsers = scoreUsers,
+            mediaType = mediaType,
+            seasonId = seasonId,
+            mediaId = mediaId,
+            seasonType = seasonType,
+            seasonTypeName = seasonTypeName,
+            url = url,
+            buttonText = buttonText,
+            isFollow = isFollow,
+            selectionStyle = selectionStyle,
+            orgTitle = orgTitle,
+            cv = cv,
+            staff = staff,
+            episodes = episodes
         )
     }
 
@@ -870,6 +894,32 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
                 )
             }
         }.filter { it.text.isNotBlank() }
+    }
+
+    private fun parseEpisodes(element: JsonElement?): List<MediaEpisode> {
+        val arr = element as? JsonArray ?: return emptyList()
+        return arr.mapNotNull { epEl ->
+            (epEl as? JsonObject)?.let { epObj ->
+                val badgeArray = epObj["badges"] as? JsonArray
+                val badgeTexts = badgeArray?.mapNotNull { badgeEl ->
+                    when (badgeEl) {
+                        is JsonObject -> badgeEl.stringOrEmpty("text").ifBlank { null }
+                        else -> runCatching { badgeEl.jsonPrimitive.content }.getOrNull()?.takeIf { it.isNotBlank() }
+                    }
+                } ?: emptyList()
+
+                MediaEpisode(
+                    id = epObj.longOrZero("id"),
+                    title = epObj.stringOrEmpty("title"),
+                    longTitle = epObj.stringOrEmpty("long_title"),
+                    indexTitle = epObj.stringOrEmpty("index_title"),
+                    cover = normalizeCover(epObj.stringOrEmpty("cover")),
+                    url = epObj.stringOrEmpty("url"),
+                    releaseDate = epObj.stringOrEmpty("release_date"),
+                    badges = badgeTexts
+                )
+            }
+        }
     }
 
     private fun extractAvailableTypes(body: String): List<String> {

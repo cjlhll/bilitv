@@ -229,6 +229,7 @@ fun parseSessionDataFromUrl(url: String): Map<String, String> {
 enum class NavRoute(val title: String, val icon: ImageVector) {
     SEARCH("搜索", Icons.Default.Search),
     SEARCH_RESULT("搜索结果", Icons.Default.Search),
+    MEDIA_DETAIL("番剧详情", Icons.Default.Search),
     HOME("首页", Icons.Default.Home),
     CATEGORY("分类", Icons.AutoMirrored.Filled.List),
     DYNAMIC("动态", Icons.Default.Star),
@@ -245,6 +246,7 @@ fun MainScreen() {
     var fullScreenPlayInfo by remember { mutableStateOf<VideoPlayInfo?>(null) }
     var fullScreenLivePlayInfo by remember { mutableStateOf<LivePlayInfo?>(null) }
     var fullScreenVideoTitle by remember { mutableStateOf("") }
+    var selectedMedia by remember { mutableStateOf<Video?>(null) }
     
     // 直播模块的导航状态 - 提升到顶层以保持状态
     var selectedLiveArea by remember { mutableStateOf<LiveAreaItem?>(null) }
@@ -371,9 +373,13 @@ fun MainScreen() {
     BackHandler(enabled = !isFullScreenPlayer && currentRoute == NavRoute.SEARCH_RESULT) {
         currentRoute = NavRoute.SEARCH
     }
+    BackHandler(enabled = !isFullScreenPlayer && currentRoute == NavRoute.MEDIA_DETAIL) {
+        selectedMedia = null
+        currentRoute = NavRoute.SEARCH_RESULT
+    }
 
     // 判断是否应该隐藏导航栏（直播列表页面全屏显示，或搜索结果页）
-    val shouldHideNavigation = (currentRoute == NavRoute.LIVE && selectedLiveArea != null) || currentRoute == NavRoute.SEARCH_RESULT
+    val shouldHideNavigation = (currentRoute == NavRoute.LIVE && selectedLiveArea != null) || currentRoute == NavRoute.SEARCH_RESULT || currentRoute == NavRoute.MEDIA_DETAIL
 
     // 使用Crossfade实现播放器与列表之间的平滑过渡
     Crossfade(
@@ -439,6 +445,20 @@ fun MainScreen() {
                             currentRoute = NavRoute.SEARCH_RESULT
                         }
                     )
+                    NavRoute.MEDIA_DETAIL -> {
+                        val media = selectedMedia
+                        if (media == null) {
+                            currentRoute = NavRoute.SEARCH_RESULT
+                        } else {
+                            MediaDetailScreen(
+                                media = media,
+                                onBack = {
+                                    selectedMedia = null
+                                    currentRoute = NavRoute.SEARCH_RESULT
+                                }
+                            )
+                        }
+                    }
                     NavRoute.SEARCH_RESULT -> SearchResultsScreen(
                         query = searchQuery,
                         viewModel = searchViewModel,
@@ -499,6 +519,11 @@ fun MainScreen() {
                                     Log.e(tag, "live play url failed roomId=$roomId")
                                 }
                             }
+                        },
+                        onMediaClick = { video ->
+                            searchViewModel.shouldRestoreFocusToGrid = true
+                            selectedMedia = video
+                            currentRoute = NavRoute.MEDIA_DETAIL
                         },
                         onBack = { currentRoute = NavRoute.SEARCH },
                         onSearch = { newQuery ->
