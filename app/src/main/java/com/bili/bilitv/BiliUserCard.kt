@@ -2,6 +2,7 @@ package com.bili.bilitv
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,7 +39,8 @@ fun BiliUserCard(
     Card(
         modifier = modifier
             .width(160.dp)
-            .onFocusChanged { isFocused = it.isFocused },
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable(),
         shape = shape,
         border = BorderStroke(
             width = if (isFocused) 3.dp else 1.dp,

@@ -263,134 +263,138 @@ fun VerticalMediaCard(
         modifier = modifier
             .width(156.dp)
             .aspectRatio(3f / 4f)
+            .onFocusChanged { isFocused = it.isFocused }
             .clip(shape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) { onClick(video) }
-            .onFocusChanged { isFocused = it.isFocused }
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .border(
-                width = if (isFocused) 3.dp else 0.dp,
-                color = if (isFocused) MaterialTheme.colorScheme.primary else Color.Transparent,
-                shape = shape
-            )
     ) {
-        val imageModel = remember(video.coverUrl) {
-            ImageRequest.Builder(context)
-                .data(video.coverUrl)
-                .size(ImageConfig.VIDEO_COVER_SIZE)
-                .memoryCacheKey(video.coverUrl)
-                .diskCacheKey(video.coverUrl)
-                .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-                .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                .allowHardware(true)
-                .crossfade(false)
-                .build()
-        }
-
-        AsyncImage(
-            model = imageModel,
-            contentDescription = video.title,
-            modifier = Modifier
-                .fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-
-        // Badge overlay (top-right)
-        val badge = video.badges.firstOrNull()
-        if (badge != null && badge.text.isNotBlank()) {
-            val bgColor = parseColorSafe(badge.bgColor, MaterialTheme.colorScheme.primary)
-            val textColor = parseColorSafe(badge.textColor, MaterialTheme.colorScheme.onPrimary)
-            val borderColor = parseColorSafe(badge.borderColor, bgColor)
-
-            Surface(
-                color = bgColor,
-                contentColor = textColor,
-                shape = RoundedCornerShape(6.dp),
-                border = BorderStroke(1.dp, borderColor),
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(4.dp)
-                    .height(22.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                ) {
-                    Text(
-                        text = badge.text,
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))
-                    )
-                )
-                .padding(horizontal = 8.dp, vertical = 6.dp)
+        Card(
+            modifier = Modifier.fillMaxSize(),
+            shape = shape,
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            border = if (isFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                Text(
-                    text = video.title,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (video.desc.isNotBlank()) {
-                    Text(
-                        text = video.desc,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                        color = Color.White.copy(alpha = 0.85f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                } else if (video.author.isNotBlank()) {
-                    Text(
-                        text = video.author,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                        color = Color.White.copy(alpha = 0.8f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+            Box(modifier = Modifier.fillMaxSize()) {
+                val imageModel = remember(video.coverUrl) {
+                    ImageRequest.Builder(context)
+                        .data(video.coverUrl)
+                        .size(ImageConfig.VIDEO_COVER_SIZE)
+                        .memoryCacheKey(video.coverUrl)
+                        .diskCacheKey(video.coverUrl)
+                        .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                        .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                        .allowHardware(true)
+                        .crossfade(false)
+                        .build()
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (video.epSize > 0) {
-                        Text(
-                            text = "全${video.epSize}话",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                            color = Color.White.copy(alpha = 0.9f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.width(1.dp))
+                AsyncImage(
+                    model = imageModel,
+                    contentDescription = video.title,
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+
+                // Badge overlay (top-right)
+                val badge = video.badges.firstOrNull()
+                if (badge != null && badge.text.isNotBlank()) {
+                    val bgColor = parseColorSafe(badge.bgColor, MaterialTheme.colorScheme.primary)
+                    val textColor = parseColorSafe(badge.textColor, MaterialTheme.colorScheme.onPrimary)
+                    val borderColor = parseColorSafe(badge.borderColor, bgColor)
+
+                    Surface(
+                        color = bgColor,
+                        contentColor = textColor,
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, borderColor),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .height(22.dp)
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        ) {
+                            Text(
+                                text = badge.text,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
-                    if (video.mediaScore > 0) {
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))
+                            )
+                        )
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
                         Text(
-                            text = String.format("%.1f", video.mediaScore),
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-                            color = Color(0xFFFFD700),
-                            maxLines = 1,
+                            text = video.title,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
+                        if (video.desc.isNotBlank()) {
+                            Text(
+                                text = video.desc,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                color = Color.White.copy(alpha = 0.85f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else if (video.author.isNotBlank()) {
+                            Text(
+                                text = video.author,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                color = Color.White.copy(alpha = 0.8f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (video.epSize > 0) {
+                                Text(
+                                    text = "全${video.epSize}话",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = Color.White.copy(alpha = 0.9f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.width(1.dp))
+                            }
+                            if (video.mediaScore > 0) {
+                                Text(
+                                    text = String.format("%.1f", video.mediaScore),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                                    color = Color(0xFFFFD700),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                     }
                 }
             }
