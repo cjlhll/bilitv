@@ -4,6 +4,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -28,11 +30,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,28 +52,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-class SimpleVideoGridStateManager : VideoGridStateManager {
-    private val scrollStates = mutableMapOf<Any, Pair<Int, Int>>()
-    private val focusIndices = mutableMapOf<Any, Int>()
-    override var shouldRestoreFocusToGrid: Boolean = false
-
-    override fun updateScrollState(key: Any, index: Int, offset: Int) {
-        scrollStates[key] = index to offset
-    }
-
-    override fun getScrollState(key: Any): Pair<Int, Int> {
-        return scrollStates[key] ?: (0 to 0)
-    }
-
-    override fun updateFocusedIndex(key: Any, index: Int) {
-        focusIndices[key] = index
-    }
-
-    override fun getFocusedIndex(key: Any): Int {
-        return focusIndices[key] ?: -1
-    }
-}
 
 @Composable
 fun SearchResultInput(
@@ -165,17 +146,18 @@ fun SearchResultsScreen(
     query: String,
     viewModel: SearchViewModel,
     onVideoClick: (Video) -> Unit,
+    onLiveClick: (Video) -> Unit,
     onBack: () -> Unit,
     onSearch: (String) -> Unit
 ) {
     // Tabs
-    var selectedTabId by remember { mutableStateOf("video") }
     var filterExpanded by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("综合排序") }
+    var isFilterFocused by remember { mutableStateOf(false) }
     val filterOptions = listOf("综合排序", "最多播放", "最新发布", "时长较短")
 
-    // State Manager
-    val stateManager = remember { SimpleVideoGridStateManager() }
+    // State Manager (ViewModel级别，跨导航持久化滚动与焦点)
+    val stateManager: VideoGridStateManager = viewModel
 
     LaunchedEffect(query) {
         if (query.isNotBlank() && viewModel.currentKeyword != query && !viewModel.isLoading) {
@@ -188,10 +170,15 @@ fun SearchResultsScreen(
         val dynamic = buildTabsFromTypes(typeList)
         if (dynamic.isNotEmpty()) dynamic else listOf(TabItem("video", "视频"))
     }
-    if (availableTabs.none { it.id.toString() == selectedTabId }) {
-        val newId = availableTabs.first().id.toString()
-        selectedTabId = newId
-        viewModel.switchType(newId)
+    val selectedTabId = run {
+        val current = viewModel.currentSearchType
+        if (availableTabs.none { it.id.toString() == current }) {
+            val newId = availableTabs.first().id.toString()
+            viewModel.switchType(newId)
+            newId
+        } else {
+            current
+        }
     }
 
     val videos = viewModel.videoResults
@@ -212,6 +199,8 @@ fun SearchResultsScreen(
         SearchResultInput(
             query = query,
             onSearch = {
+                viewModel.updateSearchInput(it)
+                viewModel.addHistory(it)
                 onSearch(it)
                 viewModel.search(it)
             }
@@ -228,7 +217,6 @@ fun SearchResultsScreen(
                 selectedTab = selectedTabId,
                 onTabSelected = { tabId ->
                     val idStr = tabId.toString()
-                    selectedTabId = idStr
                     viewModel.switchType(idStr)
                 },
                 modifier = Modifier.weight(1f),
@@ -236,9 +224,23 @@ fun SearchResultsScreen(
             )
 
             Box {
-                OutlinedButton(
+                val isFilterSelected = selectedFilter != "综合排序"
+
+                Button(
                     onClick = { filterExpanded = true },
-                    modifier = Modifier.height(36.dp)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isFilterSelected) MaterialTheme.colorScheme.primary
+                                         else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (isFilterSelected) MaterialTheme.colorScheme.onPrimary
+                                       else MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    border = if (isFilterFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null,
+                    modifier = Modifier
+                        .height(26.dp)
+                        .defaultMinSize(minWidth = 0.dp, minHeight = 0.dp)
+                        .onFocusChanged { isFilterFocused = it.isFocused }
+                    ,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
                     Text(text = "筛选", fontSize = 13.sp)
                     Spacer(modifier = Modifier.width(6.dp))
@@ -311,7 +313,7 @@ fun SearchResultsScreen(
                     stateManager = stateManager,
                     stateKey = selectedTabId,
                     columns = 4,
-                    onItemClick = { video -> onVideoClick(video) },
+                    onItemClick = { video -> onLiveClick(video) },
                     onLoadMore = if (canLoadMore) ({ viewModel.loadMoreVideos() }) else null,
                     horizontalSpacing = 12.dp,
                     verticalSpacing = 12.dp,
@@ -319,7 +321,7 @@ fun SearchResultsScreen(
                 ) { video, itemModifier ->
                     LiveRoomCard(
                         room = video.toLiveRoomStub(),
-                        onClick = { onVideoClick(video) },
+                        onClick = { onLiveClick(video) },
                         modifier = itemModifier
                     )
                 }

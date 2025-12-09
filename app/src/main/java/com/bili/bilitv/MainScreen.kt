@@ -169,6 +169,8 @@ object SessionManager {
     fun getCookieString(): String? = currentSession?.toCookieString()
     
     fun isLoggedIn(): Boolean = currentSession != null
+
+    fun getAppContext(): Context? = context
     
     private fun saveSessionToStorage(session: LoggedInSession) {
         context?.let {
@@ -261,6 +263,7 @@ fun MainScreen() {
     var loggedInSession by remember { mutableStateOf(SessionManager.getSession()) }
     var userInfo by remember { mutableStateOf<UserInfoData?>(null) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     // 获取用户信息
     LaunchedEffect(loggedInSession) {
@@ -427,7 +430,10 @@ fun MainScreen() {
                 ) { route ->
                 when (route) {
                     NavRoute.SEARCH -> SearchScreen(
+                        viewModel = searchViewModel,
                         onSearch = { query ->
+                            searchViewModel.updateSearchInput(query)
+                            searchViewModel.addHistory(query)
                             searchQuery = query
                             searchViewModel.search(query)
                             currentRoute = NavRoute.SEARCH_RESULT
@@ -437,17 +443,62 @@ fun MainScreen() {
                         query = searchQuery,
                         viewModel = searchViewModel,
                         onVideoClick = { video ->
-                            isFullScreenPlayer = true
-                            fullScreenPlayInfo = VideoPlayInfo(
-                                bvid = video.bvid.ifEmpty { "dummy_bvid" },
-                                cid = video.cid,
-                                videoUrl = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-                                audioUrl = null,
-                                duration = 600,
-                                quality = 0,
-                                format = "mp4"
-                            )
-                            fullScreenVideoTitle = video.title
+                            coroutineScope.launch {
+                                searchViewModel.onEnterFullScreenFromResult()
+                                val tag = "SearchPlay"
+                                val bvid = video.bvid
+                                if (bvid.isBlank()) {
+                                    Log.e(tag, "missing bvid for ${video.title}")
+                                    return@launch
+                                }
+                                val initialCid = video.cid
+                                val cid = if (initialCid != 0L) {
+                                    initialCid
+                                } else {
+                                    VideoPlayUrlFetcher.fetchVideoDetails(bvid)?.cid ?: 0L
+                                }
+                                Log.i(tag, "click video title=${video.title} bvid=$bvid aid=${video.aid} cid=$cid")
+                                if (cid == 0L) {
+                                    Log.e(tag, "cid not found for $bvid")
+                                    return@launch
+                                }
+                                val cookie = SessionManager.getSession()?.toCookieString()
+                                val playInfo = VideoPlayUrlFetcher.fetchPlayUrl(
+                                    bvid = bvid,
+                                    cid = cid,
+                                    cookie = cookie,
+                                    aid = video.aid
+                                )
+                                if (playInfo != null) {
+                                    Log.i(tag, "play url ready quality=${playInfo.quality} format=${playInfo.format} duration=${playInfo.duration}")
+                                    isFullScreenPlayer = true
+                                    fullScreenPlayInfo = playInfo
+                                    fullScreenVideoTitle = video.title
+                                } else {
+                                    Log.e(tag, "fetch play url failed for $bvid cid=$cid")
+                                }
+                            }
+                        },
+                        onLiveClick = { video ->
+                            coroutineScope.launch {
+                                searchViewModel.onEnterFullScreenFromResult()
+                                val tag = "SearchLivePlay"
+                                val roomId = video.cid.toInt()
+                                Log.i(tag, "click live title=${video.title} roomId=$roomId uid=${video.aid} author=${video.author}")
+                                val playInfo = LiveStreamUrlFetcher.fetchLivePlayInfo(
+                                    roomId = roomId,
+                                    title = video.title,
+                                    uname = video.author
+                                )
+                                if (playInfo != null) {
+                                    Log.i(tag, "live url ready format=${playInfo.format} url=${playInfo.playUrl}")
+                                    isFullScreenPlayer = true
+                                    fullScreenLivePlayInfo = playInfo
+                                    fullScreenVideoTitle = video.title
+                                } else {
+                                    Log.e(tag, "live play url failed roomId=$roomId")
+                                }
+                            }
                         },
                         onBack = { currentRoute = NavRoute.SEARCH },
                         onSearch = { newQuery ->

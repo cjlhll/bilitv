@@ -3,6 +3,7 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bili.bilitv.BuildConfig
@@ -18,6 +19,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.Locale
@@ -109,7 +111,51 @@ data class BiliUserResult(
     val videos: Int = 0
 )
 
-class SearchViewModel : ViewModel() {
+@Serializable
+data class HotSearchResponse(
+    val code: Int,
+    val message: String = "",
+    val data: HotSearchData? = null
+)
+
+@Serializable
+data class HotSearchData(
+    val trending: HotSearchTrending? = null
+)
+
+@Serializable
+data class HotSearchTrending(
+    val list: List<HotSearchItem>? = null
+)
+
+@Serializable
+data class HotSearchItem(
+    val keyword: String = "",
+    @SerialName("show_name") val showName: String = "",
+    val icon: String = "",
+    val uri: String = "",
+    val goto: String = ""
+)
+
+@Serializable
+data class SuggestResponse(
+    val code: Int,
+    val result: SuggestResult? = null
+)
+
+@Serializable
+data class SuggestResult(
+    val tag: List<SuggestItem>? = null
+)
+
+@Serializable
+data class SuggestItem(
+    val value: String = "",
+    val term: String = "",
+    val name: String = ""
+)
+
+class SearchViewModel : ViewModel(), VideoGridStateManager {
     var videoResults by mutableStateOf<List<Video>>(emptyList())
     var userResults by mutableStateOf<List<BiliUserResult>>(emptyList())
     var isLoading by mutableStateOf(false)
@@ -121,15 +167,66 @@ class SearchViewModel : ViewModel() {
     var currentPage by mutableStateOf(1)
     var totalPages by mutableStateOf(1)
     var availableTypes by mutableStateOf(listOf("video"))
+    var hotSearches by mutableStateOf<List<HotSearchItem>>(emptyList())
+    var isLoadingHotSearches by mutableStateOf(false)
+    var hotSearchError by mutableStateOf<String?>(null)
+    var searchSuggestions by mutableStateOf<List<SuggestItem>>(emptyList())
+    var isLoadingSuggest by mutableStateOf(false)
+    var suggestError by mutableStateOf<String?>(null)
+    var searchHistory by mutableStateOf<List<String>>(emptyList())
+    var searchInput by mutableStateOf("")
+    var lastFocusArea by mutableStateOf("input")
+    var lastFocusIndex by mutableStateOf(0)
 
     private val httpClient = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
     private var cookie: String? = null
     private var imgKey: String? = null
     private var subKey: String? = null
+    private var suggestRequestId = 0L
     private val userAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     private val logTag = "SearchVM"
+
+    // 网格状态持久化
+    private val scrollStateMap = mutableStateMapOf<Any, Pair<Int, Int>>()
+    private val focusIndexMap = mutableStateMapOf<Any, Int>()
+    override var shouldRestoreFocusToGrid by mutableStateOf(false)
+
+    init {
+        searchHistory = SearchHistoryManager.load()
+    }
+
+    fun updateSearchInput(text: String) {
+        searchInput = text
+    }
+
+    fun clearSearchInput() {
+        searchInput = ""
+    }
+
+    fun appendToSearchInput(text: String) {
+        searchInput += text
+    }
+
+    fun deleteLastChar() {
+        if (searchInput.isNotEmpty()) {
+            searchInput = searchInput.dropLast(1)
+        }
+    }
+
+    fun addHistory(keyword: String) {
+        val trimmed = keyword.trim()
+        if (trimmed.isBlank()) return
+        val newList = listOf(trimmed) + searchHistory.filterNot { it.equals(trimmed, ignoreCase = true) }
+        searchHistory = newList.take(20)
+        SearchHistoryManager.save(searchHistory)
+    }
+
+    fun updateFocus(area: String, index: Int = 0) {
+        lastFocusArea = area
+        lastFocusIndex = index
+    }
 
     fun search(keyword: String, type: String = currentSearchType) {
         if (keyword.isBlank()) return
@@ -166,9 +263,18 @@ class SearchViewModel : ViewModel() {
     fun switchType(type: String) {
         if (type == currentSearchType) return
         currentSearchType = type
+        onTabChanged(type)
         if (currentKeyword.isNotBlank()) {
             search(currentKeyword, type)
         }
+    }
+
+    fun onTabChanged(@Suppress("UNUSED_PARAMETER") type: String) {
+        shouldRestoreFocusToGrid = false
+    }
+
+    fun onEnterFullScreenFromResult() {
+        shouldRestoreFocusToGrid = true
     }
 
     fun loadMoreVideos() {
@@ -196,6 +302,55 @@ class SearchViewModel : ViewModel() {
                 error = e.localizedMessage ?: "翻页失败"
             } finally {
                 isLoadingMore = false
+            }
+        }
+    }
+
+    fun loadHotSearches(force: Boolean = false) {
+        if (isLoadingHotSearches) return
+        if (hotSearches.isNotEmpty() && !force) return
+        viewModelScope.launch {
+            isLoadingHotSearches = true
+            hotSearchError = null
+            try {
+                ensureCookie()
+                ensureWbiKeys()
+                hotSearches = fetchHotSearches()
+            } catch (e: Exception) {
+                Log.e(logTag, "hot search error", e)
+                hotSearchError = e.localizedMessage ?: "获取热搜失败"
+            } finally {
+                isLoadingHotSearches = false
+            }
+        }
+    }
+
+    fun requestSuggestions(keyword: String) {
+        val requestId = ++suggestRequestId
+        if (keyword.isBlank()) {
+            searchSuggestions = emptyList()
+            suggestError = null
+            isLoadingSuggest = false
+            return
+        }
+        viewModelScope.launch {
+            isLoadingSuggest = true
+            suggestError = null
+            try {
+                ensureCookie()
+                val list = fetchSearchSuggestions(keyword)
+                if (suggestRequestId == requestId) {
+                    searchSuggestions = list
+                }
+            } catch (e: Exception) {
+                if (suggestRequestId == requestId) {
+                    suggestError = e.localizedMessage ?: "获取搜索建议失败"
+                    searchSuggestions = emptyList()
+                }
+            } finally {
+                if (suggestRequestId == requestId) {
+                    isLoadingSuggest = false
+                }
             }
         }
     }
@@ -297,6 +452,87 @@ class SearchViewModel : ViewModel() {
                 }
                 Log.d(logTag, "searchType ok page=$page mapped=${mapped.size} totalPages=$totalPages type=$type")
                 return@use mapped
+            } ?: emptyList()
+        }
+    }
+
+    private suspend fun fetchHotSearches(allowRetry: Boolean = true): List<HotSearchItem> {
+        val params = mapOf("limit" to "20", "platform" to "web")
+        val url = buildSignedUrl("https://api.bilibili.com/x/web-interface/wbi/search/square", params)
+        return withContext(Dispatchers.IO) {
+            val builder = Request.Builder()
+                .url(url)
+                .addHeader("User-Agent", userAgent)
+            cookie?.let { builder.addHeader("Cookie", it) }
+            httpClient.newCall(builder.build()).execute().use { resp ->
+                if (resp.code == 412) {
+                    cookie = null
+                    if (allowRetry) {
+                        ensureCookie()
+                        ensureWbiKeys()
+                        return@withContext fetchHotSearches(false)
+                    } else {
+                        throw IllegalStateException("请求被拦截(-412)，已重置Cookie")
+                    }
+                }
+                if (!resp.isSuccessful) {
+                    Log.e(logTag, "hot search http error code=${resp.code}")
+                    throw IllegalStateException("热搜HTTP错误${resp.code}")
+                }
+                val body = resp.body?.string() ?: return@use emptyList()
+                val apiResp = json.decodeFromString<HotSearchResponse>(body)
+                if (apiResp.code != 0) {
+                    Log.e(logTag, "hot search api error code=${apiResp.code} msg=${apiResp.message}")
+                    throw IllegalStateException(apiResp.message.ifEmpty { "获取热搜失败" })
+                }
+                val list = apiResp.data?.trending?.list.orEmpty()
+                return@use list.map { item ->
+                    val name = item.showName.ifBlank { item.keyword }
+                    val icon = if (item.icon.startsWith("//")) "https:${item.icon}" else item.icon
+                    item.copy(showName = name, icon = icon)
+                }.filter { it.showName.isNotBlank() || it.keyword.isNotBlank() }
+            } ?: emptyList()
+        }
+    }
+
+    private suspend fun fetchSearchSuggestions(keyword: String, allowRetry: Boolean = true): List<SuggestItem> {
+        val url = HttpUrl.Builder()
+            .scheme("https")
+            .host("s.search.bilibili.com")
+            .addPathSegments("main/suggest")
+            .addQueryParameter("term", keyword)
+            .addQueryParameter("main_ver", "v1")
+            .addQueryParameter("func", "suggest")
+            .addQueryParameter("suggest_type", "accurate")
+            .addQueryParameter("sub_type", "tag")
+            .addQueryParameter("tag_num", "10")
+            .build()
+        return withContext(Dispatchers.IO) {
+            val builder = Request.Builder()
+                .url(url)
+                .addHeader("User-Agent", userAgent)
+            cookie?.let { builder.addHeader("Cookie", it) }
+            httpClient.newCall(builder.build()).execute().use { resp ->
+                if (resp.code == 412) {
+                    cookie = null
+                    if (allowRetry) {
+                        ensureCookie()
+                        return@withContext fetchSearchSuggestions(keyword, false)
+                    } else {
+                        throw IllegalStateException("请求被拦截(-412)，已重置Cookie")
+                    }
+                }
+                if (!resp.isSuccessful) {
+                    throw IllegalStateException("搜索建议HTTP错误${resp.code}")
+                }
+                val body = resp.body?.string() ?: return@use emptyList()
+                val apiResp = json.decodeFromString<SuggestResponse>(body)
+                if (apiResp.code != 0) {
+                    throw IllegalStateException("搜索建议失败")
+                }
+                return@use apiResp.result?.tag.orEmpty().map {
+                    it.copy(name = stripTags(it.name))
+                }
             } ?: emptyList()
         }
     }
@@ -698,6 +934,23 @@ class SearchViewModel : ViewModel() {
         } else {
             String.format(Locale.getDefault(), "%02d:%02d", m, s)
         }
+    }
+
+    // VideoGridStateManager 实现
+    override fun updateScrollState(key: Any, index: Int, offset: Int) {
+        scrollStateMap[key] = index to offset
+    }
+
+    override fun getScrollState(key: Any): Pair<Int, Int> {
+        return scrollStateMap[key] ?: (0 to 0)
+    }
+
+    override fun updateFocusedIndex(key: Any, index: Int) {
+        focusIndexMap[key] = index
+    }
+
+    override fun getFocusedIndex(key: Any): Int {
+        return focusIndexMap[key] ?: -1
     }
 }
 

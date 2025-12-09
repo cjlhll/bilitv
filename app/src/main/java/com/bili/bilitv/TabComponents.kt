@@ -1,6 +1,5 @@
 package com.bili.bilitv
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -9,7 +8,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 
@@ -37,7 +35,6 @@ fun CommonTabButton(
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (isFocused) 1.1f else 1.0f, label = "scale")
 
     Button(
         onClick = onClick,
@@ -51,8 +48,7 @@ fun CommonTabButton(
         modifier = modifier
             .width(68.dp)
             .height(26.dp)
-            .onFocusChanged { isFocused = it.isFocused }
-            .scale(scale),
+            .onFocusChanged { isFocused = it.isFocused },
         contentPadding = PaddingValues(0.dp)
     ) {
         Text(

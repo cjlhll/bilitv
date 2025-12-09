@@ -47,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -59,25 +60,39 @@ import androidx.compose.ui.unit.sp
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SearchScreen(
+    viewModel: SearchViewModel,
     onSearch: (String) -> Unit = {}
 ) {
-    var searchText by remember { mutableStateOf("") }
+    val searchText = viewModel.searchInput
     val focusRequester = remember { FocusRequester() }
+    val hotSearches = viewModel.hotSearches
+    val isLoadingHot = viewModel.isLoadingHotSearches
+    val hotSearchError = viewModel.hotSearchError
+    val suggestions = viewModel.searchSuggestions
+    val suggestError = viewModel.suggestError
+    val lastFocusArea = viewModel.lastFocusArea
+    val lastFocusIndex = viewModel.lastFocusIndex
 
-    // Mock Data
-    val searchHistory = listOf("opgguzi")
-    val hotSearches = listOf(
-        "WE vs DYG 挑战者杯",
-        "杨瀚森首次首发表现如何",
-        "大件运输到西藏是如何完成的",
-        "湖人险胜76人",
-        "猎鹰逆转G2晋级八强",
-        "网警依法查处网络谣言案",
-        "诺里斯成F1第35位世界冠军",
-        "F1阿布扎比站维斯塔潘夺冠",
-        "把济南5A景区做进游戏",
-        "恒星不忘交响乐版"
-    )
+    LaunchedEffect(Unit) { viewModel.loadHotSearches() }
+    LaunchedEffect(searchText) { viewModel.requestSuggestions(searchText) }
+    LaunchedEffect(lastFocusArea, suggestions.size, hotSearches.size, viewModel.searchHistory.size) {
+        when (lastFocusArea) {
+            "suggest" -> {
+                // 实际请求在每个item内处理
+            }
+            "hot" -> {
+                // 同上
+            }
+            "history" -> {
+                // 同上
+            }
+            else -> {
+                focusRequester.requestFocus()
+            }
+        }
+    }
+
+    val searchHistory = viewModel.searchHistory
 
     Row(
         modifier = Modifier
@@ -95,8 +110,14 @@ fun SearchScreen(
             // Search Input Box
             SearchInputBox(
                 searchText = searchText,
-                onValueChange = { searchText = it }
+                onValueChange = { viewModel.updateSearchInput(it) },
+                focusRequester = focusRequester
             )
+            LaunchedEffect(lastFocusArea) {
+                if (lastFocusArea == "input") {
+                    focusRequester.requestFocus()
+                }
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -104,17 +125,18 @@ fun SearchScreen(
             // Default focus on 'A' which is the first item in the keyboard
             CustomKeyboard(
                 onKeyPress = { key ->
-                    searchText += key
+                    viewModel.appendToSearchInput(key)
                 },
                 onDelete = {
-                    if (searchText.isNotEmpty()) {
-                        searchText = searchText.dropLast(1)
-                    }
+                    viewModel.deleteLastChar()
                 },
                 onClear = {
-                    searchText = ""
+                    viewModel.clearSearchInput()
                 },
-                onSearch = { onSearch(searchText) },
+                onSearch = {
+                    viewModel.addHistory(searchText)
+                    onSearch(searchText)
+                },
                 initialFocusRequester = focusRequester
             )
         }
@@ -141,29 +163,84 @@ fun SearchScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        searchHistory.forEach { history ->
-                            HistoryChip(text = history)
+                        searchHistory.forEachIndexed { index, history ->
+                            val chipFocusRequester = remember { FocusRequester() }
+                            LaunchedEffect(lastFocusArea, searchHistory.size) {
+                                if (lastFocusArea == "history" && lastFocusIndex == index) {
+                                    chipFocusRequester.requestFocus()
+                                }
+                            }
+                            HistoryChip(
+                                text = history,
+                                onClick = {
+                                    val original = searchText
+                                    viewModel.addHistory(history)
+                                    onSearch(history)
+                                    viewModel.updateSearchInput(original)
+                                    viewModel.updateFocus("history", index)
+                                },
+                                modifier = Modifier
+                                    .focusRequester(chipFocusRequester)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            viewModel.updateFocus("history", index)
+                                        }
+                                    }
+                            )
                         }
                     }
                 }
             } else {
-                // Search Results (Mock)
+                // Search Suggestions
                 Text(
-                    text = "搜索结果",
+                    text = "搜索建议",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
                 
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(5) { index ->
-                        UnifiedListItem(
-                            text = "$searchText 相关结果 ${index + 1}",
-                            icon = Icons.Default.Search,
-                            iconTint = MaterialTheme.colorScheme.onSurfaceVariant
+                when {
+                suggestions.isEmpty() -> {
+                        Text(
+                            text = "暂无建议",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    else -> {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            itemsIndexed(suggestions) { index, item ->
+                                val title = item.value.ifBlank { item.term }
+                                val displayText = (title.ifBlank { item.name }).replace(Regex("<.*?>"), "")
+                                val itemFocusRequester = remember { FocusRequester() }
+                                LaunchedEffect(lastFocusArea, suggestions.size) {
+                                    if (lastFocusArea == "suggest" && lastFocusIndex == index) {
+                                        itemFocusRequester.requestFocus()
+                                    }
+                                }
+                                UnifiedListItem(
+                                    text = displayText,
+                                    icon = Icons.Default.Search,
+                                    iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    onClick = {
+                                        val finalKeyword = displayText
+                                        viewModel.updateSearchInput(finalKeyword)
+                                        viewModel.addHistory(finalKeyword)
+                                        onSearch(finalKeyword)
+                                        viewModel.updateFocus("suggest", index)
+                                    },
+                                    modifier = Modifier
+                                        .focusRequester(itemFocusRequester)
+                                        .onFocusChanged {
+                                            if (it.isFocused) {
+                                                viewModel.updateFocus("suggest", index)
+                                            }
+                                        }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -183,15 +260,61 @@ fun SearchScreen(
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                itemsIndexed(hotSearches) { index, item ->
-                    UnifiedListItem(
-                        text = item,
-                        icon = Icons.Default.Star,
-                        iconTint = if (index < 3) Color(0xFFFF5000) else MaterialTheme.colorScheme.onSurfaceVariant
+            when {
+                isLoadingHot -> {
+                    Text(
+                        text = "加载中…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                hotSearchError != null -> {
+                    Text(
+                        text = hotSearchError ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                hotSearches.isEmpty() -> {
+                    Text(
+                        text = "暂无数据",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                else -> {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        itemsIndexed(hotSearches) { index, item ->
+                            val title = item.showName.ifBlank { item.keyword }
+                            val itemFocusRequester = remember { FocusRequester() }
+                            LaunchedEffect(lastFocusArea, hotSearches.size) {
+                                if (lastFocusArea == "hot" && lastFocusIndex == index) {
+                                    itemFocusRequester.requestFocus()
+                                }
+                            }
+                            UnifiedListItem(
+                                text = title,
+                                icon = Icons.Default.Star,
+                                iconTint = if (index < 3) Color(0xFFFF5000) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                onClick = {
+                                    val original = searchText
+                                    viewModel.addHistory(title)
+                                    onSearch(title)
+                                    viewModel.updateSearchInput(original)
+                                        viewModel.updateFocus("hot", index)
+                                },
+                                modifier = Modifier
+                                    .focusRequester(itemFocusRequester)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            viewModel.updateFocus("hot", index)
+                                        }
+                                    }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -201,7 +324,8 @@ fun SearchScreen(
 @Composable
 fun SearchInputBox(
     searchText: String,
-    onValueChange: (String) -> Unit
+    onValueChange: (String) -> Unit,
+    focusRequester: FocusRequester? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
@@ -213,6 +337,7 @@ fun SearchInputBox(
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .background(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                 shape = RoundedCornerShape(8.dp)
@@ -361,16 +486,16 @@ fun KeyboardButton(
 }
 
 @Composable
-fun HistoryChip(text: String) {
+fun HistoryChip(text: String, onClick: () -> Unit = {}, modifier: Modifier = Modifier) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
     Surface(
-        onClick = {},
+        onClick = onClick,
         shape = RoundedCornerShape(50),
         color = if (isFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         contentColor = if (isFocused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier
+        modifier = modifier
             .focusable(interactionSource = interactionSource)
     ) {
         Box(
@@ -390,14 +515,15 @@ fun UnifiedListItem(
     text: String,
     icon: ImageVector,
     iconTint: Color,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(48.dp) // Consistent height
             .clip(RoundedCornerShape(8.dp))
