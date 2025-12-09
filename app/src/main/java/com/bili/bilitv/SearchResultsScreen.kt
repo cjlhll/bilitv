@@ -35,6 +35,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -162,17 +163,13 @@ fun SearchResultInput(
 @Composable
 fun SearchResultsScreen(
     query: String,
+    viewModel: SearchViewModel,
     onVideoClick: (Video) -> Unit,
     onBack: () -> Unit,
     onSearch: (String) -> Unit
 ) {
     // Tabs
-    val tabs = listOf(
-        TabItem("video", "视频"),
-        TabItem("live", "直播"),
-        TabItem("user", "用户")
-    )
-    var selectedTabId by remember { mutableStateOf(tabs[0].id) }
+    var selectedTabId by remember { mutableStateOf("video") }
     var filterExpanded by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("综合排序") }
     val filterOptions = listOf("综合排序", "最多播放", "最新发布", "时长较短")
@@ -180,20 +177,27 @@ fun SearchResultsScreen(
     // State Manager
     val stateManager = remember { SimpleVideoGridStateManager() }
 
-    // Mock Data - now depends on query
-    val dummyVideos = remember(query) {
-        List(20) { index ->
-            Video(
-                id = index.toString(),
-                title = "搜索结果演示视频 $index - $query",
-                coverUrl = "https://i0.hdslb.com/bfs/archive/placeholder.jpg", // Placeholder
-                author = "UP主 $index",
-                playCount = "${1000 * (index + 1)}",
-                danmakuCount = "${100 * (index + 1)}",
-                duration = "10:00"
-            )
+    LaunchedEffect(query) {
+        if (query.isNotBlank() && viewModel.currentKeyword != query && !viewModel.isLoading) {
+            viewModel.search(query)
         }
     }
+
+    val typeList = viewModel.availableTypes
+    val availableTabs = remember(typeList) {
+        val dynamic = buildTabsFromTypes(typeList)
+        if (dynamic.isNotEmpty()) dynamic else listOf(TabItem("video", "视频"))
+    }
+    if (availableTabs.none { it.id.toString() == selectedTabId }) {
+        val newId = availableTabs.first().id.toString()
+        selectedTabId = newId
+        viewModel.switchType(newId)
+    }
+
+    val videos = viewModel.videoResults
+    val isLoading = viewModel.isLoading
+    val error = viewModel.error
+    val canLoadMore = viewModel.currentPage < viewModel.totalPages
 
     Column(
         modifier = Modifier
@@ -203,7 +207,10 @@ fun SearchResultsScreen(
         // Search Input Header
         SearchResultInput(
             query = query,
-            onSearch = onSearch
+            onSearch = {
+                onSearch(it)
+                viewModel.search(it)
+            }
         )
 
         Row(
@@ -213,9 +220,13 @@ fun SearchResultsScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             CommonTabRow(
-                tabs = tabs,
+                tabs = availableTabs,
                 selectedTab = selectedTabId,
-                onTabSelected = { selectedTabId = it },
+                onTabSelected = { tabId ->
+                    val idStr = tabId.toString()
+                    selectedTabId = idStr
+                    viewModel.switchType(idStr)
+                },
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(start = 0.dp, end = 8.dp)
             )
@@ -253,15 +264,48 @@ fun SearchResultsScreen(
             }
         }
 
-        // Video Grid
-        CommonVideoGrid(
-            videos = dummyVideos,
-            stateManager = stateManager,
-            stateKey = selectedTabId,
-            onVideoClick = onVideoClick,
-            horizontalSpacing = 12.dp,
-            verticalSpacing = 12.dp,
-            contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp)
-        )
+        if (isLoading && videos.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = "加载中…", style = MaterialTheme.typography.bodyMedium)
+            }
+        } else {
+            if (error != null) {
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+            CommonVideoGrid(
+                videos = videos,
+                stateManager = stateManager,
+                stateKey = selectedTabId,
+                onVideoClick = onVideoClick,
+                onLoadMore = if (canLoadMore) ({ viewModel.loadMoreVideos() }) else null,
+                horizontalSpacing = 12.dp,
+                verticalSpacing = 12.dp,
+                contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp)
+            )
+        }
+    }
+}
+
+private fun buildTabsFromTypes(types: List<String>): List<TabItem> {
+    val ordered = listOf(
+        "video" to "视频",
+        "media_bangumi" to "番剧",
+        "media_ft" to "影视",
+        "live" to "直播",
+        "bili_user" to "用户"
+    )
+    val set = types.toSet()
+    return ordered.mapNotNull { (id, title) ->
+        if (set.contains(id)) TabItem(id, title) else null
     }
 }

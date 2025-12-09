@@ -256,6 +256,7 @@ fun MainScreen() {
     
     // 使用 ViewModel 保存直播列表状态，确保在导航时不会丢失
     val liveRoomListViewModel: LiveRoomListViewModel = viewModel()
+    val searchViewModel: SearchViewModel = viewModel()
 
     var loggedInSession by remember { mutableStateOf(SessionManager.getSession()) }
     var userInfo by remember { mutableStateOf<UserInfoData?>(null) }
@@ -428,11 +429,13 @@ fun MainScreen() {
                     NavRoute.SEARCH -> SearchScreen(
                         onSearch = { query ->
                             searchQuery = query
+                            searchViewModel.search(query)
                             currentRoute = NavRoute.SEARCH_RESULT
                         }
                     )
                     NavRoute.SEARCH_RESULT -> SearchResultsScreen(
                         query = searchQuery,
+                        viewModel = searchViewModel,
                         onVideoClick = { video ->
                             isFullScreenPlayer = true
                             fullScreenPlayInfo = VideoPlayInfo(
@@ -447,7 +450,10 @@ fun MainScreen() {
                             fullScreenVideoTitle = video.title
                         },
                         onBack = { currentRoute = NavRoute.SEARCH },
-                        onSearch = { newQuery -> searchQuery = newQuery }
+                        onSearch = { newQuery ->
+                            searchQuery = newQuery
+                            searchViewModel.search(newQuery)
+                        }
                     )
                     NavRoute.HOME -> HomeScreen(
                         viewModel = homeViewModel,

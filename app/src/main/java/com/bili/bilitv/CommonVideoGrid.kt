@@ -265,11 +265,11 @@ fun <T> CommonVideoGrid(
     ) {
         itemsIndexed(
             items = items,
-            key = { index, item -> 
-                // 使用稳定的 key 确保列表项正确重组
+            key = { index, item ->
+                // 避免重复 key 导致崩溃：使用索引 + 视频唯一信息组合
                 when (item) {
-                    is Video -> item.id
-                    else -> "${index}_${item.hashCode()}"
+                    is Video -> "${stateKey}_${index}_${item.id}"
+                    else -> "${stateKey}_${index}_${item.hashCode()}"
                 }
             }
         ) { index, item ->
