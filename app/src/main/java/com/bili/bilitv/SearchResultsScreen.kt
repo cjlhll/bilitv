@@ -195,9 +195,13 @@ fun SearchResultsScreen(
     }
 
     val videos = viewModel.videoResults
+    val users = viewModel.userResults
     val isLoading = viewModel.isLoading
     val error = viewModel.error
     val canLoadMore = viewModel.currentPage < viewModel.totalPages
+    val isUserTab = selectedTabId == "bili_user"
+    val isLiveTab = selectedTabId == "live"
+    val isVerticalCardTab = selectedTabId == "media_bangumi" || selectedTabId == "media_ft"
 
     Column(
         modifier = Modifier
@@ -264,7 +268,8 @@ fun SearchResultsScreen(
             }
         }
 
-        if (isLoading && videos.isEmpty()) {
+        val hasNoItem = if (isUserTab) users.isEmpty() else videos.isEmpty()
+        if (isLoading && hasNoItem) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -282,16 +287,70 @@ fun SearchResultsScreen(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                 )
             }
-            CommonVideoGrid(
-                videos = videos,
-                stateManager = stateManager,
-                stateKey = selectedTabId,
-                onVideoClick = onVideoClick,
-                onLoadMore = if (canLoadMore) ({ viewModel.loadMoreVideos() }) else null,
-                horizontalSpacing = 12.dp,
-                verticalSpacing = 12.dp,
-                contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp)
-            )
+            if (isVerticalCardTab) {
+                CommonVideoGrid(
+                    items = videos,
+                    stateManager = stateManager,
+                    stateKey = selectedTabId,
+                    columns = 5,
+                    onItemClick = onVideoClick,
+                    onLoadMore = if (canLoadMore) ({ viewModel.loadMoreVideos() }) else null,
+                    horizontalSpacing = 12.dp,
+                    verticalSpacing = 16.dp,
+                    contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp)
+                ) { video, itemModifier ->
+                    VerticalMediaCard(
+                        video = video,
+                        onClick = onVideoClick,
+                        modifier = itemModifier
+                    )
+                }
+            } else if (isLiveTab) {
+                CommonVideoGrid(
+                    items = videos,
+                    stateManager = stateManager,
+                    stateKey = selectedTabId,
+                    columns = 4,
+                    onItemClick = { video -> onVideoClick(video) },
+                    onLoadMore = if (canLoadMore) ({ viewModel.loadMoreVideos() }) else null,
+                    horizontalSpacing = 12.dp,
+                    verticalSpacing = 12.dp,
+                    contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp)
+                ) { video, itemModifier ->
+                    LiveRoomCard(
+                        room = video.toLiveRoomStub(),
+                        onClick = { onVideoClick(video) },
+                        modifier = itemModifier
+                    )
+                }
+            } else if (isUserTab) {
+                CommonVideoGrid(
+                    items = users,
+                    stateManager = stateManager,
+                    stateKey = selectedTabId,
+                    columns = 5,
+                    onLoadMore = if (canLoadMore) ({ viewModel.loadMoreVideos() }) else null,
+                    horizontalSpacing = 12.dp,
+                    verticalSpacing = 12.dp,
+                    contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp)
+                ) { user, itemModifier ->
+                    BiliUserCard(
+                        user = user,
+                        modifier = itemModifier
+                    )
+                }
+            } else {
+                CommonVideoGrid(
+                    videos = videos,
+                    stateManager = stateManager,
+                    stateKey = selectedTabId,
+                    onVideoClick = onVideoClick,
+                    onLoadMore = if (canLoadMore) ({ viewModel.loadMoreVideos() }) else null,
+                    horizontalSpacing = 12.dp,
+                    verticalSpacing = 12.dp,
+                    contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp)
+                )
+            }
         }
     }
 }
@@ -308,4 +367,28 @@ private fun buildTabsFromTypes(types: List<String>): List<TabItem> {
     return ordered.mapNotNull { (id, title) ->
         if (set.contains(id)) TabItem(id, title) else null
     }
+}
+
+private fun Video.toLiveRoomStub(): LiveRoomItem {
+    val roomId = (cid.takeIf { it != 0L } ?: aid).toInt()
+    val online = playCount.toIntOrNullSafe()
+    return LiveRoomItem(
+        roomid = roomId,
+        uid = 0L,
+        title = title,
+        uname = author,
+        online = online,
+        user_cover = coverUrl,
+        system_cover = coverUrl,
+        cover = coverUrl,
+        face = "",
+        parent_id = 0,
+        parent_name = "",
+        area_id = 0,
+        area_name = ""
+    )
+}
+
+private fun String.toIntOrNullSafe(): Int {
+    return this.replace(",", "").toIntOrNull() ?: 0
 }

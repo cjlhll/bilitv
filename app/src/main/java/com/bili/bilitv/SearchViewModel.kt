@@ -99,8 +99,19 @@ data class SearchVideoItem(
     val pic: String = ""
 )
 
+@Serializable
+data class BiliUserResult(
+    val mid: Long = 0,
+    val uname: String = "",
+    val face: String = "",
+    val sign: String = "",
+    val fans: Long = 0,
+    val videos: Int = 0
+)
+
 class SearchViewModel : ViewModel() {
     var videoResults by mutableStateOf<List<Video>>(emptyList())
+    var userResults by mutableStateOf<List<BiliUserResult>>(emptyList())
     var isLoading by mutableStateOf(false)
     var isLoadingMore by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
@@ -130,6 +141,7 @@ class SearchViewModel : ViewModel() {
             currentPage = 1
             totalPages = 1
             videoResults = emptyList()
+            userResults = emptyList()
             try {
                 Log.d(logTag, "search start keyword=$keyword type=$type")
                 ensureCookie()
@@ -137,7 +149,11 @@ class SearchViewModel : ViewModel() {
                 fetchAllSearch(keyword)
                 val activeType = currentSearchType
                 val firstPage = fetchTypeSearch(1, activeType)
-                videoResults = firstPage
+                if (activeType == "bili_user") {
+                    videoResults = emptyList()
+                } else {
+                    videoResults = firstPage
+                }
             } catch (e: Exception) {
                 Log.e(logTag, "search error", e)
                 error = e.localizedMessage ?: "搜索失败"
@@ -165,6 +181,11 @@ class SearchViewModel : ViewModel() {
                 Log.d(logTag, "loadMore page=$nextPage type=$currentSearchType")
                 ensureCookie()
                 ensureWbiKeys()
+                if (currentSearchType == "bili_user") {
+                    fetchTypeSearch(nextPage, currentSearchType)
+                    currentPage = nextPage
+                    return@launch
+                }
                 val more = fetchTypeSearch(nextPage, currentSearchType)
                 if (more.isNotEmpty()) {
                     videoResults = videoResults + more
@@ -218,10 +239,13 @@ class SearchViewModel : ViewModel() {
                     currentSearchType = availableTypes.firstOrNull() ?: "video"
                     Log.d(logTag, "current type missing in pageinfo, fallback to $currentSearchType")
                 }
-                val page = apiResp.data?.pageinfo?.video
-                if (page != null && page.numPages > 0) {
-                    totalPages = page.numPages
-                }
+                val pageInfo = apiResp.data?.pageinfo
+                totalPages = when (currentSearchType) {
+                    "bili_user" -> pageInfo?.biliUser?.numPages ?: 1
+                    "media_bangumi" -> pageInfo?.mediaBangumi?.numPages ?: 1
+                    "media_ft" -> pageInfo?.mediaFt?.numPages ?: 1
+                    else -> pageInfo?.video?.numPages ?: 1
+                }.coerceAtLeast(1)
                 Log.d(logTag, "searchAll ok availableTypes=${availableTypes.joinToString()} modules=${showModules.joinToString()} pages=$totalPages")
             }
         }
@@ -269,7 +293,7 @@ class SearchViewModel : ViewModel() {
                     val list = apiResp.data?.result ?: emptyList()
                     list.map { it.toVideo() }
                 } else {
-                    parseNonVideoResults(body, type)
+                    parseNonVideoResults(body, type, page)
                 }
                 Log.d(logTag, "searchType ok page=$page mapped=${mapped.size} totalPages=$totalPages type=$type")
                 return@use mapped
@@ -407,10 +431,15 @@ class SearchViewModel : ViewModel() {
         )
     }
 
-    private fun parseNonVideoResults(body: String, type: String): List<Video> {
+    private fun parseNonVideoResults(body: String, type: String, page: Int): List<Video> {
         val root = json.parseToJsonElement(body)
         val dataObj = (root as? JsonObject)?.get("data") as? JsonObject ?: return emptyList()
         dataObj["numPages"]?.jsonPrimitive?.content?.toIntOrNull()?.let { if (it > 0) totalPages = it }
+        if (type == "bili_user") {
+            val users = parseUserResults(dataObj)
+            userResults = if (page == 1) users else userResults + users
+            return emptyList()
+        }
         val resultElem = dataObj["result"] ?: return emptyList()
         val videos = mutableListOf<Video>()
         when (resultElem) {
@@ -445,6 +474,55 @@ class SearchViewModel : ViewModel() {
             else -> {}
         }
         return videos
+    }
+
+    private fun parseUserResults(dataObj: JsonObject): List<BiliUserResult> {
+        val resultElem = dataObj["result"] ?: return emptyList()
+        val users = mutableListOf<BiliUserResult>()
+        fun addFrom(obj: JsonObject) {
+            val mid = obj.longOrZero("mid")
+            val uname = stripTags(
+                obj.stringOrEmpty("uname")
+                    .ifBlank { obj.stringOrEmpty("title") }
+                    .ifBlank { obj.stringOrEmpty("name") }
+            )
+            val face = normalizeCover(
+                obj.stringOrEmpty("upic")
+                    .ifBlank { obj.stringOrEmpty("face") }
+                    .ifBlank { obj.stringOrEmpty("pic") }
+            )
+            val sign = obj.stringOrEmpty("usign")
+            val fans = obj.stringOrNumber("fans").toLongOrNull() ?: 0L
+            val videos = obj.longOrZero("videos").toInt()
+            users.add(
+                BiliUserResult(
+                    mid = mid,
+                    uname = uname,
+                    face = face,
+                    sign = sign,
+                    fans = fans,
+                    videos = videos
+                )
+            )
+        }
+        when (resultElem) {
+            is JsonArray -> {
+                resultElem.forEach { item ->
+                    (item as? JsonObject)?.let { addFrom(it) }
+                }
+            }
+            is JsonObject -> {
+                resultElem.values.forEach { elem ->
+                    if (elem is JsonArray) {
+                        elem.forEach { item ->
+                            (item as? JsonObject)?.let { addFrom(it) }
+                        }
+                    }
+                }
+            }
+            else -> {}
+        }
+        return users
     }
 
     private fun isLiveResultKey(key: String): Boolean {
@@ -498,6 +576,12 @@ class SearchViewModel : ViewModel() {
         val durationSeconds = if (durationStr.contains(":")) parseDurationToSeconds(durationStr) else obj.longOrZero("duration")
         val duration = if (durationStr.isNotBlank()) durationStr else formatDuration(durationSeconds)
         val pubDate = obj.longOrZero("pubdate").takeIf { it != 0L }
+        val desc = obj.stringOrEmpty("desc").ifBlank { obj.stringOrEmpty("evaluate") }
+        val badges = obj.parseBadges()
+        val epSize = obj.longOrZero("ep_size").toInt()
+        val mediaScoreObj = obj["media_score"] as? JsonObject
+        val score = mediaScoreObj?.get("score")?.jsonPrimitive?.content?.toDoubleOrNull() ?: 0.0
+        val scoreUsers = mediaScoreObj?.get("user_count")?.jsonPrimitive?.content?.toIntOrNull() ?: 0
 
         return Video(
             id = id,
@@ -511,7 +595,12 @@ class SearchViewModel : ViewModel() {
             danmakuCount = danmaku,
             duration = duration,
             durationSeconds = durationSeconds,
-            pubDate = pubDate
+            pubDate = pubDate,
+            desc = desc,
+            badges = badges,
+            epSize = epSize,
+            mediaScore = score,
+            mediaScoreUsers = scoreUsers
         )
     }
 
@@ -527,6 +616,24 @@ class SearchViewModel : ViewModel() {
         val prim = this[key]?.jsonPrimitive ?: return ""
         val num = prim.content.toLongOrNull()
         return if (prim.content.isNotBlank()) prim.content else num?.toString() ?: ""
+    }
+
+    private fun JsonObject.parseBadges(): List<Badge> {
+        val arr = this["badges"] as? JsonArray ?: return emptyList()
+        return arr.mapNotNull { el ->
+            (el as? JsonObject)?.let { obj ->
+                Badge(
+                    text = obj.stringOrEmpty("text"),
+                    textColor = obj.stringOrEmpty("text_color"),
+                    textColorNight = obj.stringOrEmpty("text_color_night"),
+                    bgColor = obj.stringOrEmpty("bg_color"),
+                    bgColorNight = obj.stringOrEmpty("bg_color_night"),
+                    borderColor = obj.stringOrEmpty("border_color"),
+                    borderColorNight = obj.stringOrEmpty("border_color_night"),
+                    bgStyle = obj.longOrZero("bg_style").toInt()
+                )
+            }
+        }.filter { it.text.isNotBlank() }
     }
 
     private fun extractAvailableTypes(body: String): List<String> {
