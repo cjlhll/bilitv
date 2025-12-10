@@ -135,6 +135,8 @@ fun SearchScreen(
                 },
                 onSearch = {
                     viewModel.addHistory(searchText)
+                    viewModel.updateSearchOrder("totalrank")
+                    viewModel.search(searchText, "video")
                     onSearch(searchText)
                 },
                 initialFocusRequester = focusRequester
@@ -175,6 +177,8 @@ fun SearchScreen(
                                 onClick = {
                                     val original = searchText
                                     viewModel.addHistory(history)
+                                    viewModel.updateSearchOrder("totalrank")
+                                    viewModel.search(history, "video")
                                     onSearch(history)
                                     viewModel.updateSearchInput(original)
                                     viewModel.updateFocus("history", index)
@@ -228,6 +232,8 @@ fun SearchScreen(
                                         val finalKeyword = displayText
                                         viewModel.updateSearchInput(finalKeyword)
                                         viewModel.addHistory(finalKeyword)
+                                        viewModel.updateSearchOrder("totalrank")
+                                        viewModel.search(finalKeyword, "video")
                                         onSearch(finalKeyword)
                                         viewModel.updateFocus("suggest", index)
                                     },
@@ -301,6 +307,8 @@ fun SearchScreen(
                                 onClick = {
                                     val original = searchText
                                     viewModel.addHistory(title)
+                                    viewModel.updateSearchOrder("totalrank")
+                                    viewModel.search(title, "video")
                                     onSearch(title)
                                     viewModel.updateSearchInput(original)
                                         viewModel.updateFocus("hot", index)

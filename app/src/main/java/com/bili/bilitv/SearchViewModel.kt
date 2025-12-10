@@ -251,10 +251,9 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
             currentOrder = order
             currentPage = 1
             totalPages = 1
-            if (!wasLoading) {
-                videoResults = emptyList()
-                userResults = emptyList()
-            }
+            // Always clear results to prevent showing stale data from previous tab/request
+            videoResults = emptyList()
+            userResults = emptyList()
             try {
                 Log.d(logTag, "searchWithOrder start keyword=$keyword type=$type order=$order requestId=$requestId")
                 ensureCookie()
@@ -305,10 +304,9 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
             currentSearchType = type
             currentPage = 1
             totalPages = 1
-            if (!wasLoading) {
-                videoResults = emptyList()
-                userResults = emptyList()
-            }
+            // Always clear results to prevent showing stale data from previous tab/request
+            videoResults = emptyList()
+            userResults = emptyList()
             try {
                 Log.d(logTag, "search start keyword=$keyword type=$type requestId=$requestId")
                 ensureCookie()
