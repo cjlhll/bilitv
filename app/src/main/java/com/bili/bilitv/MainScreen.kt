@@ -261,6 +261,7 @@ fun MainScreen() {
     // 使用 ViewModel 保存直播列表状态，确保在导航时不会丢失
     val liveRoomListViewModel: LiveRoomListViewModel = viewModel()
     val searchViewModel: SearchViewModel = viewModel()
+    val mediaDetailViewModel: MediaDetailViewModel = viewModel()
 
     var loggedInSession by remember { mutableStateOf(SessionManager.getSession()) }
     var userInfo by remember { mutableStateOf<UserInfoData?>(null) }
@@ -452,6 +453,7 @@ fun MainScreen() {
                         } else {
                             MediaDetailScreen(
                                 media = media,
+                                viewModel = mediaDetailViewModel,
                                 onBack = {
                                     selectedMedia = null
                                     currentRoute = NavRoute.SEARCH_RESULT

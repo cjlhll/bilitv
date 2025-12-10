@@ -68,42 +68,54 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 
 @Composable
 fun MediaDetailScreen(
     media: Video,
+    viewModel: MediaDetailViewModel,
     onBack: () -> Unit,
     onPlay: (VideoPlayInfo, String) -> Unit = { _, _ -> }
 ) {
     val logTag = "MediaDetail"
     val context = LocalContext.current
-    val scrollState = rememberScrollState()
-    var detailMedia by remember { mutableStateOf(media) }
-    var isAscending by remember { mutableStateOf(false) }
-    var isDetailLoading by remember { mutableStateOf(false) }
-    var detailError by remember { mutableStateOf<String?>(null) }
-    var sections by remember { mutableStateOf<List<DetailSection>>(emptyList()) }
+    
+    // Initial data load
+    LaunchedEffect(media) {
+        viewModel.loadMedia(media)
+    }
 
+    // Scroll state persistence
+    val scrollState = rememberScrollState(initial = viewModel.scrollPosition)
+    LaunchedEffect(scrollState.value) {
+        viewModel.scrollPosition = scrollState.value
+    }
+
+    val detailMedia = viewModel.detailMedia ?: media
+    var isAscending by remember { mutableStateOf(viewModel.isAscending) } // Use local state initialized from VM, or bind directly?
+    // Binding directly to VM property for persistence
+    // But isAscending in VM should be mutable.
+    
+    // Sync isAscending changes to ViewModel
+    LaunchedEffect(isAscending) {
+        viewModel.isAscending = isAscending
+    }
+
+    val isDetailLoading = viewModel.isDetailLoading
+    val detailError = viewModel.detailError
+    val sections = viewModel.sections
+
+    // Focus restoration
+    var hasRestoredFocus by remember { mutableStateOf(false) }
+    
     val coverModel = remember(detailMedia.coverUrl) {
         ImageRequest.Builder(context)
             .data(detailMedia.coverUrl)
             .size(ImageConfig.VIDEO_COVER_SIZE)
             .build()
-    }
-    
-    LaunchedEffect(media.id) {
-        isDetailLoading = true
-        detailError = null
-        try {
-            val (detail, sectionList) = loadMediaDetail(media)
-            Log.d(logTag, "detail loaded id=${detail.id} sections=${sectionList.size}")
-            detailMedia = detail
-            sections = sectionList
-        } catch (e: Exception) {
-            detailError = e.localizedMessage ?: "加载详情失败"
-        } finally {
-            isDetailLoading = false
-        }
     }
     
     val displayedMainEpisodes = remember(sections, isAscending) {
@@ -113,6 +125,11 @@ fun MediaDetailScreen(
 
     val primaryEpisode = displayedMainEpisodes.firstOrNull()
 
+    val focusRequester = remember { FocusRequester() }
+    
+    // Auto-focus on primary episode if no other focus recorded
+    // Or just rely on EpisodeCard logic
+    
     BackHandler { onBack() }
     
     val coroutineScope = rememberCoroutineScope()
@@ -336,7 +353,25 @@ fun MediaDetailScreen(
                                 modifier = Modifier.padding(vertical = 12.dp)
                             )
                         } else {
+                            val rowKey = "episodes_$index"
+                            val (initialIndex, initialOffset) = remember(rowKey) {
+                                viewModel.rowScrollStates[rowKey] ?: (0 to 0)
+                            }
+                            val rowState = rememberLazyListState(
+                                initialFirstVisibleItemIndex = initialIndex,
+                                initialFirstVisibleItemScrollOffset = initialOffset
+                            )
+                            
+                            LaunchedEffect(rowState, rowKey) {
+                                snapshotFlow { 
+                                    rowState.firstVisibleItemIndex to rowState.firstVisibleItemScrollOffset 
+                                }.collect { (index, offset) ->
+                                    viewModel.rowScrollStates[rowKey] = index to offset
+                                }
+                            }
+                            
                             LazyRow(
+                                state = rowState,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 contentPadding = PaddingValues(horizontal = 4.dp),
                                 modifier = Modifier
@@ -347,7 +382,10 @@ fun MediaDetailScreen(
                                     EpisodeCard(
                                         episode = ep,
                                         onClick = { handlePlay(ep) },
-                                        modifier = Modifier.width(240.dp)
+                                        modifier = Modifier.width(240.dp),
+                                        onFocus = { viewModel.lastFocusedId = ep.id.toString() },
+                                        requestInitialFocus = !hasRestoredFocus && (viewModel.lastFocusedId == ep.id.toString()),
+                                        onInitialFocusRequested = { hasRestoredFocus = true }
                                     )
                                 }
                             }
@@ -376,7 +414,25 @@ fun MediaDetailScreen(
                                 modifier = Modifier.padding(vertical = 12.dp)
                             )
                         } else {
+                            val rowKey = "seasons_$index"
+                            val (initialIndex, initialOffset) = remember(rowKey) {
+                                viewModel.rowScrollStates[rowKey] ?: (0 to 0)
+                            }
+                            val rowState = rememberLazyListState(
+                                initialFirstVisibleItemIndex = initialIndex,
+                                initialFirstVisibleItemScrollOffset = initialOffset
+                            )
+                            
+                            LaunchedEffect(rowState, rowKey) {
+                                snapshotFlow { 
+                                    rowState.firstVisibleItemIndex to rowState.firstVisibleItemScrollOffset 
+                                }.collect { (index, offset) ->
+                                    viewModel.rowScrollStates[rowKey] = index to offset
+                                }
+                            }
+                            
                             LazyRow(
+                                state = rowState,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 contentPadding = PaddingValues(horizontal = 4.dp),
                                 modifier = Modifier.fillMaxWidth()
@@ -426,19 +482,19 @@ fun MediaDetailScreen(
 }
 
 @Serializable
-private data class SeasonSimpleResponse(
+data class SeasonSimpleResponse(
     val code: Int,
     val message: String = "",
     val result: SeasonSimpleResult? = null
 )
 
 @Serializable
-private data class SeasonSimpleResult(
+data class SeasonSimpleResult(
     val seasons: List<SeasonSimpleItem>? = null
 )
 
 @Serializable
-private data class SeasonSimpleItem(
+data class SeasonSimpleItem(
     @SerialName("season_id") val seasonId: Long = 0,
     @SerialName("season_title") val seasonTitle: String = "",
     val cover: String = "",
@@ -451,31 +507,31 @@ private data class SeasonSimpleItem(
 )
 
 @Serializable
-private data class SeasonBadgeInfo(
+data class SeasonBadgeInfo(
     val text: String = "",
     @SerialName("bg_color") val bgColor: String = "",
     @SerialName("text_color") val textColor: String = ""
 )
 
 @Serializable
-private data class SeasonNewEp(
+data class SeasonNewEp(
     @SerialName("index_show") val indexShow: String = ""
 )
 
 @Serializable
-private data class MediaBasicResponse(
+data class MediaBasicResponse(
     val code: Int,
     val message: String = "",
     val result: MediaBasicResult? = null
 )
 
 @Serializable
-private data class MediaBasicResult(
+data class MediaBasicResult(
     val media: MediaBasicInfo? = null
 )
 
 @Serializable
-private data class MediaBasicInfo(
+data class MediaBasicInfo(
     @SerialName("media_id") val mediaId: Long = 0,
     @SerialName("season_id") val seasonId: Long = 0,
     val title: String = "",
@@ -490,49 +546,49 @@ private data class MediaBasicInfo(
 )
 
 @Serializable
-private data class MediaRating(
+data class MediaRating(
     val score: Double = 0.0,
     val count: Int = 0
 )
 
 @Serializable
-private data class MediaNewEp(
+data class MediaNewEp(
     @SerialName("index_show") val indexShow: String = ""
 )
 
 @Serializable
-private data class MediaArea(
+data class MediaArea(
     val id: Int = 0,
     val name: String = ""
 )
 
-private sealed interface DetailSection {
+sealed interface DetailSection {
     val title: String
 }
 
-private data class EpisodeCardSection(
+data class EpisodeCardSection(
     override val title: String = "",
     val type: Int = 0,
     val episodes: List<MediaEpisode> = emptyList(),
     val isMain: Boolean = false
 ) : DetailSection
 
-private data class SeasonCardSection(
+data class SeasonCardSection(
     override val title: String = "",
     val seasons: List<Video> = emptyList()
 ) : DetailSection
 
-private enum class CardStyle { Video16x10, Cover3x4 }
+enum class CardStyle { Video16x10, Cover3x4 }
 
 @Serializable
-private data class SeasonDetailResponse(
+data class SeasonDetailResponse(
     val code: Int,
     val message: String = "",
     val result: SeasonDetailResult? = null
 )
 
 @Serializable
-private data class SeasonDetailResult(
+data class SeasonDetailResult(
     @SerialName("season_id") val seasonId: Long = 0,
     @SerialName("media_id") val mediaId: Long = 0,
     val title: String = "",
@@ -557,7 +613,7 @@ private data class SeasonDetailResult(
 )
 
 @Serializable
-private data class SeasonEpisode(
+data class SeasonEpisode(
     val id: Long = 0,
     val aid: Long = 0,
     val cid: Long = 0,
@@ -571,14 +627,14 @@ private data class SeasonEpisode(
 )
 
 @Serializable
-private data class SeasonSection(
+data class SeasonSection(
     val episodes: List<SeasonEpisode> = emptyList(),
     val title: String = "",
     val type: Int = 0
 )
 
 @Serializable
-private data class SeasonBrief(
+data class SeasonBrief(
     @SerialName("season_id") val seasonId: Long = 0,
     @SerialName("season_title") val seasonTitle: String = "",
     val cover: String = "",
@@ -591,165 +647,43 @@ private data class SeasonBrief(
 ) 
 
 @Serializable
-private data class SeasonSeries(
+data class SeasonSeries(
     @SerialName("series_id") val seriesId: Long = 0,
     val title: String = "",
     val seasons: List<SeasonBrief> = emptyList()
 )
 
-private suspend fun loadMediaDetail(initial: Video): Pair<Video, List<DetailSection>> {
-    val client = OkHttpClient()
-    val json = Json { ignoreUnknownKeys = true }
-    var seasonId = initial.seasonId
-    var mediaId = initial.mediaId
-    var basic: MediaBasicInfo? = null
-    if (seasonId == 0L && mediaId != 0L) {
-        basic = fetchMediaBasic(client, json, mediaId)
-        seasonId = basic?.seasonId ?: 0L
-    }
-    if (seasonId == 0L) return initial to emptyList()
-    val detail = fetchSeasonDetail(client, json, seasonId) ?: return initial to emptyList()
-    val episodes = detail.episodes.ifEmpty { detail.sections.firstOrNull()?.episodes.orEmpty() }
-    val allSections = buildList {
-        if (detail.section.isNotEmpty()) addAll(detail.section)
-        if (detail.sections.isNotEmpty()) addAll(detail.sections)
-    }
-    val mapEpisode: (SeasonEpisode) -> MediaEpisode = { ep ->
-        val badgeText = ep.badgeInfo?.text?.ifBlank { ep.badge } ?: ep.badge
-        MediaEpisode(
-            id = ep.id,
-            aid = ep.aid,
-            cid = ep.cid,
-            bvid = ep.bvid.ifBlank { detail.bvid }, // Use episode's bvid, fallback to season's bvid
-            title = ep.title,
-            longTitle = ep.longTitle,
-            indexTitle = ep.title,
-            cover = ep.cover,
-            url = ep.shareUrl,
-            releaseDate = "",
-            badges = badgeText.takeIf { it.isNotBlank() }?.let { listOf(it) } ?: emptyList()
-        )
-    }
-    val mappedEpisodes = episodes.map(mapEpisode)
-    val cover = detail.cover.ifBlank { detail.horizontalCover169.ifBlank { detail.horizontalCover1610 } }
-    val mapped = Video(
-        id = detail.seasonId.takeIf { it != 0L }?.toString() ?: initial.id,
-        aid = initial.aid,
-        bvid = initial.bvid,
-        cid = initial.cid,
-        title = detail.seasonTitle.ifBlank { detail.title.ifBlank { initial.title } },
-        coverUrl = cover.ifBlank { initial.coverUrl },
-        author = initial.author,
-        playCount = initial.playCount,
-        danmakuCount = initial.danmakuCount,
-        duration = initial.duration,
-        durationSeconds = initial.durationSeconds,
-        pubDate = initial.pubDate,
-        desc = detail.evaluate.ifBlank { initial.desc },
-        badges = initial.badges,
-        epSize = episodes.size.takeIf { it > 0 } ?: initial.epSize,
-        mediaScore = detail.rating?.score ?: initial.mediaScore,
-        mediaScoreUsers = detail.rating?.count ?: initial.mediaScoreUsers,
-        mediaType = detail.type.takeIf { it != 0 } ?: initial.mediaType,
-        seasonId = detail.seasonId.takeIf { it != 0L } ?: initial.seasonId,
-        mediaId = detail.mediaId.takeIf { it != 0L } ?: basic?.mediaId ?: initial.mediaId,
-        seasonType = initial.seasonType,
-        seasonTypeName = detail.typeName.ifBlank { initial.seasonTypeName },
-        url = detail.link.ifBlank { basic?.shareUrl ?: initial.url },
-        buttonText = initial.buttonText,
-        isFollow = initial.isFollow,
-        selectionStyle = initial.selectionStyle,
-        orgTitle = initial.orgTitle,
-        cv = detail.cv.ifBlank { initial.cv },
-        staff = detail.staff.ifBlank { initial.staff },
-        episodes = mappedEpisodes
-    )
-    val seasonMap = linkedMapOf<Long, Video>()
-    val appendSeason: (SeasonBrief) -> Unit = { item ->
-        if (item.seasonId != mapped.seasonId && !seasonMap.containsKey(item.seasonId)) {
-            val badgeText = item.badgeInfo?.text?.ifBlank { item.badge } ?: item.badge
-            val badge = badgeText.takeIf { it.isNotBlank() }?.let {
-                Badge(
-                    text = it,
-                    textColor = item.badgeInfo?.textColor ?: "#FFFFFF",
-                    bgColor = item.badgeInfo?.bgColor ?: "#FB7299",
-                    borderColor = item.badgeInfo?.bgColor ?: "#FB7299"
-                )
-            }
-            val itemCover = item.cover.ifBlank { item.horizontalCover169.ifBlank { item.horizontalCover1610 } }
-            seasonMap[item.seasonId] = Video(
-                id = item.seasonId.toString(),
-                title = item.seasonTitle,
-                coverUrl = itemCover,
-                desc = item.newEp?.indexShow ?: "",
-                badges = badge?.let { listOf(it) } ?: emptyList(),
-                seasonId = item.seasonId,
-                url = item.link
-            )
-        }
-    }
-    detail.seasons.forEach { appendSeason(it) }
-    detail.series?.seasons?.forEach { appendSeason(it) }
-
-    val sectionList = buildList<DetailSection> {
-        if (mappedEpisodes.isNotEmpty()) {
-            add(EpisodeCardSection(title = "正片剧集", type = 0, episodes = mappedEpisodes, isMain = true))
-        }
-        allSections.forEach { sec ->
-            Log.d("MediaDetail", "section title=${sec.title} type=${sec.type} eps=${sec.episodes.size}")
-            val eps = sec.episodes.map(mapEpisode)
-            if (eps.isNotEmpty()) {
-                add(EpisodeCardSection(title = sec.title, type = sec.type, episodes = eps, isMain = false))
-            }
-        }
-        if (seasonMap.isNotEmpty()) {
-            add(SeasonCardSection(title = detail.series?.title ?: "系列/多季", seasons = seasonMap.values.toList()))
-        }
-    }
-    return mapped to sectionList
-}
-
-private suspend fun fetchMediaBasic(client: OkHttpClient, json: Json, mediaId: Long): MediaBasicInfo? {
-    val url = "https://api.bilibili.com/pgc/review/user?media_id=$mediaId"
-    val req = Request.Builder().url(url).get().build()
-    return withContext(Dispatchers.IO) {
-        client.newCall(req).execute().use { resp ->
-            val body = resp.body?.string() ?: return@use null
-            val parsed = json.decodeFromString<MediaBasicResponse>(body)
-            if (parsed.code != 0) return@use null
-            parsed.result?.media
-        }
-    }
-}
-
-private suspend fun fetchSeasonDetail(client: OkHttpClient, json: Json, seasonId: Long): SeasonDetailResult? {
-    val url = "https://api.bilibili.com/pgc/view/web/season?season_id=$seasonId"
-    val req = Request.Builder().url(url).get().build()
-    return withContext(Dispatchers.IO) {
-        client.newCall(req).execute().use { resp ->
-            val body = resp.body?.string() ?: return@use null
-            Log.d("MediaDetail", "season detail len=${body.length} snippet=${body.take(2000)}")
-            val parsed = json.decodeFromString<SeasonDetailResponse>(body)
-            if (parsed.code != 0) return@use null
-            parsed.result
-        }
-    }
-}
 
 @Composable
 private fun EpisodeCard(
     episode: MediaEpisode,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onFocus: () -> Unit = {},
+    requestInitialFocus: Boolean = false,
+    onInitialFocusRequested: () -> Unit = {}
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+
+    if (requestInitialFocus) {
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+            onInitialFocusRequested()
+        }
+    }
+
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
         modifier = modifier
             .fillMaxWidth()
             .wrapContentHeight()
-            .onFocusChanged { isFocused = it.isFocused },
+            .focusRequester(focusRequester)
+            .onFocusChanged { 
+                isFocused = it.isFocused 
+                if (it.isFocused) onFocus()
+            },
         border = if (isFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null,
         onClick = onClick
     ) {
