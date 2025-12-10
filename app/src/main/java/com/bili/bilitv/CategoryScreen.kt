@@ -272,8 +272,8 @@ class CategoryViewModel : ViewModel(), VideoGridStateManager {
                                     title = archive.title,
                                     coverUrl = archive.cover,
                                     author = archive.author.name,
-                                    playCount = formatCount(archive.stat.view),
-                                    danmakuCount = formatCount(archive.stat.danmaku),
+                                    playCount = archive.stat.view.toString(),
+                                    danmakuCount = archive.stat.danmaku.toString(),
                                     duration = formatDuration(archive.duration.toLong()),
                                     durationSeconds = archive.duration.toLong(),
                                     pubDate = archive.pubdate

@@ -313,8 +313,8 @@ private fun mapVideoItemDataToVideo(videoItemData: VideoItemData): Video {
         title = videoItemData.title,
         coverUrl = videoItemData.pic,
         author = videoItemData.owner.name,
-        playCount = formatCount(videoItemData.stat.view),
-        danmakuCount = formatCount(videoItemData.stat.danmaku),
+        playCount = videoItemData.stat.view.toString(),
+        danmakuCount = videoItemData.stat.danmaku.toString(),
         duration = formatDuration(videoItemData.duration),
         durationSeconds = videoItemData.duration,
         pubDate = videoItemData.pubdate

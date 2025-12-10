@@ -108,9 +108,6 @@ fun MediaDetailScreen(
     val detailError = viewModel.detailError
     val sections = viewModel.sections
 
-    // Focus restoration
-    var hasRestoredFocus by remember { mutableStateOf(false) }
-    
     val coverModel = remember(detailMedia.coverUrl) {
         ImageRequest.Builder(context)
             .data(detailMedia.coverUrl)
@@ -125,12 +122,32 @@ fun MediaDetailScreen(
 
     val primaryEpisode = displayedMainEpisodes.firstOrNull()
 
+    // Focus requesters
     val focusRequester = remember { FocusRequester() }
-    
+    val playButtonRequester = remember { FocusRequester() }
+    val followButtonRequester = remember { FocusRequester() }
+
+    // Focus restoration
+    var hasRestoredFocus by remember { mutableStateOf(false) }
+
+    // Restore button focus if no episode focus is set
+    LaunchedEffect(hasRestoredFocus, viewModel.lastFocusedButton) {
+        if (!hasRestoredFocus && viewModel.lastFocusedId == null && viewModel.lastFocusedButton != null) {
+            when (viewModel.lastFocusedButton) {
+                "play" -> playButtonRequester.requestFocus()
+                "follow" -> followButtonRequester.requestFocus()
+            }
+            hasRestoredFocus = true
+        }
+    }
+
     // Auto-focus on primary episode if no other focus recorded
     // Or just rely on EpisodeCard logic
     
-    BackHandler { onBack() }
+    BackHandler {
+        viewModel.clearState()
+        onBack()
+    }
     
     val coroutineScope = rememberCoroutineScope()
     fun handlePlay(episode: MediaEpisode) {
@@ -261,7 +278,12 @@ fun MediaDetailScreen(
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                modifier = Modifier.onFocusChanged { isPlayFocused = it.isFocused },
+                                modifier = Modifier
+                                    .focusRequester(playButtonRequester)
+                                    .onFocusChanged {
+                                        isPlayFocused = it.isFocused
+                                        if (it.isFocused) viewModel.lastFocusedButton = "play"
+                                    },
                                 border = if (isPlayFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.onPrimary) else null
                             ) {
                                 Text(text = media.buttonText.ifBlank { "开始观看" }, fontSize = 16.sp)
@@ -274,30 +296,16 @@ fun MediaDetailScreen(
                                     containerColor = Color.White.copy(alpha = 0.15f),
                                     contentColor = Color.White
                                 ),
-                                modifier = Modifier.onFocusChanged { isFollowFocused = it.isFocused },
+                                modifier = Modifier
+                                    .focusRequester(followButtonRequester)
+                                    .onFocusChanged {
+                                        isFollowFocused = it.isFocused
+                                        if (it.isFocused) viewModel.lastFocusedButton = "follow"
+                                    },
                                 border = if (isFollowFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null
                             ) {
                                 Text(text = "追番/追剧", fontSize = 16.sp)
                             }
-                        }
-
-                        if (detailMedia.cv.isNotBlank()) {
-                            Text(
-                                text = "CV：${detailMedia.cv}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.9f),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        if (detailMedia.staff.isNotBlank()) {
-                            Text(
-                                text = "STAFF：${detailMedia.staff}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.9f),
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis
-                            )
                         }
                     }
                 }

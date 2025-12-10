@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.bili.bilitv.BuildConfig
 import com.bili.bilitv.utils.WbiUtil
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -164,6 +165,7 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
     var showModules by mutableStateOf<List<String>>(emptyList())
     var currentKeyword by mutableStateOf("")
     var currentSearchType by mutableStateOf("video") // video / live / bili_user
+    var currentOrder by mutableStateOf("totalrank") // totalrank / click / pubdate / dm / stow
     var currentPage by mutableStateOf(1)
     var totalPages by mutableStateOf(1)
     var availableTypes by mutableStateOf(listOf("video"))
@@ -184,6 +186,9 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
     private var imgKey: String? = null
     private var subKey: String? = null
     private var suggestRequestId = 0L
+    private var searchRequestId = 0L
+    private var currentSearchJob: Job? = null
+    private var currentSuggestJob: Job? = null
     private val userAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     private val logTag = "SearchVM"
@@ -228,34 +233,112 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
         lastFocusIndex = index
     }
 
+    fun updateSearchOrder(order: String) {
+        currentOrder = order
+    }
+
+    fun searchWithOrder(keyword: String, type: String = currentSearchType, order: String = currentOrder) {
+        if (keyword.isBlank()) return
+        // 取消之前的搜索请求
+        currentSearchJob?.cancel()
+        val requestId = ++searchRequestId
+        currentSearchJob = viewModelScope.launch {
+            val wasLoading = isLoading
+            isLoading = true
+            error = null
+            currentKeyword = keyword
+            currentSearchType = type
+            currentOrder = order
+            currentPage = 1
+            totalPages = 1
+            if (!wasLoading) {
+                videoResults = emptyList()
+                userResults = emptyList()
+            }
+            try {
+                Log.d(logTag, "searchWithOrder start keyword=$keyword type=$type order=$order requestId=$requestId")
+                ensureCookie()
+                ensureWbiKeys()
+                fetchAllSearch(keyword)
+                if (searchRequestId != requestId) {
+                    Log.d(logTag, "searchWithOrder cancelled, newer request started requestId=$requestId")
+                    return@launch
+                }
+                val activeType = currentSearchType
+                val activeOrder = currentOrder
+                val firstPage = fetchTypeSearch(1, activeType, activeOrder, requestId)
+                if (searchRequestId != requestId) {
+                    Log.d(logTag, "searchWithOrder cancelled after fetch, newer request started requestId=$requestId")
+                    return@launch
+                }
+                if (activeType == "bili_user") {
+                    videoResults = emptyList()
+                } else {
+                    videoResults = firstPage
+                }
+                Log.d(logTag, "searchWithOrder completed keyword=$keyword type=$type order=$order requestId=$requestId")
+            } catch (e: Exception) {
+                if (searchRequestId == requestId) {
+                    Log.e(logTag, "searchWithOrder error", e)
+                    error = e.localizedMessage ?: "搜索失败"
+                }
+            } finally {
+                if (searchRequestId == requestId) {
+                    isLoading = false
+                }
+                // 协程结束时清除Job引用
+                if (currentSearchJob?.isActive != true) {
+                    currentSearchJob = null
+                }
+            }
+        }
+    }
+
     fun search(keyword: String, type: String = currentSearchType) {
         if (keyword.isBlank()) return
+        val requestId = ++searchRequestId
         viewModelScope.launch {
+            val wasLoading = isLoading
             isLoading = true
             error = null
             currentKeyword = keyword
             currentSearchType = type
             currentPage = 1
             totalPages = 1
-            videoResults = emptyList()
-            userResults = emptyList()
+            if (!wasLoading) {
+                videoResults = emptyList()
+                userResults = emptyList()
+            }
             try {
-                Log.d(logTag, "search start keyword=$keyword type=$type")
+                Log.d(logTag, "search start keyword=$keyword type=$type requestId=$requestId")
                 ensureCookie()
                 ensureWbiKeys()
                 fetchAllSearch(keyword)
+                if (searchRequestId != requestId) {
+                    Log.d(logTag, "search cancelled, newer request started requestId=$requestId")
+                    return@launch
+                }
                 val activeType = currentSearchType
-                val firstPage = fetchTypeSearch(1, activeType)
+                val firstPage = fetchTypeSearch(1, activeType, currentOrder, requestId)
+                if (searchRequestId != requestId) {
+                    Log.d(logTag, "search cancelled after fetch, newer request started requestId=$requestId")
+                    return@launch
+                }
                 if (activeType == "bili_user") {
                     videoResults = emptyList()
                 } else {
                     videoResults = firstPage
                 }
+                Log.d(logTag, "search completed keyword=$keyword type=$type requestId=$requestId")
             } catch (e: Exception) {
-                Log.e(logTag, "search error", e)
-                error = e.localizedMessage ?: "搜索失败"
+                if (searchRequestId == requestId) {
+                    Log.e(logTag, "search error", e)
+                    error = e.localizedMessage ?: "搜索失败"
+                }
             } finally {
-                isLoading = false
+                if (searchRequestId == requestId) {
+                    isLoading = false
+                }
             }
         }
     }
@@ -263,9 +346,19 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
     fun switchType(type: String) {
         if (type == currentSearchType) return
         currentSearchType = type
+        // 切换到非video tab时，强制使用totalrank排序
+        if (type != "video") {
+            currentOrder = "totalrank"
+        }
         onTabChanged(type)
         if (currentKeyword.isNotBlank()) {
-            search(currentKeyword, type)
+            searchWithOrder(currentKeyword, type, currentOrder)
+        } else {
+            // 即使没有关键词也要清空数据，避免显示上一个tab的数据
+            videoResults = emptyList()
+            userResults = emptyList()
+            currentPage = 1
+            totalPages = 1
         }
     }
 
@@ -288,11 +381,11 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
                 ensureCookie()
                 ensureWbiKeys()
                 if (currentSearchType == "bili_user") {
-                    fetchTypeSearch(nextPage, currentSearchType)
+                    fetchTypeSearch(nextPage, currentSearchType, currentOrder, 0L, true)
                     currentPage = nextPage
                     return@launch
                 }
-                val more = fetchTypeSearch(nextPage, currentSearchType)
+                val more = fetchTypeSearch(nextPage, currentSearchType, currentOrder, 0L, true)
                 if (more.isNotEmpty()) {
                     videoResults = videoResults + more
                 }
@@ -326,6 +419,8 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
     }
 
     fun requestSuggestions(keyword: String) {
+        // 取消之前的建议请求
+        currentSuggestJob?.cancel()
         val requestId = ++suggestRequestId
         if (keyword.isBlank()) {
             searchSuggestions = emptyList()
@@ -333,7 +428,7 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
             isLoadingSuggest = false
             return
         }
-        viewModelScope.launch {
+        currentSuggestJob = viewModelScope.launch {
             isLoadingSuggest = true
             suggestError = null
             try {
@@ -350,6 +445,10 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
             } finally {
                 if (suggestRequestId == requestId) {
                     isLoadingSuggest = false
+                }
+                // 协程结束时清除Job引用
+                if (currentSuggestJob?.isActive != true) {
+                    currentSuggestJob = null
                 }
             }
         }
@@ -406,12 +505,12 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
         }
     }
 
-    private suspend fun fetchTypeSearch(page: Int, type: String, allowRetry: Boolean = true): List<Video> {
+    private suspend fun fetchTypeSearch(page: Int, type: String, order: String = currentOrder, requestId: Long = 0L, allowRetry: Boolean = true): List<Video> {
         val params = mapOf(
             "search_type" to type,
             "keyword" to currentKeyword,
             "page" to page.toString(),
-            "order" to "totalrank",
+            "order" to order,
             "duration" to "0",
             "tids" to "0"
         )
@@ -428,7 +527,7 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
                     if (allowRetry) {
                         ensureCookie()
                         ensureWbiKeys()
-                        return@withContext fetchTypeSearch(page, type, false)
+                        return@withContext fetchTypeSearch(page, type, order, requestId, false)
                     } else {
                         throw IllegalStateException("请求被拦截(-412)，已重置Cookie")
                     }
@@ -438,6 +537,10 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
                     throw IllegalStateException("分类搜索HTTP错误${resp.code}")
                 }
                 val body = resp.body?.string() ?: return@use emptyList()
+                if (requestId > 0 && searchRequestId != requestId) {
+                    Log.d(logTag, "fetchTypeSearch cancelled, requestId mismatch current=$searchRequestId requested=$requestId")
+                    return@use emptyList()
+                }
                 val mapped = if (type == "video") {
                     val apiResp = json.decodeFromString<SearchTypeResponse>(body)
                     if (apiResp.code != 0) {
@@ -448,7 +551,7 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
                     val list = apiResp.data?.result ?: emptyList()
                     list.map { it.toVideo() }
                 } else {
-                    parseNonVideoResults(body, type, page)
+                    parseNonVideoResults(body, type, page, requestId)
                 }
                 Log.d(logTag, "searchType ok page=$page mapped=${mapped.size} totalPages=$totalPages type=$type")
                 return@use mapped
@@ -667,11 +770,15 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
         )
     }
 
-    private fun parseNonVideoResults(body: String, type: String, page: Int): List<Video> {
+    private fun parseNonVideoResults(body: String, type: String, page: Int, requestId: Long = 0L): List<Video> {
         val root = json.parseToJsonElement(body)
         val dataObj = (root as? JsonObject)?.get("data") as? JsonObject ?: return emptyList()
         dataObj["numPages"]?.jsonPrimitive?.content?.toIntOrNull()?.let { if (it > 0) totalPages = it }
         if (type == "bili_user") {
+            if (requestId > 0 && searchRequestId != requestId) {
+                Log.d(logTag, "parseNonVideoResults cancelled for users, requestId mismatch current=$searchRequestId requested=$requestId")
+                return emptyList()
+            }
             val users = parseUserResults(dataObj)
             userResults = if (page == 1) users else userResults + users
             return emptyList()

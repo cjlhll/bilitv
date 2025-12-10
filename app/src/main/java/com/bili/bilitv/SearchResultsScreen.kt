@@ -155,7 +155,15 @@ fun SearchResultsScreen(
     var filterExpanded by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("综合排序") }
     var isFilterFocused by remember { mutableStateOf(false) }
-    val filterOptions = listOf("综合排序", "最多播放", "最新发布", "时长较短")
+    val filterOptions = listOf("综合排序", "最多播放", "最新发布", "最多弹幕", "最多收藏")
+
+    val orderMap = mapOf(
+        "综合排序" to "totalrank",
+        "最多播放" to "click",
+        "最新发布" to "pubdate",
+        "最多弹幕" to "dm",
+        "最多收藏" to "stow"
+    )
 
     // State Manager (ViewModel级别，跨导航持久化滚动与焦点)
     val stateManager: VideoGridStateManager = viewModel
@@ -166,19 +174,33 @@ fun SearchResultsScreen(
         }
     }
 
-    val typeList = viewModel.availableTypes
-    val availableTabs = remember(typeList) {
-        val dynamic = buildTabsFromTypes(typeList)
-        if (dynamic.isNotEmpty()) dynamic else listOf(TabItem("video", "视频"))
+    val availableTabs = buildTabsFromTypes(viewModel.availableTypes).ifEmpty {
+        listOf(TabItem("video", "视频"))
     }
+
+    val hasValidTabs = availableTabs.isNotEmpty()
     val selectedTabId = run {
         val current = viewModel.currentSearchType
         if (availableTabs.none { it.id.toString() == current }) {
-            val newId = availableTabs.first().id.toString()
-            viewModel.switchType(newId)
-            newId
+            availableTabs.firstOrNull()?.id?.toString() ?: "video"
         } else {
             current
+        }
+    }
+
+    LaunchedEffect(availableTabs, selectedTabId) {
+        if (availableTabs.none { it.id.toString() == selectedTabId } && availableTabs.isNotEmpty()) {
+            val newId = availableTabs.first().id.toString()
+            if (newId != viewModel.currentSearchType) {
+                viewModel.switchType(newId)
+            }
+        }
+    }
+
+    // 当切换到非video tab时，重置筛选状态
+    LaunchedEffect(selectedTabId) {
+        if (selectedTabId != "video" && selectedFilter != "综合排序") {
+            selectedFilter = "综合排序"
         }
     }
 
@@ -224,55 +246,63 @@ fun SearchResultsScreen(
                 contentPadding = PaddingValues(start = 0.dp, end = 8.dp)
             )
 
-            Box {
-                val isFilterSelected = selectedFilter != "综合排序"
+            if (selectedTabId == "video") {
+                Box {
+                    val isFilterSelected = selectedFilter != "综合排序"
 
-                Button(
-                    onClick = { filterExpanded = true },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isFilterSelected) MaterialTheme.colorScheme.primary
-                                         else MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = if (isFilterSelected) MaterialTheme.colorScheme.onPrimary
-                                       else MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    border = if (isFilterFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null,
-                    modifier = Modifier
-                        .height(26.dp)
-                        .defaultMinSize(minWidth = 0.dp, minHeight = 0.dp)
-                        .onFocusChanged { isFilterFocused = it.isFocused }
-                    ,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                ) {
-                    Text(text = "筛选", fontSize = 13.sp)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = selectedFilter, fontSize = 13.sp)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                DropdownMenu(
-                    expanded = filterExpanded,
-                    onDismissRequest = { filterExpanded = false }
-                ) {
-                    filterOptions.forEach { option ->
-                        DropdownMenuItem(
-                            text = { Text(option) },
-                            onClick = {
-                                selectedFilter = option
-                                filterExpanded = false
-                            }
+                    Button(
+                        onClick = { filterExpanded = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isFilterSelected) MaterialTheme.colorScheme.primary
+                                             else MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = if (isFilterSelected) MaterialTheme.colorScheme.onPrimary
+                                           else MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        border = if (isFilterFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null,
+                        modifier = Modifier
+                            .height(26.dp)
+                            .defaultMinSize(minWidth = 0.dp, minHeight = 0.dp)
+                            .onFocusChanged { isFilterFocused = it.isFocused }
+                        ,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Text(text = "筛选", fontSize = 13.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = selectedFilter, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
                         )
+                    }
+
+                    DropdownMenu(
+                        expanded = filterExpanded,
+                        onDismissRequest = { filterExpanded = false }
+                    ) {
+                        filterOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                onClick = {
+                                    selectedFilter = option
+                                    filterExpanded = false
+                                    val orderValue = orderMap[option] ?: "totalrank"
+                                    viewModel.updateSearchOrder(orderValue)
+                                    if (query.isNotBlank()) {
+                                        viewModel.searchWithOrder(query, viewModel.currentSearchType, orderValue)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
 
         val hasNoItem = if (isUserTab) users.isEmpty() else videos.isEmpty()
-        if (isLoading && hasNoItem) {
+        val shouldShowLoading = isLoading && hasNoItem
+        if (shouldShowLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -280,6 +310,15 @@ fun SearchResultsScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(text = "加载中…", style = MaterialTheme.typography.bodyMedium)
+            }
+        } else if (hasNoItem && !isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = "暂无数据", style = MaterialTheme.typography.bodyMedium)
             }
         } else {
             if (error != null) {

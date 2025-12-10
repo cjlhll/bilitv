@@ -34,6 +34,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.bili.bilitv.utils.WbiUtil
+import com.bili.bilitv.utils.FormatUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -454,7 +455,7 @@ fun LiveRoomCard(
                     ) {
                         IconWithText(
                             icon = Icons.Default.Person,
-                            text = formatOnline(room.online),
+                            text = FormatUtils.formatOnline(room.online),
                             iconSize = 10.dp,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                         )
@@ -490,13 +491,5 @@ fun LiveRoomCard(
                 }
             }
         }
-    }
-}
-
-fun formatOnline(online: Int): String {
-    return if (online >= 10000) {
-        String.format("%.1f万", online / 10000f)
-    } else {
-        online.toString()
     }
 }

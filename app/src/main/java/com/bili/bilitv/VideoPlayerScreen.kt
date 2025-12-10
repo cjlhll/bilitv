@@ -1141,18 +1141,9 @@ private fun calculateSeekStep(duration: Long, longPressDuration: Long = 0): Long
 }
 
 private fun snapToIndex(previewTime: Long, data: VideoshotData?, duration: Long): Long {
-    val indexList = data?.index ?: return previewTime
-    if (indexList.size <= 1) return previewTime
-    val timeInSeconds = previewTime / 1000.0
-    var snapped = previewTime
-    for (idx in 1 until indexList.size) {
-        val end = indexList[idx].toDouble()
-        val start = indexList[idx - 1].toDouble()
-        if (timeInSeconds <= end) {
-            snapped = (start * 1000).toLong()
-            break
-        }
-        snapped = (start * 1000).toLong()
-    }
-    return snapped.coerceIn(0, duration)
+    val indexList = data?.index ?: return previewTime.coerceIn(0, duration)
+    if (indexList.isEmpty()) return previewTime.coerceIn(0, duration)
+    val clamped = previewTime.coerceIn(0, duration)
+    val closest = indexList.minByOrNull { kotlin.math.abs(it * 1000 - clamped) } ?: return clamped
+    return (closest * 1000).coerceIn(0, duration)
 }

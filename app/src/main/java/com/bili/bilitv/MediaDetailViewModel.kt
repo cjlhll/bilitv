@@ -27,6 +27,7 @@ class MediaDetailViewModel(application: Application) : AndroidViewModel(applicat
     // Scroll state persistence
     var scrollPosition by mutableStateOf(0)
     var lastFocusedId by mutableStateOf<String?>(null)
+    var lastFocusedButton by mutableStateOf<String?>(null)
     
     // LazyRow scroll states map: key is section index (or some unique key), value is (index, offset)
     var rowScrollStates = mutableMapOf<String, Pair<Int, Int>>()
@@ -47,6 +48,7 @@ class MediaDetailViewModel(application: Application) : AndroidViewModel(applicat
         detailMedia = media
         scrollPosition = 0 // Reset scroll position for new media
         lastFocusedId = null // Reset focus for new media
+        lastFocusedButton = null // Reset button focus for new media
         rowScrollStates.clear() // Reset horizontal scroll states
         isDetailLoading = true
         detailError = null
@@ -201,5 +203,17 @@ class MediaDetailViewModel(application: Application) : AndroidViewModel(applicat
                 parsed.result
             }
         }
+    }
+
+    fun clearState() {
+        detailMedia = null
+        isAscending = false
+        isDetailLoading = false
+        detailError = null
+        sections = emptyList()
+        scrollPosition = 0
+        lastFocusedId = null
+        lastFocusedButton = null
+        rowScrollStates.clear()
     }
 }

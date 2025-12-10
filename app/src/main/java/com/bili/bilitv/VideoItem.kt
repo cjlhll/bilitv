@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Stable
+import com.bili.bilitv.utils.FormatUtils
 
 @Stable
 @Composable
@@ -218,16 +219,16 @@ fun VideoItem(
                                 if (video.playCount.isNotEmpty()) {
                                     IconWithText(
                                         icon = Icons.Filled.PlayArrow,
-                                        text = video.playCount
+                                        text = FormatUtils.formatCount(video.playCount)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                 }
-                                
+
                                 // 弹幕数
                                 if (video.danmakuCount.isNotEmpty()) {
                                     IconWithText(
                                         icon = Icons.Filled.Menu,
-                                        text = video.danmakuCount
+                                        text = FormatUtils.formatCount(video.danmakuCount)
                                     )
                                 }
                                 
