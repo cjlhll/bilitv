@@ -156,6 +156,13 @@ data class VideoshotData(
     val img_y_size: Int = 90  // 单张缩略图高度
 )
 
+@Serializable
+data class PgcPlayUrlResponse(
+    val code: Int,
+    val message: String,
+    val result: PlayUrlData? = null
+)
+
 object VideoPlayUrlFetcher {
     private val client = OkHttpClient()
     private val json = Json { 
@@ -167,6 +174,108 @@ object VideoPlayUrlFetcher {
     private var imgKey: String? = null
     private var subKey: String? = null
     
+    /**
+     * 获取番剧/影视播放地址 (PGC)
+     * @param epId 剧集EP ID
+     * @param cid 视频CID
+     * @param qn 清晰度
+     * @param fnval 格式标记
+     * @param cookie 登录Cookie
+     */
+    suspend fun fetchPgcPlayUrl(epId: Long, cid: Long, bvid: String, aid: Long = 0, qn: Int = 64, fnval: Int = 4048, cookie: String? = null): VideoPlayInfo? {
+        return withContext(Dispatchers.IO) {
+            try {
+                // PGC不需要WBI签名，直接请求
+                val params = mutableMapOf<String, String>(
+                    "qn" to qn.toString(),
+                    "fnval" to fnval.toString(),
+                    "fnver" to "0",
+                    "fourk" to "1"
+                )
+                
+                if (epId > 0) {
+                    params["ep_id"] = epId.toString()
+                } else {
+                    params["cid"] = cid.toString()
+                }
+
+                val query = params.entries.joinToString("&") { "${it.key}=${it.value}" }
+                val url = "https://api.bilibili.com/pgc/player/web/playurl?$query"
+                
+                val requestBuilder = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .header("Referer", "https://www.bilibili.com")
+                
+                cookie?.let {
+                    requestBuilder.header("Cookie", it)
+                }
+                
+                val request = requestBuilder.build()
+                val response = client.newCall(request).execute()
+                
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (body != null) {
+                        val pgcResponse = json.decodeFromString<PgcPlayUrlResponse>(body)
+                        if (pgcResponse.code == 0 && pgcResponse.result != null) {
+                            val data = pgcResponse.result
+                            Log.i("BiliTV", "PGC PlayUrl data: quality=${data.quality}, format=${data.format}")
+
+                            // 优先使用DASH
+                            if (data.dash != null) {
+                                val targetQualityVideos = data.dash.video.filter { it.id == data.quality }
+                                val video = targetQualityVideos.find { 
+                                    it.codecs.startsWith("avc") || it.codecs.startsWith("h264") 
+                                } ?: targetQualityVideos.firstOrNull()
+                                  ?: data.dash.video.firstOrNull()
+                                
+                                val audio = data.dash.audio?.firstOrNull()
+                                
+                                if (video != null) {
+                                    return@withContext VideoPlayInfo(
+                                        aid = aid,
+                                        bvid = bvid,
+                                        cid = cid,
+                                        quality = video.id,
+                                        format = "dash",
+                                        duration = data.timelength / 1000,
+                                        videoUrl = video.baseUrl.ifEmpty { video.base_url ?: "" },
+                                        audioUrl = audio?.baseUrl?.ifEmpty { audio.base_url ?: "" },
+                                        lastPlayTime = data.last_play_time
+                                    )
+                                }
+                            }
+                            
+                            // 降级到MP4 (durl)
+                            if (data.durl != null && data.durl.isNotEmpty()) {
+                                val item = data.durl[0]
+                                return@withContext VideoPlayInfo(
+                                    aid = aid,
+                                    bvid = bvid,
+                                    cid = cid,
+                                    quality = data.quality,
+                                    format = "mp4",
+                                    duration = data.timelength / 1000,
+                                    videoUrl = item.url,
+                                    lastPlayTime = data.last_play_time
+                                )
+                            }
+                        } else {
+                            Log.e("BiliTV", "PGC API error: ${pgcResponse.message}")
+                        }
+                    }
+                } else {
+                    Log.e("BiliTV", "PGC HTTP error: ${response.code}")
+                }
+                null
+            } catch (e: Exception) {
+                Log.e("BiliTV", "Error fetching PGC play URL", e)
+                null
+            }
+        }
+    }
+
     /**
      * 获取视频播放地址
      * @param bvid 视频BV号

@@ -455,6 +455,11 @@ fun MainScreen() {
                                 onBack = {
                                     selectedMedia = null
                                     currentRoute = NavRoute.SEARCH_RESULT
+                                },
+                                onPlay = { playInfo, title ->
+                                    isFullScreenPlayer = true
+                                    fullScreenPlayInfo = playInfo
+                                    fullScreenVideoTitle = title
                                 }
                             )
                         }

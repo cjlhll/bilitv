@@ -44,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,11 +67,13 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import kotlinx.coroutines.launch
 
 @Composable
 fun MediaDetailScreen(
     media: Video,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onPlay: (VideoPlayInfo, String) -> Unit = { _, _ -> }
 ) {
     val logTag = "MediaDetail"
     val context = LocalContext.current
@@ -111,6 +114,33 @@ fun MediaDetailScreen(
     val primaryEpisode = displayedMainEpisodes.firstOrNull()
 
     BackHandler { onBack() }
+    
+    val coroutineScope = rememberCoroutineScope()
+    fun handlePlay(episode: MediaEpisode) {
+        coroutineScope.launch {
+            val cookie = SessionManager.getSession()?.toCookieString()
+            // 使用ep_id获取播放地址
+            val playInfo = VideoPlayUrlFetcher.fetchPgcPlayUrl(
+                epId = episode.id,
+                cid = episode.cid,
+                bvid = episode.bvid,
+                aid = episode.aid,
+                cookie = cookie
+            )
+            
+            if (playInfo != null) {
+                onPlay(playInfo, "${episode.indexTitle} ${episode.longTitle}")
+            } else {
+                // 如果获取失败，尝试打开网页
+                val targetUrl = episode.url.ifBlank { detailMedia.url }
+                if (targetUrl.isNotBlank()) {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                }
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -202,11 +232,15 @@ fun MediaDetailScreen(
                             var isPlayFocused by remember { mutableStateOf(false) }
                             Button(
                                 onClick = {
-                                    val targetUrl = primaryEpisode?.url?.ifBlank { detailMedia.url } ?: detailMedia.url
-                                    if (targetUrl.isNotBlank()) {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
-                                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        context.startActivity(intent)
+                                    if (primaryEpisode != null) {
+                                        handlePlay(primaryEpisode)
+                                    } else {
+                                        val targetUrl = primaryEpisode?.url?.ifBlank { media.url } ?: media.url
+                                        if (targetUrl.isNotBlank()) {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
+                                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            context.startActivity(intent)
+                                        }
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
@@ -312,14 +346,7 @@ fun MediaDetailScreen(
                                 items(episodesToShow) { ep ->
                                     EpisodeCard(
                                         episode = ep,
-                                        onClick = {
-                                            val targetUrl = ep.url.ifBlank { detailMedia.url }
-                                            if (targetUrl.isNotBlank()) {
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
-                                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                context.startActivity(intent)
-                                            }
-                                        },
+                                        onClick = { handlePlay(ep) },
                                         modifier = Modifier.width(240.dp)
                                     )
                                 }
@@ -525,7 +552,8 @@ private data class SeasonDetailResult(
     @SerialName("type_name") val typeName: String = "",
     val link: String = "",
     val staff: String = "",
-    val cv: String = ""
+    val cv: String = "",
+    val bvid: String = ""
 )
 
 @Serializable
@@ -538,7 +566,8 @@ private data class SeasonEpisode(
     val cover: String = "",
     @SerialName("share_url") val shareUrl: String = "",
     val badge: String = "",
-    @SerialName("badge_info") val badgeInfo: SeasonBadgeInfo? = null
+    @SerialName("badge_info") val badgeInfo: SeasonBadgeInfo? = null,
+    val bvid: String = ""
 )
 
 @Serializable
@@ -589,6 +618,9 @@ private suspend fun loadMediaDetail(initial: Video): Pair<Video, List<DetailSect
         val badgeText = ep.badgeInfo?.text?.ifBlank { ep.badge } ?: ep.badge
         MediaEpisode(
             id = ep.id,
+            aid = ep.aid,
+            cid = ep.cid,
+            bvid = ep.bvid.ifBlank { detail.bvid }, // Use episode's bvid, fallback to season's bvid
             title = ep.title,
             longTitle = ep.longTitle,
             indexTitle = ep.title,

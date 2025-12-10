@@ -88,6 +88,9 @@ data class Badge(
 @Stable
 data class MediaEpisode(
     val id: Long = 0,
+    val aid: Long = 0,
+    val cid: Long = 0,
+    val bvid: String = "",
     val title: String = "",
     val longTitle: String = "",
     val indexTitle: String = "",
