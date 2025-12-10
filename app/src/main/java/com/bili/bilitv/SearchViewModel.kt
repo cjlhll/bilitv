@@ -186,294 +186,240 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
     private var imgKey: String? = null
     private var subKey: String? = null
     private var suggestRequestId = 0L
-    private var searchRequestId = 0L
-    private var currentSearchJob: Job? = null
-    private var currentSuggestJob: Job? = null
-    private val userAgent =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    private val logTag = "SearchVM"
-
-    // 网格状态持久化
-    private val scrollStateMap = mutableStateMapOf<Any, Pair<Int, Int>>()
-    private val focusIndexMap = mutableStateMapOf<Any, Int>()
-    override var shouldRestoreFocusToGrid by mutableStateOf(false)
-
-    init {
-        searchHistory = SearchHistoryManager.load()
-    }
-
-    fun updateSearchInput(text: String) {
-        searchInput = text
-    }
-
-    fun clearSearchInput() {
-        searchInput = ""
-    }
-
-    fun appendToSearchInput(text: String) {
-        searchInput += text
-    }
-
-    fun deleteLastChar() {
-        if (searchInput.isNotEmpty()) {
-            searchInput = searchInput.dropLast(1)
+        private var searchRequestId = 0L
+        private var currentSearchJob: Job? = null
+        private var currentSuggestJob: Job? = null
+        private var currentLoadMoreJob: Job? = null
+        private val userAgent =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        private val logTag = "SearchVM"
+    
+        // 网格状态持久化
+        private val scrollStateMap = mutableStateMapOf<Any, Pair<Int, Int>>()
+        private val focusIndexMap = mutableStateMapOf<Any, Int>()
+        override var shouldRestoreFocusToGrid by mutableStateOf(false)
+    
+        init {
+            searchHistory = SearchHistoryManager.load()
         }
-    }
-
-    fun addHistory(keyword: String) {
-        val trimmed = keyword.trim()
-        if (trimmed.isBlank()) return
-        val newList = listOf(trimmed) + searchHistory.filterNot { it.equals(trimmed, ignoreCase = true) }
-        searchHistory = newList.take(20)
-        SearchHistoryManager.save(searchHistory)
-    }
-
-    fun updateFocus(area: String, index: Int = 0) {
-        lastFocusArea = area
-        lastFocusIndex = index
-    }
-
+    
+        fun updateSearchInput(text: String) {
+            searchInput = text
+        }
+    
+        fun clearSearchInput() {
+            searchInput = ""
+        }
+    
+        fun appendToSearchInput(text: String) {
+            searchInput += text
+        }
+    
+        fun deleteLastChar() {
+            if (searchInput.isNotEmpty()) {
+                searchInput = searchInput.dropLast(1)
+            }
+        }
+    
+        fun addHistory(keyword: String) {
+            val trimmed = keyword.trim()
+            if (trimmed.isBlank()) return
+            val newList = listOf(trimmed) + searchHistory.filterNot { it.equals(trimmed, ignoreCase = true) }
+            searchHistory = newList.take(20)
+            SearchHistoryManager.save(searchHistory)
+        }
+    
+        fun updateFocus(area: String, index: Int = 0) {
+            lastFocusArea = area
+            lastFocusIndex = index
+        }
+    
         fun updateSearchOrder(order: String) {
-
             currentOrder = order
-
         }
-
     
-
         fun resetSearchState() {
-
-            videoResults = emptyList()
-
-            userResults = emptyList()
-
-            availableTypes = listOf("video")
-
-            showModules = emptyList()
-
-            currentKeyword = ""
-
-            currentPage = 1
-
-            totalPages = 1
-
-            error = null
-
-        }
-
-    
-
-        fun searchWithOrder(keyword: String, type: String = currentSearchType, order: String = currentOrder, needGlobalInfo: Boolean = true) {
-
-            if (keyword.isBlank()) return
-
-            // 取消之前的搜索请求
-
+            currentLoadMoreJob?.cancel()
             currentSearchJob?.cancel()
-
-            val requestId = ++searchRequestId
-
-            currentSearchJob = viewModelScope.launch {
-
-                val wasLoading = isLoading
-
-                isLoading = true
-
-                error = null
-
-                currentKeyword = keyword
-
-                currentSearchType = type
-
-                currentOrder = order
-
-                currentPage = 1
-
-                totalPages = 1
-
-                
-
-                // Always clear results to prevent showing stale data from previous tab/request
-
-                videoResults = emptyList()
-
-                userResults = emptyList()
-
-    
-
-                try {
-
-                    Log.d(logTag, "searchWithOrder start keyword=$keyword type=$type order=$order requestId=$requestId global=$needGlobalInfo")
-
-                    ensureCookie()
-
-                    ensureWbiKeys()
-
-                    
-
-                    if (needGlobalInfo) {
-
-                        fetchAllSearch(keyword)
-
-                        if (searchRequestId != requestId) {
-
-                            Log.d(logTag, "searchWithOrder cancelled after global fetch, newer request started requestId=$requestId")
-
-                            return@launch
-
-                        }
-
-                    }
-
-    
-
-                    val activeType = currentSearchType
-
-                    // Ensure we are fetching for the type that is currently active
-
-                    if (activeType != type) {
-
-                         Log.d(logTag, "searchWithOrder type mismatch, active=$activeType requested=$type")
-
-                         return@launch
-
-                    }
-
-    
-
-                    val activeOrder = currentOrder
-
-                    val firstPage = fetchTypeSearch(1, activeType, activeOrder, requestId)
-
-                    
-
-                    if (searchRequestId != requestId) {
-
-                        Log.d(logTag, "searchWithOrder cancelled after fetch, newer request started requestId=$requestId")
-
-                        return@launch
-
-                    }
-
-                    
-
-                    // Final check: ensure the type we fetched is still the current type
-
-                    if (currentSearchType != activeType) {
-
-                        Log.d(logTag, "searchWithOrder ignored result, type changed during fetch. current=$currentSearchType fetched=$activeType")
-
-                        return@launch
-
-                    }
-
-    
-
-                    if (activeType == "bili_user") {
-
-                        videoResults = emptyList()
-
-                    } else {
-
-                        videoResults = firstPage
-
-                    }
-
-                    Log.d(logTag, "searchWithOrder completed keyword=$keyword type=$type order=$order requestId=$requestId")
-
-                } catch (e: Exception) {
-
-                    if (searchRequestId == requestId) {
-
-                        Log.e(logTag, "searchWithOrder error", e)
-
-                        error = e.localizedMessage ?: "搜索失败"
-
-                    }
-
-                } finally {
-
-                    if (searchRequestId == requestId) {
-
-                        isLoading = false
-
-                    }
-
-                    // 协程结束时清除Job引用
-
-                    if (currentSearchJob?.isActive != true) {
-
-                        currentSearchJob = null
-
-                    }
-
-                }
-
-            }
-
-        }
-
-    fun search(keyword: String, type: String = currentSearchType) {
-        // Reuse searchWithOrder for unified logic
-        searchWithOrder(keyword, type, currentOrder, needGlobalInfo = true)
-    }
-
-    fun switchType(type: String) {
-        if (type == currentSearchType) return
-        currentSearchType = type
-        // 切换到非video tab时，强制使用totalrank排序
-        if (type != "video") {
-            currentOrder = "totalrank"
-        }
-        onTabChanged(type)
-        if (currentKeyword.isNotBlank()) {
-            // Switching tabs does not need to re-fetch global info (tabs list etc.)
-            searchWithOrder(currentKeyword, type, currentOrder, needGlobalInfo = false)
-        } else {
-            // 即使没有关键词也要清空数据，避免显示上一个tab的数据
             videoResults = emptyList()
             userResults = emptyList()
+            availableTypes = listOf("video")
+            showModules = emptyList()
+            currentKeyword = ""
             currentPage = 1
             totalPages = 1
+            error = null
         }
-    }
-
-    fun onTabChanged(@Suppress("UNUSED_PARAMETER") type: String) {
-        shouldRestoreFocusToGrid = false
-    }
-
-    fun onEnterFullScreenFromResult() {
-        shouldRestoreFocusToGrid = true
-    }
-
-    fun loadMoreVideos() {
-        if (isLoadingMore || currentKeyword.isBlank()) return
-        if (currentPage >= totalPages) return
-        val nextPage = currentPage + 1
-        viewModelScope.launch {
-            isLoadingMore = true
-            try {
-                Log.d(logTag, "loadMore page=$nextPage type=$currentSearchType")
-                ensureCookie()
-                ensureWbiKeys()
-                if (currentSearchType == "bili_user") {
-                    fetchTypeSearch(nextPage, currentSearchType, currentOrder, 0L, true)
-                    currentPage = nextPage
-                    return@launch
+    
+        fun searchWithOrder(keyword: String, type: String = currentSearchType, order: String = currentOrder, needGlobalInfo: Boolean = true) {
+            if (keyword.isBlank()) return
+            // 取消之前的搜索请求和加载更多请求
+            currentSearchJob?.cancel()
+            currentLoadMoreJob?.cancel()
+            
+            val requestId = ++searchRequestId
+            currentSearchJob = viewModelScope.launch {
+                val wasLoading = isLoading
+                isLoading = true
+                error = null
+                currentKeyword = keyword
+                currentSearchType = type
+                currentOrder = order
+                currentPage = 1
+                totalPages = 1
+                
+                // Always clear results to prevent showing stale data from previous tab/request
+                videoResults = emptyList()
+                userResults = emptyList()
+    
+                try {
+                    Log.d(logTag, "searchWithOrder start keyword=$keyword type=$type order=$order requestId=$requestId global=$needGlobalInfo")
+                    ensureCookie()
+                    ensureWbiKeys()
+                    
+                    if (needGlobalInfo) {
+                        fetchAllSearch(keyword)
+                        if (searchRequestId != requestId) {
+                            Log.d(logTag, "searchWithOrder cancelled after global fetch, newer request started requestId=$requestId")
+                            return@launch
+                        }
+                    }
+    
+                    val activeType = currentSearchType
+                    // Ensure we are fetching for the type that is currently active
+                    if (activeType != type) {
+                         Log.d(logTag, "searchWithOrder type mismatch, active=$activeType requested=$type")
+                         return@launch
+                    }
+    
+                    val activeOrder = currentOrder
+                    val firstPage = fetchTypeSearch(1, activeType, activeOrder, requestId)
+                    
+                    if (searchRequestId != requestId) {
+                        Log.d(logTag, "searchWithOrder cancelled after fetch, newer request started requestId=$requestId")
+                        return@launch
+                    }
+                    
+                    // Final check: ensure the type we fetched is still the current type
+                    if (currentSearchType != activeType) {
+                        Log.d(logTag, "searchWithOrder ignored result, type changed during fetch. current=$currentSearchType fetched=$activeType")
+                        return@launch
+                    }
+    
+                    if (activeType == "bili_user") {
+                        videoResults = emptyList()
+                    } else {
+                        videoResults = firstPage
+                    }
+                    Log.d(logTag, "searchWithOrder completed keyword=$keyword type=$type order=$order requestId=$requestId")
+                } catch (e: Exception) {
+                    if (searchRequestId == requestId) {
+                        Log.e(logTag, "searchWithOrder error", e)
+                        error = e.localizedMessage ?: "搜索失败"
+                    }
+                } finally {
+                    if (searchRequestId == requestId) {
+                        isLoading = false
+                    }
+                    // 协程结束时清除Job引用
+                    if (currentSearchJob?.isActive != true) {
+                        currentSearchJob = null
+                    }
                 }
-                val more = fetchTypeSearch(nextPage, currentSearchType, currentOrder, 0L, true)
-                if (more.isNotEmpty()) {
-                    videoResults = videoResults + more
-                }
-                currentPage = nextPage
-            } catch (e: Exception) {
-                Log.e(logTag, "loadMore error", e)
-                error = e.localizedMessage ?: "翻页失败"
-            } finally {
-                isLoadingMore = false
             }
         }
-    }
+    
+        fun search(keyword: String, type: String = currentSearchType) {
+            // Reuse searchWithOrder for unified logic
+            searchWithOrder(keyword, type, currentOrder, needGlobalInfo = true)
+        }
+    
+        fun switchType(type: String) {
+            if (type == currentSearchType) return
+            currentSearchType = type
+            // 切换到非video tab时，强制使用totalrank排序
+            if (type != "video") {
+                currentOrder = "totalrank"
+            }
+            onTabChanged(type)
+            if (currentKeyword.isNotBlank()) {
+                // Switching tabs does not need to re-fetch global info (tabs list etc.)
+                searchWithOrder(currentKeyword, type, currentOrder, needGlobalInfo = false)
+            } else {
+                // 即使没有关键词也要清空数据，避免显示上一个tab的数据
+                videoResults = emptyList()
+                userResults = emptyList()
+                currentPage = 1
+                totalPages = 1
+            }
+        }
+    
+        fun onTabChanged(@Suppress("UNUSED_PARAMETER") type: String) {
+            shouldRestoreFocusToGrid = false
+        }
+    
+        fun onEnterFullScreenFromResult() {
+            shouldRestoreFocusToGrid = true
+        }
+    
+        fun loadMoreVideos() {
+            if (isLoadingMore || currentKeyword.isBlank()) return
+            if (currentPage >= totalPages) return
+            
+            // 取消之前的加载更多（防止并发）
+            currentLoadMoreJob?.cancel()
+            
+            val nextPage = currentPage + 1
+            val requestingType = currentSearchType
+            
+            currentLoadMoreJob = viewModelScope.launch {
+                isLoadingMore = true
+                try {
+                    Log.d(logTag, "loadMore page=$nextPage type=$requestingType")
+                    ensureCookie()
+                    ensureWbiKeys()
+                    
+                    // 再次检查类型是否发生变化（防止在等待cookie时切换了Tab）
+                    if (currentSearchType != requestingType) {
+                        Log.d(logTag, "loadMore aborted: type changed from $requestingType to $currentSearchType")
+                        return@launch
+                    }
+    
+                    if (requestingType == "bili_user") {
+                        // bili_user 翻页逻辑略有不同，这里暂时复用 fetchTypeSearch 的副作用
+                        fetchTypeSearch(nextPage, requestingType, currentOrder, 0L, true)
+                        currentPage = nextPage
+                        return@launch
+                    }
+                    
+                    val more = fetchTypeSearch(nextPage, requestingType, currentOrder, 0L, true)
+                    
+                    // 结果回来后再次检查类型
+                    if (currentSearchType != requestingType) {
+                        Log.d(logTag, "loadMore result ignored: type changed from $requestingType to $currentSearchType")
+                        return@launch
+                    }
+                    
+                    if (more.isNotEmpty()) {
+                        videoResults = videoResults + more
+                    }
+                    currentPage = nextPage
+                } catch (e: Exception) {
+                    if (currentSearchType == requestingType) {
+                        Log.e(logTag, "loadMore error", e)
+                        error = e.localizedMessage ?: "翻页失败"
+                    }
+                } finally {
+                    // 只有当类型匹配时才重置loadingMore，或者简单地总是重置
+                    if (currentSearchType == requestingType) {
+                        isLoadingMore = false
+                    }
+                    if (currentLoadMoreJob?.isActive != true) {
+                        currentLoadMoreJob = null
+                    }
+                }
+            }
+        }
 
     fun loadHotSearches(force: Boolean = false) {
         if (isLoadingHotSearches) return
