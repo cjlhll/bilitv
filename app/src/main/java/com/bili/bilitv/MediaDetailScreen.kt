@@ -20,6 +20,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -57,6 +58,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
+import okhttp3.Request
 
 @Composable
 fun MediaDetailScreen(
@@ -66,12 +74,31 @@ fun MediaDetailScreen(
     val context = LocalContext.current
     val scrollState = rememberScrollState()
     var isAscending by remember { mutableStateOf(false) }
+    var otherSeasons by remember { mutableStateOf<List<Video>>(emptyList()) }
+    var isSeasonsLoading by remember { mutableStateOf(false) }
+    var seasonsError by remember { mutableStateOf<String?>(null) }
 
     val coverModel = remember(media.coverUrl) {
         ImageRequest.Builder(context)
             .data(media.coverUrl)
             .size(ImageConfig.VIDEO_COVER_SIZE)
             .build()
+    }
+    
+    LaunchedEffect(media.seasonId) {
+        if (media.seasonId != 0L) {
+            isSeasonsLoading = true
+            seasonsError = null
+            try {
+                otherSeasons = fetchSeasonList(media.seasonId)
+            } catch (e: Exception) {
+                seasonsError = e.localizedMessage ?: "加载更多剧集失败"
+            } finally {
+                isSeasonsLoading = false
+            }
+        } else {
+            otherSeasons = emptyList()
+        }
     }
     
     val displayedEpisodes = remember(media.episodes, isAscending) {
@@ -288,6 +315,127 @@ fun MediaDetailScreen(
                         )
                     }
                 }
+            }
+            
+            when {
+                otherSeasons.isNotEmpty() -> {
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Text(
+                        text = "其他剧集",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(otherSeasons) { season ->
+                            VerticalMediaCard(
+                                video = season,
+                                onClick = {
+                                    val targetUrl = season.url.ifBlank { media.url }
+                                    if (targetUrl.isNotBlank()) {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
+                                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        context.startActivity(intent)
+                                    }
+                                },
+                                modifier = Modifier.width(156.dp)
+                            )
+                        }
+                    }
+                }
+                isSeasonsLoading -> {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "正在加载更多剧集…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.85f)
+                    )
+                }
+                seasonsError != null -> {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = seasonsError ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Serializable
+private data class SeasonSimpleResponse(
+    val code: Int,
+    val message: String = "",
+    val result: SeasonSimpleResult? = null
+)
+
+@Serializable
+private data class SeasonSimpleResult(
+    val seasons: List<SeasonSimpleItem>? = null
+)
+
+@Serializable
+private data class SeasonSimpleItem(
+    @SerialName("season_id") val seasonId: Long = 0,
+    @SerialName("season_title") val seasonTitle: String = "",
+    val cover: String = "",
+    @SerialName("horizontal_cover_169") val horizontalCover169: String = "",
+    @SerialName("horizontal_cover_1610") val horizontalCover1610: String = "",
+    val badge: String = "",
+    @SerialName("badge_info") val badgeInfo: SeasonBadgeInfo? = null,
+    @SerialName("new_ep") val newEp: SeasonNewEp? = null,
+    val link: String = ""
+)
+
+@Serializable
+private data class SeasonBadgeInfo(
+    val text: String = "",
+    @SerialName("bg_color") val bgColor: String = "",
+    @SerialName("text_color") val textColor: String = ""
+)
+
+@Serializable
+private data class SeasonNewEp(
+    @SerialName("index_show") val indexShow: String = ""
+)
+
+private suspend fun fetchSeasonList(seasonId: Long): List<Video> {
+    val client = OkHttpClient()
+    val url = "https://api.bilibili.com/pgc/view/web/simple/season?season_id=$seasonId"
+    val req = Request.Builder().url(url).get().build()
+    val json = Json { ignoreUnknownKeys = true }
+    return withContext(Dispatchers.IO) {
+        client.newCall(req).execute().use { resp ->
+            val body = resp.body?.string() ?: return@use emptyList()
+            val parsed = json.decodeFromString<SeasonSimpleResponse>(body)
+            if (parsed.code != 0) return@use emptyList()
+            val list = parsed.result?.seasons.orEmpty()
+            list.map { item ->
+                val badgeText = item.badgeInfo?.text?.ifBlank { item.badge } ?: item.badge
+                val badge = badgeText.takeIf { it.isNotBlank() }?.let {
+                    Badge(
+                        text = it,
+                        textColor = item.badgeInfo?.textColor ?: "#FFFFFF",
+                        bgColor = item.badgeInfo?.bgColor ?: "#FB7299",
+                        borderColor = item.badgeInfo?.bgColor ?: "#FB7299"
+                    )
+                }
+                val cover = item.cover.ifBlank { item.horizontalCover169.ifBlank { item.horizontalCover1610 } }
+                Video(
+                    id = item.seasonId.toString(),
+                    title = item.seasonTitle,
+                    coverUrl = cover,
+                    desc = item.newEp?.indexShow ?: "",
+                    badges = badge?.let { listOf(it) } ?: emptyList(),
+                    seasonId = item.seasonId,
+                    url = item.link
+                )
             }
         }
     }
