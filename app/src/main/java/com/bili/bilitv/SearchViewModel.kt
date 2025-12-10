@@ -233,112 +233,189 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
         lastFocusIndex = index
     }
 
-    fun updateSearchOrder(order: String) {
-        currentOrder = order
-    }
+        fun updateSearchOrder(order: String) {
 
-    fun searchWithOrder(keyword: String, type: String = currentSearchType, order: String = currentOrder) {
-        if (keyword.isBlank()) return
-        // 取消之前的搜索请求
-        currentSearchJob?.cancel()
-        val requestId = ++searchRequestId
-        currentSearchJob = viewModelScope.launch {
-            val wasLoading = isLoading
-            isLoading = true
-            error = null
-            currentKeyword = keyword
-            currentSearchType = type
             currentOrder = order
-            currentPage = 1
-            totalPages = 1
-            // Always clear results to prevent showing stale data from previous tab/request
-            videoResults = emptyList()
-            userResults = emptyList()
-            try {
-                Log.d(logTag, "searchWithOrder start keyword=$keyword type=$type order=$order requestId=$requestId")
-                ensureCookie()
-                ensureWbiKeys()
-                fetchAllSearch(keyword)
-                if (searchRequestId != requestId) {
-                    Log.d(logTag, "searchWithOrder cancelled, newer request started requestId=$requestId")
-                    return@launch
-                }
-                val activeType = currentSearchType
-                val activeOrder = currentOrder
-                val firstPage = fetchTypeSearch(1, activeType, activeOrder, requestId)
-                if (searchRequestId != requestId) {
-                    Log.d(logTag, "searchWithOrder cancelled after fetch, newer request started requestId=$requestId")
-                    return@launch
-                }
-                if (activeType == "bili_user") {
-                    videoResults = emptyList()
-                } else {
-                    videoResults = firstPage
-                }
-                Log.d(logTag, "searchWithOrder completed keyword=$keyword type=$type order=$order requestId=$requestId")
-            } catch (e: Exception) {
-                if (searchRequestId == requestId) {
-                    Log.e(logTag, "searchWithOrder error", e)
-                    error = e.localizedMessage ?: "搜索失败"
-                }
-            } finally {
-                if (searchRequestId == requestId) {
-                    isLoading = false
-                }
-                // 协程结束时清除Job引用
-                if (currentSearchJob?.isActive != true) {
-                    currentSearchJob = null
-                }
-            }
+
         }
-    }
+
+    
+
+        fun resetSearchState() {
+
+            videoResults = emptyList()
+
+            userResults = emptyList()
+
+            availableTypes = listOf("video")
+
+            showModules = emptyList()
+
+            currentKeyword = ""
+
+            currentPage = 1
+
+            totalPages = 1
+
+            error = null
+
+        }
+
+    
+
+        fun searchWithOrder(keyword: String, type: String = currentSearchType, order: String = currentOrder, needGlobalInfo: Boolean = true) {
+
+            if (keyword.isBlank()) return
+
+            // 取消之前的搜索请求
+
+            currentSearchJob?.cancel()
+
+            val requestId = ++searchRequestId
+
+            currentSearchJob = viewModelScope.launch {
+
+                val wasLoading = isLoading
+
+                isLoading = true
+
+                error = null
+
+                currentKeyword = keyword
+
+                currentSearchType = type
+
+                currentOrder = order
+
+                currentPage = 1
+
+                totalPages = 1
+
+                
+
+                // Always clear results to prevent showing stale data from previous tab/request
+
+                videoResults = emptyList()
+
+                userResults = emptyList()
+
+    
+
+                try {
+
+                    Log.d(logTag, "searchWithOrder start keyword=$keyword type=$type order=$order requestId=$requestId global=$needGlobalInfo")
+
+                    ensureCookie()
+
+                    ensureWbiKeys()
+
+                    
+
+                    if (needGlobalInfo) {
+
+                        fetchAllSearch(keyword)
+
+                        if (searchRequestId != requestId) {
+
+                            Log.d(logTag, "searchWithOrder cancelled after global fetch, newer request started requestId=$requestId")
+
+                            return@launch
+
+                        }
+
+                    }
+
+    
+
+                    val activeType = currentSearchType
+
+                    // Ensure we are fetching for the type that is currently active
+
+                    if (activeType != type) {
+
+                         Log.d(logTag, "searchWithOrder type mismatch, active=$activeType requested=$type")
+
+                         return@launch
+
+                    }
+
+    
+
+                    val activeOrder = currentOrder
+
+                    val firstPage = fetchTypeSearch(1, activeType, activeOrder, requestId)
+
+                    
+
+                    if (searchRequestId != requestId) {
+
+                        Log.d(logTag, "searchWithOrder cancelled after fetch, newer request started requestId=$requestId")
+
+                        return@launch
+
+                    }
+
+                    
+
+                    // Final check: ensure the type we fetched is still the current type
+
+                    if (currentSearchType != activeType) {
+
+                        Log.d(logTag, "searchWithOrder ignored result, type changed during fetch. current=$currentSearchType fetched=$activeType")
+
+                        return@launch
+
+                    }
+
+    
+
+                    if (activeType == "bili_user") {
+
+                        videoResults = emptyList()
+
+                    } else {
+
+                        videoResults = firstPage
+
+                    }
+
+                    Log.d(logTag, "searchWithOrder completed keyword=$keyword type=$type order=$order requestId=$requestId")
+
+                } catch (e: Exception) {
+
+                    if (searchRequestId == requestId) {
+
+                        Log.e(logTag, "searchWithOrder error", e)
+
+                        error = e.localizedMessage ?: "搜索失败"
+
+                    }
+
+                } finally {
+
+                    if (searchRequestId == requestId) {
+
+                        isLoading = false
+
+                    }
+
+                    // 协程结束时清除Job引用
+
+                    if (currentSearchJob?.isActive != true) {
+
+                        currentSearchJob = null
+
+                    }
+
+                }
+
+            }
+
+        }
 
     fun search(keyword: String, type: String = currentSearchType) {
-        if (keyword.isBlank()) return
-        val requestId = ++searchRequestId
-        viewModelScope.launch {
-            val wasLoading = isLoading
-            isLoading = true
-            error = null
-            currentKeyword = keyword
-            currentSearchType = type
-            currentPage = 1
-            totalPages = 1
-            // Always clear results to prevent showing stale data from previous tab/request
-            videoResults = emptyList()
-            userResults = emptyList()
-            try {
-                Log.d(logTag, "search start keyword=$keyword type=$type requestId=$requestId")
-                ensureCookie()
-                ensureWbiKeys()
-                fetchAllSearch(keyword)
-                if (searchRequestId != requestId) {
-                    Log.d(logTag, "search cancelled, newer request started requestId=$requestId")
-                    return@launch
-                }
-                val activeType = currentSearchType
-                val firstPage = fetchTypeSearch(1, activeType, currentOrder, requestId)
-                if (searchRequestId != requestId) {
-                    Log.d(logTag, "search cancelled after fetch, newer request started requestId=$requestId")
-                    return@launch
-                }
-                if (activeType == "bili_user") {
-                    videoResults = emptyList()
-                } else {
-                    videoResults = firstPage
-                }
-                Log.d(logTag, "search completed keyword=$keyword type=$type requestId=$requestId")
-            } catch (e: Exception) {
-                if (searchRequestId == requestId) {
-                    Log.e(logTag, "search error", e)
-                    error = e.localizedMessage ?: "搜索失败"
-                }
-            } finally {
-                if (searchRequestId == requestId) {
-                    isLoading = false
-                }
-            }
-        }
+        // Reuse searchWithOrder for unified logic
+        searchWithOrder(keyword, type, currentOrder, needGlobalInfo = true)
     }
 
     fun switchType(type: String) {
@@ -350,7 +427,8 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
         }
         onTabChanged(type)
         if (currentKeyword.isNotBlank()) {
-            searchWithOrder(currentKeyword, type, currentOrder)
+            // Switching tabs does not need to re-fetch global info (tabs list etc.)
+            searchWithOrder(currentKeyword, type, currentOrder, needGlobalInfo = false)
         } else {
             // 即使没有关键词也要清空数据，避免显示上一个tab的数据
             videoResults = emptyList()
