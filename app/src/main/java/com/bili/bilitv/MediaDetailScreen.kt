@@ -3,6 +3,7 @@ package com.bili.bilitv
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,12 +13,21 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,12 +65,19 @@ fun MediaDetailScreen(
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+    var isAscending by remember { mutableStateOf(false) }
+
     val coverModel = remember(media.coverUrl) {
         ImageRequest.Builder(context)
             .data(media.coverUrl)
             .size(ImageConfig.VIDEO_COVER_SIZE)
             .build()
     }
+    
+    val displayedEpisodes = remember(media.episodes, isAscending) {
+        if (isAscending) media.episodes else media.episodes.reversed()
+    }
+
     val primaryEpisode = media.episodes.firstOrNull()
 
     BackHandler { onBack() }
@@ -96,23 +113,8 @@ fun MediaDetailScreen(
                 .padding(20.dp)
                 .verticalScroll(scrollState)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.Filled.ArrowBack,
-                        contentDescription = "back",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
             BoxWithConstraints {
-                val infoHeight = (this@BoxWithConstraints.maxHeight * 0.5f).coerceIn(220.dp, 360.dp)
+                val infoHeight = (this@BoxWithConstraints.maxHeight * 0.4f).coerceIn(100.dp, 240.dp)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(18.dp),
                     modifier = Modifier
@@ -147,15 +149,6 @@ fun MediaDetailScreen(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (media.orgTitle.isNotBlank()) {
-                            Text(
-                                text = media.orgTitle,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.85f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
 
                         Text(
                             text = buildString {
@@ -176,6 +169,7 @@ fun MediaDetailScreen(
                         )
 
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            var isPlayFocused by remember { mutableStateOf(false) }
                             Button(
                                 onClick = {
                                     val targetUrl = primaryEpisode?.url?.ifBlank { media.url } ?: media.url
@@ -185,14 +179,22 @@ fun MediaDetailScreen(
                                         context.startActivity(intent)
                                     }
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.onFocusChanged { isPlayFocused = it.isFocused },
+                                border = if (isPlayFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.onPrimary) else null
                             ) {
                                 Text(text = media.buttonText.ifBlank { "开始观看" }, fontSize = 16.sp)
                             }
 
+                            var isFollowFocused by remember { mutableStateOf(false) }
                             Button(
                                 onClick = {},
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White.copy(alpha = 0.15f),
+                                    contentColor = Color.White
+                                ),
+                                modifier = Modifier.onFocusChanged { isFollowFocused = it.isFocused },
+                                border = if (isFollowFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null
                             ) {
                                 Text(text = "追番/追剧", fontSize = 16.sp)
                             }
@@ -222,14 +224,41 @@ fun MediaDetailScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            Text(
-                text = "正片剧集",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "正片剧集",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White
+                )
+
+                var isSortFocused by remember { mutableStateOf(false) }
+                TextButton(
+                    onClick = { isAscending = !isAscending },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.onFocusChanged { isSortFocused = it.isFocused },
+                    border = if (isSortFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null
+                ) {
+                    Icon(
+                        imageVector = if (isAscending) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isAscending) "正序" else "倒序",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(10.dp))
 
-            if (media.episodes.isEmpty()) {
+            if (displayedEpisodes.isEmpty()) {
                 Text(
                     text = "暂无剧集信息",
                     style = MaterialTheme.typography.bodyMedium,
@@ -242,9 +271,9 @@ fun MediaDetailScreen(
                     contentPadding = PaddingValues(horizontal = 4.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(220.dp)
+                        .height(240.dp)
                 ) {
-                    items(media.episodes) { ep ->
+                    items(displayedEpisodes) { ep ->
                         EpisodeCard(
                             episode = ep,
                             onClick = {
@@ -270,50 +299,87 @@ private fun EpisodeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var isFocused by remember { mutableStateOf(false) }
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
         modifier = modifier
             .fillMaxWidth()
-            .height(160.dp),
+            .wrapContentHeight()
+            .onFocusChanged { isFocused = it.isFocused },
+        border = if (isFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null,
         onClick = onClick
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.padding(8.dp)
         ) {
-            AsyncImage(
-                model = episode.cover,
-                contentDescription = episode.title,
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(90.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop
-            )
-            Text(
-                text = "${episode.indexTitle.ifBlank { episode.title }} ${episode.longTitle}",
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (episode.badges.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    episode.badges.take(2).forEach { badge ->
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                            contentColor = MaterialTheme.colorScheme.primary,
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                text = badge,
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    .aspectRatio(1.6f)
+                    .clip(RoundedCornerShape(8.dp))
+            ) {
+                AsyncImage(
+                    model = episode.cover,
+                    contentDescription = episode.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+                
+                // Bottom Shadow with Episode Number
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))
                             )
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = episode.indexTitle.ifBlank { episode.title },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.align(Alignment.BottomStart)
+                    )
+                }
+
+                if (episode.badges.isNotEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                    ) {
+                        episode.badges.take(2).forEach { badge ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = badge,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
+            Text(
+                text = episode.longTitle.ifBlank { "${episode.indexTitle} ${episode.title}" },
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
