@@ -313,7 +313,14 @@ fun CommonVideoGrid(
     horizontalSpacing: Dp = 12.dp,
     verticalSpacing: Dp = 12.dp,
     contentPadding: PaddingValues = PaddingValues(top = 16.dp, bottom = 32.dp, start = 12.dp, end = 12.dp),
-    scrollToTopSignal: Int = 0
+    scrollToTopSignal: Int = 0,
+    itemContent: @Composable (item: Video, modifier: Modifier) -> Unit = { video, itemModifier ->
+        VideoItem(
+            video = video,
+            onClick = onVideoClick,
+            modifier = itemModifier
+        )
+    }
 ) {
     val context = LocalContext.current
     val (initialIndex, initialOffset) = remember(stateKey) { 
@@ -358,12 +365,7 @@ fun CommonVideoGrid(
         verticalSpacing = verticalSpacing,
         contentPadding = contentPadding,
         state = listState,
-        scrollToTopSignal = scrollToTopSignal
-    ) { video, itemModifier ->
-        VideoItem(
-            video = video,
-            onClick = onVideoClick,
-            modifier = itemModifier
-        )
-    }
+        scrollToTopSignal = scrollToTopSignal,
+        itemContent = itemContent
+    )
 }

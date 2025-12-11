@@ -253,56 +253,23 @@ fun SearchResultsScreen(
             )
 
             if (selectedTabId == "video") {
-                Box {
-                    val isFilterSelected = selectedFilter != "综合排序"
+                val options = filterOptions.map { label ->
+                    FilterOption(label, orderMap[label] ?: "totalrank")
+                }
 
-                    Button(
-                        onClick = { filterExpanded = true },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isFilterSelected) MaterialTheme.colorScheme.primary
-                                             else MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = if (isFilterSelected) MaterialTheme.colorScheme.onPrimary
-                                           else MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        border = if (isFilterFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface) else null,
-                        modifier = Modifier
-                            .height(26.dp)
-                            .defaultMinSize(minWidth = 0.dp, minHeight = 0.dp)
-                            .onFocusChanged { isFilterFocused = it.isFocused }
-                        ,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                    ) {
-                        Text(text = "筛选", fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = selectedFilter, fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Default.ArrowDropDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = filterExpanded,
-                        onDismissRequest = { filterExpanded = false }
-                    ) {
-                        filterOptions.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option) },
-                                onClick = {
-                                    selectedFilter = option
-                                    filterExpanded = false
-                                    val orderValue = orderMap[option] ?: "totalrank"
-                                    viewModel.updateSearchOrder(orderValue)
-                                    if (query.isNotBlank()) {
-                                        viewModel.searchWithOrder(query, viewModel.currentSearchType, orderValue)
-                                    }
-                                }
-                            )
+                FilterSelectButton(
+                    label = "筛选",
+                    selectedOptionLabel = selectedFilter,
+                    options = options,
+                    onOptionSelected = { option ->
+                        selectedFilter = option.label
+                        val orderValue = option.value
+                        viewModel.updateSearchOrder(orderValue)
+                        if (query.isNotBlank()) {
+                            viewModel.searchWithOrder(query, viewModel.currentSearchType, orderValue)
                         }
                     }
-                }
+                )
             }
         }
 

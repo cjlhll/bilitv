@@ -395,11 +395,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                     val totalCount = payload.total
                     val currentPage = payload.page.takeIf { it > 0 } ?: targetPage
                     val consumed = if (pageSize > 0) currentPage * pageSize else currentPage * mapped.size
-                    bangumiRecommendHasMore = when {
-                        totalCount > 0 && pageSize > 0 -> consumed < totalCount
-                        pageSize > 0 -> mapped.size >= pageSize
-                        else -> mapped.isNotEmpty()
-                    }
+                    bangumiRecommendHasMore = false // 首页只展示固定数量，不分页
                     bangumiRecommendPage = targetPage + 1
                 } ?: run {
                     bangumiRecommendError = bangumiRecommendError ?: "加载失败"
@@ -417,6 +413,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
     }
 
     private suspend fun fetchBangumiRecommendPage(page: Int): BangumiIndexData? {
+        // 请求15个数据，只展示3行
         val url = okhttp3.HttpUrl.Builder()
             .scheme("https")
             .host("api.bilibili.com")
@@ -434,7 +431,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
             .addQueryParameter("style_id", "-1")
             .addQueryParameter("sort", "0")
             .addQueryParameter("season_type", "1")
-            .addQueryParameter("pagesize", "20")
+            .addQueryParameter("pagesize", "15") // Changed to 15
             .addQueryParameter("type", "1")
             .addQueryParameter("page", page.toString())
             .build()

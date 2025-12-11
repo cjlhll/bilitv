@@ -10,6 +10,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -18,6 +20,9 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -126,7 +131,8 @@ fun HomeScreen(
     viewModel: HomeViewModel,
     modifier: Modifier = Modifier,
     onEnterFullScreen: (VideoPlayInfo, String) -> Unit = { _, _ -> },
-    onMediaClick: (Video) -> Unit = {}
+    onMediaClick: (Video) -> Unit = {},
+    onNavigateToAnimeList: () -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     var isVisible by remember { mutableStateOf(false) }
@@ -281,7 +287,8 @@ fun HomeScreen(
                             onMediaClick = {
                                 viewModel.shouldRestoreFocusToGrid = true
                                 onMediaClick(it)
-                            }
+                            },
+                            onHeaderClick = onNavigateToAnimeList
                         )
                     } else {
                         key(viewModel.selectedTab) {
@@ -364,7 +371,8 @@ private fun formatDuration(seconds: Long): String {
 @Composable
 private fun BangumiTabContent(
     viewModel: HomeViewModel,
-    onMediaClick: (Video) -> Unit
+    onMediaClick: (Video) -> Unit,
+    onHeaderClick: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val recommendList = viewModel.bangumiRecommendVideos
@@ -426,16 +434,39 @@ private fun BangumiTabContent(
         }
 
         item(span = { GridItemSpan(maxLineSpan) }) {
+            var isHeaderFocused by remember { mutableStateOf(false) }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 12.dp)
             ) {
-                Text(
-                    text = "推荐",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 0.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .padding(bottom = 8.dp)
+                        .focusable()
+                        .onFocusChanged { isHeaderFocused = it.isFocused }
+                        .clickable(onClick = onHeaderClick)
+                        .background(
+                            color = if (isHeaderFocused) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                            shape = MaterialTheme.shapes.small
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "推荐",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isHeaderFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "更多",
+                        modifier = Modifier.size(16.dp),
+                        tint = if (isHeaderFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onBackground
+                    )
+                }
+                
                 if (isRecommendLoading && recommendList.isEmpty()) {
                     Box(
                         modifier = Modifier

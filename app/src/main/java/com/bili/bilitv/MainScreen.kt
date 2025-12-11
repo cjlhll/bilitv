@@ -11,7 +11,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
@@ -231,11 +231,12 @@ enum class NavRoute(val title: String, val icon: ImageVector) {
     SEARCH_RESULT("搜索结果", Icons.Default.Search),
     MEDIA_DETAIL("番剧详情", Icons.Default.Search),
     HOME("首页", Icons.Default.Home),
-    CATEGORY("分类", Icons.AutoMirrored.Filled.List),
+    CATEGORY("分类", Icons.Default.List),
     DYNAMIC("动态", Icons.Default.Star),
     LIVE("直播", Icons.Default.PlayArrow),
     USER("用户", Icons.Default.AccountCircle),
-    SETTINGS("设置", Icons.Default.Settings)
+    SETTINGS("设置", Icons.Default.Settings),
+    ANIME_LIST("番剧索引", Icons.Default.List)
 }
 
 @Composable
@@ -380,7 +381,7 @@ fun MainScreen() {
     }
 
     // 判断是否应该隐藏导航栏（直播列表页面全屏显示，或搜索结果页）
-    val shouldHideNavigation = (currentRoute == NavRoute.LIVE && selectedLiveArea != null) || currentRoute == NavRoute.SEARCH_RESULT || currentRoute == NavRoute.MEDIA_DETAIL
+    val shouldHideNavigation = (currentRoute == NavRoute.LIVE && selectedLiveArea != null) || currentRoute == NavRoute.SEARCH_RESULT || currentRoute == NavRoute.MEDIA_DETAIL || currentRoute == NavRoute.ANIME_LIST
 
     // 使用Crossfade实现播放器与列表之间的平滑过渡
     Crossfade(
@@ -456,7 +457,17 @@ fun MainScreen() {
                                 viewModel = mediaDetailViewModel,
                                 onBack = {
                                     selectedMedia = null
-                                    currentRoute = NavRoute.SEARCH_RESULT
+                                    // Try to determine where to go back based on context, or default to HOME/SEARCH
+                                    // For now, if we came from AnimeList, we probably want to go back there?
+                                    // But simple logic: if came from search result, go there.
+                                    // If came from Home, go Home.
+                                    // Ideally we need a 'previousRoute' stack.
+                                    // Current implementation simple back to SEARCH_RESULT for search flow.
+                                    // For Home flow, we handled it inside HomeScreen callback.
+                                    // But here we are at top level.
+                                    // Let's just go back to Home if we are not in search flow context?
+                                    // Or simply:
+                                    currentRoute = NavRoute.HOME 
                                 },
                                 onPlay = { playInfo, title ->
                                     isFullScreenPlayer = true
@@ -465,6 +476,15 @@ fun MainScreen() {
                                 }
                             )
                         }
+                    }
+                    NavRoute.ANIME_LIST -> {
+                        AnimeListScreen(
+                            onMediaClick = { video ->
+                                selectedMedia = video
+                                currentRoute = NavRoute.MEDIA_DETAIL
+                            },
+                            onBack = { currentRoute = NavRoute.HOME }
+                        )
                     }
                     NavRoute.SEARCH_RESULT -> SearchResultsScreen(
                         query = searchQuery,
@@ -548,6 +568,9 @@ fun MainScreen() {
                         onMediaClick = { video ->
                             selectedMedia = video
                             currentRoute = NavRoute.MEDIA_DETAIL
+                        },
+                        onNavigateToAnimeList = {
+                            currentRoute = NavRoute.ANIME_LIST
                         }
                     )
                     NavRoute.USER -> UserLoginScreen(
