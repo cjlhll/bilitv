@@ -544,6 +544,10 @@ fun MainScreen() {
                             isFullScreenPlayer = true
                             fullScreenPlayInfo = playInfo
                             fullScreenVideoTitle = title
+                        },
+                        onMediaClick = { video ->
+                            selectedMedia = video
+                            currentRoute = NavRoute.MEDIA_DETAIL
                         }
                     )
                     NavRoute.USER -> UserLoginScreen(

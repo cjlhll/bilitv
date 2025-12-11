@@ -34,6 +34,77 @@ data class RecommendVideoData(
 )
 
 @Serializable
+data class BangumiIndexResponse(
+    val code: Int = -1,
+    val message: String = "",
+    val data: BangumiIndexData? = null
+)
+
+@Serializable
+data class BangumiIndexData(
+    val list: List<BangumiIndexItem> = emptyList(),
+    val total: Int = 0,
+    val num: Int = 0,
+    val size: Int = 0,
+    val page: Int = 0
+)
+
+@Serializable
+data class BangumiIndexItem(
+    val badge: String = "",
+    @SerialName("badge_info")
+    val badgeInfo: BangumiBadgeInfo? = null,
+    @SerialName("badge_type")
+    val badgeType: Int = 0,
+    val cover: String = "",
+    @SerialName("first_ep")
+    val firstEp: BangumiFirstEp? = null,
+    @SerialName("index_show")
+    val indexShow: String = "",
+    @SerialName("is_finish")
+    val isFinish: Int = 0,
+    val link: String = "",
+    @SerialName("media_id")
+    val mediaId: Long = 0,
+    val order: String = "",
+    @SerialName("order_type")
+    val orderType: String = "",
+    val score: String = "",
+    @SerialName("season_id")
+    val seasonId: Long = 0,
+    @SerialName("season_status")
+    val seasonStatus: Int = 0,
+    @SerialName("season_type")
+    val seasonType: Int = 0,
+    @SerialName("subTitle")
+    val subTitle: String = "",
+    val title: String = "",
+    @SerialName("title_icon")
+    val titleIcon: String = ""
+)
+
+@Serializable
+data class BangumiBadgeInfo(
+    val text: String = "",
+    @SerialName("text_color")
+    val textColor: String = "",
+    @SerialName("bg_color")
+    val bgColor: String = "",
+    @SerialName("border_color")
+    val borderColor: String = "",
+    @SerialName("bg_style")
+    val bgStyle: Int = 0
+)
+
+@Serializable
+data class BangumiFirstEp(
+    val cover: String = "",
+    val title: String = "",
+    @SerialName("ep_id")
+    val epId: Long = 0
+)
+
+@Serializable
 data class TimelineResponse(
     val code: Int,
     val message: String,
@@ -162,6 +233,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
     var timelineError by mutableStateOf<String?>(null)
     var timelineSelectedIndex by mutableStateOf(0)
 
+    // Bangumi recommend states
+    val bangumiRecommendVideos: SnapshotStateList<Video> = mutableStateListOf()
+    var isBangumiRecommendLoading by mutableStateOf(false)
+    var bangumiRecommendError by mutableStateOf<String?>(null)
+    private var bangumiRecommendPage = 1
+    private var bangumiRecommendHasMore = true
+
     // Store state per tab
     // Pair(index, offset)
     private val _tabScrollStates = mutableStateMapOf<TabType, Pair<Int, Int>>()
@@ -249,6 +327,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         }
     }
 
+    fun ensureBangumiRecommendLoaded() {
+        if (bangumiRecommendVideos.isEmpty() && !isBangumiRecommendLoading) {
+            viewModelScope.launch {
+                loadBangumiRecommend(reset = false)
+            }
+        }
+    }
+
     suspend fun loadTimeline(forceRefresh: Boolean = false) {
         if (isTimelineLoading) return
         if (!forceRefresh && timelineDays.isNotEmpty()) return
@@ -276,6 +362,115 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
             }
         } finally {
             isTimelineLoading = false
+        }
+    }
+
+    suspend fun loadBangumiRecommend(reset: Boolean = false) {
+        if (isBangumiRecommendLoading) return
+        if (!reset && !bangumiRecommendHasMore) return
+
+        isBangumiRecommendLoading = true
+        if (reset) {
+            bangumiRecommendPage = 1
+            bangumiRecommendHasMore = true
+        }
+        bangumiRecommendError = null
+
+        try {
+            val targetPage = bangumiRecommendPage
+            val data = withContext(Dispatchers.IO) {
+                fetchBangumiRecommendPage(targetPage)
+            }
+            withContext(Dispatchers.Main) {
+                data?.let { payload ->
+                    bangumiRecommendError = null
+                    if (reset) {
+                        bangumiRecommendVideos.clear()
+                    }
+                    val mapped = payload.list.map { it.toVideo() }
+                    if (mapped.isNotEmpty()) {
+                        bangumiRecommendVideos.addAll(mapped)
+                    }
+                    val pageSize = payload.size.takeIf { it > 0 } ?: payload.list.size
+                    val totalCount = payload.total
+                    val currentPage = payload.page.takeIf { it > 0 } ?: targetPage
+                    val consumed = if (pageSize > 0) currentPage * pageSize else currentPage * mapped.size
+                    bangumiRecommendHasMore = when {
+                        totalCount > 0 && pageSize > 0 -> consumed < totalCount
+                        pageSize > 0 -> mapped.size >= pageSize
+                        else -> mapped.isNotEmpty()
+                    }
+                    bangumiRecommendPage = targetPage + 1
+                } ?: run {
+                    bangumiRecommendError = bangumiRecommendError ?: "加载失败"
+                    if (reset) bangumiRecommendHasMore = false
+                }
+            }
+        } catch (e: Exception) {
+            bangumiRecommendError = e.localizedMessage ?: "加载失败"
+            if (BuildConfig.DEBUG) {
+                Log.e("BiliTV", "bangumi recommend load error", e)
+            }
+        } finally {
+            isBangumiRecommendLoading = false
+        }
+    }
+
+    private suspend fun fetchBangumiRecommendPage(page: Int): BangumiIndexData? {
+        val url = okhttp3.HttpUrl.Builder()
+            .scheme("https")
+            .host("api.bilibili.com")
+            .addPathSegments("pgc/season/index/result")
+            .addQueryParameter("st", "1")
+            .addQueryParameter("order", "3")
+            .addQueryParameter("season_version", "-1")
+            .addQueryParameter("spoken_language_type", "-1")
+            .addQueryParameter("area", "-1")
+            .addQueryParameter("is_finish", "-1")
+            .addQueryParameter("copyright", "-1")
+            .addQueryParameter("season_status", "-1")
+            .addQueryParameter("season_month", "-1")
+            .addQueryParameter("year", "-1")
+            .addQueryParameter("style_id", "-1")
+            .addQueryParameter("sort", "0")
+            .addQueryParameter("season_type", "1")
+            .addQueryParameter("pagesize", "20")
+            .addQueryParameter("type", "1")
+            .addQueryParameter("page", page.toString())
+            .build()
+
+        val requestBuilder = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
+            .header("Referer", "https://www.bilibili.com")
+
+        SessionManager.getCookieString()?.let {
+            requestBuilder.header("Cookie", it)
+        }
+
+        val response = httpClient.newCall(requestBuilder.build()).execute()
+        if (!response.isSuccessful) {
+            if (BuildConfig.DEBUG) {
+                Log.e("BiliTV", "Bangumi recommend HTTP error: ${response.code}")
+            }
+            return null
+        }
+        val body = response.body?.string() ?: return null
+        return try {
+            val resp = json.decodeFromString<BangumiIndexResponse>(body)
+            if (resp.code == 0) {
+                resp.data
+            } else {
+                if (BuildConfig.DEBUG) {
+                    Log.e("BiliTV", "Bangumi recommend API error: ${resp.message} (code=${resp.code})")
+                }
+                null
+            }
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) {
+                Log.e("BiliTV", "Bangumi recommend parse error", e)
+            }
+            null
         }
     }
 
@@ -504,6 +699,69 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         )
     }
 
+    private fun BangumiIndexItem.toVideo(): Video {
+        val badgeText = badge.ifBlank { badgeInfo?.text.orEmpty() }
+        val badge = badgeInfo?.let {
+            Badge(
+                text = badgeText,
+                textColor = it.textColor,
+                textColorNight = "",
+                bgColor = it.bgColor,
+                bgColorNight = "",
+                borderColor = it.borderColor,
+                borderColorNight = "",
+                bgStyle = it.bgStyle
+            )
+        }?.takeIf { it.text.isNotBlank() }
+
+        val desc = subTitle.ifBlank { order.ifBlank { indexShow } }
+        val epSize = parseEpisodeCount(indexShow)
+        val mediaScore = parseScoreValue(score)
+
+        return Video(
+            id = seasonId.takeIf { it != 0L }?.toString() ?: mediaId.takeIf { it != 0L }?.toString()
+                ?: link.ifBlank { title },
+            title = title,
+            coverUrl = normalizeCoverUrl(cover),
+            author = "",
+            playCount = "",
+            danmakuCount = "",
+            duration = "",
+            durationSeconds = 0,
+            pubDate = null,
+            desc = desc,
+            badges = badge?.let { listOf(it) } ?: emptyList(),
+            epSize = epSize,
+            mediaScore = mediaScore,
+            mediaScoreUsers = 0,
+            mediaType = 0,
+            seasonId = seasonId,
+            mediaId = mediaId,
+            seasonType = seasonType,
+            seasonTypeName = "",
+            url = link,
+            buttonText = "",
+            isFollow = isFinish == 1,
+            cid = firstEp?.epId ?: 0
+        )
+    }
+
+    private fun parseScoreValue(text: String): Double {
+        if (text.isBlank()) return 0.0
+        val cleaned = text.replace("分", "").replace(Regex("[^0-9.]"), "")
+        return cleaned.toDoubleOrNull() ?: 0.0
+    }
+
+    private fun parseEpisodeCount(text: String): Int {
+        val match = Regex("(\\d+)").find(text)
+        return match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+    }
+
+    private fun normalizeCoverUrl(url: String): String {
+        if (url.isBlank()) return url
+        return if (url.startsWith("//")) "https:$url" else url
+    }
+
     // 辅助函数
     private fun isCurrentlyLoading(tabType: TabType): Boolean {
         return when (tabType) {
@@ -582,6 +840,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         return !isCurrentlyLoading(tabType) && hasMoreData(tabType)
     }
 
+    fun canLoadMoreBangumiRecommend(): Boolean {
+        return !isBangumiRecommendLoading && bangumiRecommendHasMore
+    }
+
     fun refreshCurrentTab(restoreFocusToGrid: Boolean = true) {
         if (isRefreshing) return
         val targetTab = selectedTab
@@ -627,8 +889,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                     }
                     TabType.BANGUMI -> {
                         loadTimeline(forceRefresh = true)
+                        bangumiRecommendPage = 1
+                        bangumiRecommendHasMore = true
+                        bangumiRecommendError = null
+                        bangumiRecommendVideos.clear()
+                        loadBangumiRecommend(reset = true)
                         _tabScrollStates[targetTab] = 0 to 0
                         _tabFocusStates[targetTab] = 0
+                        refreshSignal++
                     }
                 }
             } finally {

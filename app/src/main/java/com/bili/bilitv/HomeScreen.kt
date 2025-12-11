@@ -11,15 +11,23 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.style.TextOverflow
@@ -117,7 +125,8 @@ private fun TimelineEpisode.toVideoCard(): Video {
 fun HomeScreen(
     viewModel: HomeViewModel,
     modifier: Modifier = Modifier,
-    onEnterFullScreen: (VideoPlayInfo, String) -> Unit = { _, _ -> }
+    onEnterFullScreen: (VideoPlayInfo, String) -> Unit = { _, _ -> },
+    onMediaClick: (Video) -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     var isVisible by remember { mutableStateOf(false) }
@@ -194,6 +203,7 @@ fun HomeScreen(
             }
             TabType.BANGUMI -> {
                 viewModel.ensureTimelineLoaded()
+                viewModel.ensureBangumiRecommendLoaded()
             }
         }
     }
@@ -266,8 +276,12 @@ fun HomeScreen(
                     CircularProgressIndicator()
                 } else {
                     if (viewModel.selectedTab == TabType.BANGUMI) {
-                        BangumiTimelineSection(
-                            viewModel = viewModel
+                        BangumiTabContent(
+                            viewModel = viewModel,
+                            onMediaClick = {
+                                viewModel.shouldRestoreFocusToGrid = true
+                                onMediaClick(it)
+                            }
                         )
                     } else {
                         key(viewModel.selectedTab) {
@@ -348,8 +362,166 @@ private fun formatDuration(seconds: Long): String {
 }
 
 @Composable
+private fun BangumiTabContent(
+    viewModel: HomeViewModel,
+    onMediaClick: (Video) -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val recommendList = viewModel.bangumiRecommendVideos
+    val isRecommendLoading = viewModel.isBangumiRecommendLoading
+    val recommendError = viewModel.bangumiRecommendError
+    val (initialIndex, initialOffset) = remember { viewModel.getScrollState(TabType.BANGUMI) }
+    val initialFocusIndex = remember { viewModel.getFocusedIndex(TabType.BANGUMI) }
+    val gridState = rememberLazyGridState(
+        initialFirstVisibleItemIndex = initialIndex,
+        initialFirstVisibleItemScrollOffset = initialOffset
+    )
+    val shouldRestoreFocus = viewModel.shouldRestoreFocusToGrid
+
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+            .collect { (idx, offset) ->
+                viewModel.updateScrollState(TabType.BANGUMI, idx, offset)
+            }
+    }
+
+    if (viewModel.canLoadMoreBangumiRecommend()) {
+        val shouldLoadMore by remember {
+            derivedStateOf {
+                val layoutInfo = gridState.layoutInfo
+                val total = layoutInfo.totalItemsCount
+                val last = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                total > 0 && last >= total - 10
+            }
+        }
+        LaunchedEffect(gridState) {
+            snapshotFlow { shouldLoadMore }.collect { need ->
+                if (need && viewModel.canLoadMoreBangumiRecommend()) {
+                    coroutineScope.launch {
+                        viewModel.loadBangumiRecommend(reset = false)
+                    }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(viewModel.refreshSignal) {
+        gridState.scrollToItem(0)
+        viewModel.updateScrollState(TabType.BANGUMI, 0, 0)
+    }
+
+    LazyVerticalGrid(
+        state = gridState,
+        columns = GridCells.Fixed(5),
+        modifier = Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp)
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            BangumiTimelineSection(
+                viewModel = viewModel,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp)
+            ) {
+                Text(
+                    text = "推荐",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 0.dp)
+                )
+                if (isRecommendLoading && recommendList.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                } else if (recommendError != null && recommendList.isEmpty()) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(text = "加载失败：$recommendError")
+                        Button(onClick = { coroutineScope.launch { viewModel.loadBangumiRecommend(reset = true) } }) {
+                            Text("重试")
+                        }
+                    }
+                } else if (recommendList.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("暂无推荐")
+                    }
+                }
+            }
+        }
+
+        itemsIndexed(
+            items = recommendList,
+            key = { index, video -> "bangumi_rcmd_${index}_${video.id}" }
+        ) { index, video ->
+            val focusRequester = remember { FocusRequester() }
+            LaunchedEffect(shouldRestoreFocus, recommendList.size) {
+                if (shouldRestoreFocus && recommendList.isNotEmpty()) {
+                    if (index == initialFocusIndex || (initialFocusIndex == -1 && index == 0)) {
+                        focusRequester.requestFocus()
+                    }
+                }
+            }
+            VerticalMediaCard(
+                video = video,
+                onClick = {
+                    viewModel.shouldRestoreFocusToGrid = true
+                    onMediaClick(video)
+                },
+                modifier = Modifier
+                    .focusRequester(focusRequester)
+                    .onFocusChanged {
+                        if (it.isFocused) {
+                            viewModel.updateFocusedIndex(TabType.BANGUMI, index)
+                        }
+                    }
+            )
+        }
+
+        if (isRecommendLoading && recommendList.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 0.dp, vertical = 8.dp)
+                )
+            }
+        } else if (recommendError != null && recommendList.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    text = "部分数据加载异常：$recommendError",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun BangumiTimelineSection(
-    viewModel: HomeViewModel
+    viewModel: HomeViewModel,
+    modifier: Modifier = Modifier
 ) {
     val days = viewModel.timelineDays
     val selectedIndex = viewModel.timelineSelectedIndex.coerceIn(0, (days.size - 1).coerceAtLeast(0))
@@ -358,8 +530,8 @@ private fun BangumiTimelineSection(
     val error = viewModel.timelineError
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = modifier
+            .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         if (days.isNotEmpty()) {
@@ -391,7 +563,9 @@ private fun BangumiTimelineSection(
         when {
             isLoading && days.isEmpty() -> {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 160.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator()
@@ -399,7 +573,9 @@ private fun BangumiTimelineSection(
             }
             error != null && days.isEmpty() -> {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 160.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
@@ -415,7 +591,9 @@ private fun BangumiTimelineSection(
             }
             currentDay == null -> {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 160.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("暂无数据")
@@ -432,8 +610,7 @@ private fun BangumiTimelineSection(
                 }
                 val episodes = currentDay.episodes
                 LazyRow(
-                    modifier = Modifier
-                        .weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                 ) {
