@@ -7,16 +7,14 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.compose.runtime.toMutableStateList
 import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bili.bilitv.BuildConfig
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.delay
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -33,6 +31,107 @@ data class RecommendVideoResponse(
 @Serializable
 data class RecommendVideoData(
     val item: List<VideoItemData>? = null
+)
+
+@Serializable
+data class TimelineResponse(
+    val code: Int,
+    val message: String,
+    val result: List<TimelineDayDto>? = null
+)
+
+@Serializable
+data class TimelineDayDto(
+    val date: String = "",
+    @SerialName("date_ts")
+    val dateTs: Long = 0L,
+    @SerialName("day_of_week")
+    val dayOfWeek: Int = 1,
+    @SerialName("is_today")
+    val isToday: Int = 0,
+    val episodes: List<TimelineEpisodeDto> = emptyList()
+)
+
+@Serializable
+data class TimelineEpisodeDto(
+    @SerialName("episode_id")
+    val episodeId: Long = 0,
+    @SerialName("season_id")
+    val seasonId: Long = 0,
+    val title: String = "",
+    val cover: String = "",
+    @SerialName("pub_index")
+    val pubIndex: String = "",
+    @SerialName("pub_time")
+    val pubTime: String = "",
+    @SerialName("follow")
+    val follow: Int = 0,
+    @SerialName("plays")
+    val plays: String? = null,
+    @SerialName("follows")
+    val follows: String? = null
+)
+
+@Serializable
+data class TimelineGlobalResponse(
+    val code: Int = -1,
+    val message: String = "",
+    val result: List<TimelineGlobalDay> = emptyList()
+)
+
+@Serializable
+data class TimelineGlobalDay(
+    val date: String = "",
+    @SerialName("date_ts")
+    val dateTs: Long = 0L,
+    @SerialName("day_of_week")
+    val dayOfWeek: Int = 1,
+    @SerialName("is_today")
+    val isToday: Int = 0,
+    val seasons: List<TimelineGlobalSeason> = emptyList()
+)
+
+@Serializable
+data class TimelineGlobalSeason(
+    @SerialName("season_id")
+    val seasonId: Long = 0,
+    @SerialName("ep_id")
+    val episodeId: Long = 0,
+    val title: String = "",
+    val cover: String = "",
+    @SerialName("pub_index")
+    val pubIndex: String = "",
+    @SerialName("pub_time")
+    val pubTime: String = "",
+    @SerialName("is_published")
+    val isPublished: Int = 0,
+    @SerialName("is_follow")
+    val isFollow: Int = 0,
+    @SerialName("plays")
+    val plays: String? = null,
+    @SerialName("follows")
+    val follows: String? = null,
+    val type: Int = 1
+)
+
+data class TimelineEpisode(
+    val episodeId: Long,
+    val seasonId: Long,
+    val title: String,
+    val cover: String,
+    val episodeIndex: String,
+    val publishTime: String,
+    val isFollowed: Boolean,
+    val viewCount: Long,
+    val followCount: Long
+)
+
+data class TimelineDay(
+    val date: String,
+    val dateTs: Long,
+    val dayOfWeek: Int,
+    val isToday: Boolean,
+    val episodes: List<TimelineEpisode>
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application), VideoGridStateManager {
@@ -56,6 +155,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
 
     private val httpClient = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
+
+    // Timeline states
+    val timelineDays: SnapshotStateList<TimelineDay> = mutableStateListOf()
+    var isTimelineLoading by mutableStateOf(false)
+    var timelineError by mutableStateOf<String?>(null)
+    var timelineSelectedIndex by mutableStateOf(0)
 
     // Store state per tab
     // Pair(index, offset)
@@ -81,6 +186,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
      * 优化的分页加载函数 - 使用后台IO线程和SnapshotStateList
      */
     suspend fun loadNextPage(tabType: TabType) {
+        if (tabType == TabType.BANGUMI) return
         if (isCurrentlyLoading(tabType) || !hasMoreData(tabType)) return
         
         setLoading(tabType, true)
@@ -91,6 +197,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                 val result = when (tabType) {
                     TabType.RECOMMEND -> fetchRecommendPage()
                     TabType.HOT -> fetchHotPage()
+                    TabType.BANGUMI -> null
                 }
                 
                 // 在主线程更新UI状态
@@ -108,6 +215,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                                     hotPage++
                                     hotHasMore = newVideos.size >= 20
                                 }
+                                TabType.BANGUMI -> {}
                             }
                             
                             if (BuildConfig.DEBUG) {
@@ -118,6 +226,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                             when (tabType) {
                                 TabType.RECOMMEND -> recommendHasMore = false
                                 TabType.HOT -> hotHasMore = false
+                                TabType.BANGUMI -> {}
                             }
                         }
                     }
@@ -129,6 +238,44 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                     setLoading(tabType, false)
                 }
             }
+        }
+    }
+
+    fun ensureTimelineLoaded() {
+        if (timelineDays.isEmpty() && !isTimelineLoading) {
+            viewModelScope.launch {
+                loadTimeline()
+            }
+        }
+    }
+
+    suspend fun loadTimeline(forceRefresh: Boolean = false) {
+        if (isTimelineLoading) return
+        if (!forceRefresh && timelineDays.isNotEmpty()) return
+
+        isTimelineLoading = true
+        timelineError = null
+
+        try {
+            val merged = withContext(Dispatchers.IO) {
+                val bangumi = fetchTimelineWithFallback(type = 1)
+                val guochuang = fetchTimelineWithFallback(type = 4)
+                mergeTimeline(bangumi, guochuang)
+            }
+            timelineDays.clear()
+            timelineDays.addAll(merged)
+            val todayIndex = merged.indexOfFirst { it.isToday }
+            timelineSelectedIndex = if (todayIndex >= 0) todayIndex else 0
+        } catch (e: Exception) {
+            timelineError = e.message ?: "加载失败"
+            if (BuildConfig.DEBUG) {
+                Log.e("BiliTV", "timeline load error: ${e.message}", e)
+            }
+            if (forceRefresh) {
+                timelineDays.clear()
+            }
+        } finally {
+            isTimelineLoading = false
         }
     }
 
@@ -208,11 +355,161 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         return null
     }
 
+    private suspend fun fetchTimelineWithFallback(type: Int, before: Int = 6, after: Int = 6): List<TimelineDay> {
+        val v2 = fetchTimelineV2(type, before, after)
+        if (v2 != null && v2.isNotEmpty()) return v2
+        if (BuildConfig.DEBUG) {
+            Log.d("BiliTV", "timeline v2 empty/fail, fallback legacy type=$type")
+        }
+        return fetchTimelineLegacy(type) ?: emptyList()
+    }
+
+    private suspend fun fetchTimelineV2(type: Int, before: Int = 6, after: Int = 6): List<TimelineDay>? {
+        val url = "https://api.bilibili.com/pgc/web/timeline/v2?types=$type&before=$before&after=$after"
+        val requestBuilder = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
+            .header("Referer", "https://www.bilibili.com")
+            .header("Origin", "https://www.bilibili.com")
+
+        SessionManager.getCookieString()?.let {
+            requestBuilder.header("Cookie", it)
+        }
+
+        val response = httpClient.newCall(requestBuilder.build()).execute()
+        if (BuildConfig.DEBUG) {
+            Log.d("BiliTV", "timeline req type=$type http=${response.code} url=$url")
+        }
+        if (!response.isSuccessful) {
+            return null
+        }
+        val body = response.body?.string() ?: return null
+        if (BuildConfig.DEBUG) {
+            Log.d("BiliTV", "timeline body type=$type $body")
+        }
+        val resp = json.decodeFromString<TimelineResponse>(body)
+        if (BuildConfig.DEBUG) {
+            Log.d("BiliTV", "timeline api type=$type code=${resp.code} msg=${resp.message} days=${resp.result?.size}")
+        }
+        if (resp.code != 0 || resp.result == null) {
+            return null
+        }
+        return resp.result.map { it.toDomain() }
+    }
+
+    private suspend fun fetchTimelineLegacy(type: Int): List<TimelineDay>? {
+        val url = "https://bangumi.bilibili.com/web_api/timeline_global"
+        val requestBuilder = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
+            .header("Referer", "https://www.bilibili.com")
+            .header("Origin", "https://www.bilibili.com")
+
+        SessionManager.getCookieString()?.let {
+            requestBuilder.header("Cookie", it)
+        }
+
+        val response = httpClient.newCall(requestBuilder.build()).execute()
+        if (BuildConfig.DEBUG) {
+            Log.d("BiliTV", "timeline legacy req type=$type http=${response.code} url=$url")
+        }
+        if (!response.isSuccessful) {
+            return null
+        }
+        val body = response.body?.string() ?: return null
+        if (BuildConfig.DEBUG) {
+            Log.d("BiliTV", "timeline legacy body $body")
+        }
+        val resp = json.decodeFromString<TimelineGlobalResponse>(body)
+        if (resp.code != 0) {
+            return null
+        }
+        val filtered = resp.result.map { it.toDomain(type) }.filter { it.episodes.isNotEmpty() }
+        if (BuildConfig.DEBUG) {
+            Log.d("BiliTV", "timeline legacy parsed days=${filtered.size}")
+        }
+        return filtered
+    }
+
+    private fun mergeTimeline(bangumi: List<TimelineDay>, guochuang: List<TimelineDay>): List<TimelineDay> {
+        if (bangumi.isEmpty()) return guochuang
+        if (guochuang.isEmpty()) return bangumi
+
+        val merged = bangumi.associateBy { it.dateTs }.toMutableMap()
+        guochuang.forEach { day ->
+            val existing = merged[day.dateTs]
+            if (existing != null) {
+                merged[day.dateTs] = existing.copy(
+                    episodes = existing.episodes + day.episodes
+                )
+            } else {
+                merged[day.dateTs] = day
+            }
+        }
+        return merged.values.sortedBy { it.dateTs }
+    }
+
+    private fun TimelineDayDto.toDomain(): TimelineDay {
+        return TimelineDay(
+            date = date,
+            dateTs = dateTs,
+            dayOfWeek = dayOfWeek,
+            isToday = isToday == 1,
+            episodes = episodes.map { it.toDomain() }
+        )
+    }
+
+    private fun TimelineEpisodeDto.toDomain(): TimelineEpisode {
+        val view = plays?.toLongOrNull() ?: 0L
+        val followCount = follows?.toLongOrNull() ?: 0L
+        return TimelineEpisode(
+            episodeId = episodeId,
+            seasonId = seasonId,
+            title = title,
+            cover = cover,
+            episodeIndex = pubIndex,
+            publishTime = pubTime,
+            isFollowed = follow == 1,
+            viewCount = view,
+            followCount = followCount
+        )
+    }
+
+    private fun TimelineGlobalDay.toDomain(filterType: Int): TimelineDay {
+        val preferred = seasons.filter { it.type == filterType }
+        val source = if (preferred.isNotEmpty()) preferred else seasons
+        val mappedEpisodes = source.map { it.toDomain() }
+        return TimelineDay(
+            date = date,
+            dateTs = dateTs,
+            dayOfWeek = dayOfWeek,
+            isToday = isToday == 1,
+            episodes = mappedEpisodes
+        )
+    }
+
+    private fun TimelineGlobalSeason.toDomain(): TimelineEpisode {
+        val view = plays?.toLongOrNull() ?: 0L
+        val followCount = follows?.toLongOrNull() ?: 0L
+        return TimelineEpisode(
+            episodeId = episodeId,
+            seasonId = seasonId,
+            title = title,
+            cover = cover,
+            episodeIndex = pubIndex,
+            publishTime = pubTime,
+            isFollowed = isFollow == 1,
+            viewCount = view,
+            followCount = followCount
+        )
+    }
+
     // 辅助函数
     private fun isCurrentlyLoading(tabType: TabType): Boolean {
         return when (tabType) {
             TabType.HOT -> isHotLoading
             TabType.RECOMMEND -> isRecommendLoading
+            TabType.BANGUMI -> isTimelineLoading
         }
     }
 
@@ -220,6 +517,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         return when (tabType) {
             TabType.HOT -> hotHasMore
             TabType.RECOMMEND -> recommendHasMore
+            TabType.BANGUMI -> false
         }
     }
 
@@ -227,6 +525,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         when (tabType) {
             TabType.HOT -> isHotLoading = loading
             TabType.RECOMMEND -> isRecommendLoading = loading
+            TabType.BANGUMI -> isTimelineLoading = loading
         }
     }
 
@@ -234,6 +533,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         return when (tabType) {
             TabType.HOT -> _hotVideos.size
             TabType.RECOMMEND -> _recommendVideos.size
+            TabType.BANGUMI -> timelineDays.sumOf { it.episodes.size }
         }
     }
 
@@ -288,7 +588,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         isRefreshing = true
         shouldRestoreFocusToGrid = restoreFocusToGrid
         viewModelScope.launch {
-            setLoading(targetTab, true)
+            if (targetTab != TabType.BANGUMI) {
+                setLoading(targetTab, true)
+            }
             try {
                 when (targetTab) {
                     TabType.RECOMMEND -> {
@@ -323,10 +625,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                             }
                         }
                     }
+                    TabType.BANGUMI -> {
+                        loadTimeline(forceRefresh = true)
+                        _tabScrollStates[targetTab] = 0 to 0
+                        _tabFocusStates[targetTab] = 0
+                    }
                 }
             } finally {
                 withContext(Dispatchers.Main) {
-                    setLoading(targetTab, false)
+                    if (targetTab != TabType.BANGUMI) {
+                        setLoading(targetTab, false)
+                    }
                     isRefreshing = false
                 }
             }

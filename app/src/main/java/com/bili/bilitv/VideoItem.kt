@@ -282,7 +282,8 @@ fun VideoItem(
 fun VerticalMediaCard(
     video: Video,
     onClick: (Video) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    bottomContent: (@Composable () -> Unit)? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -370,58 +371,62 @@ fun VerticalMediaCard(
                         )
                         .padding(horizontal = 8.dp, vertical = 6.dp)
                 ) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(
-                            text = video.title,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        if (video.desc.isNotBlank()) {
-                            Text(
-                                text = video.desc,
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                color = Color.White.copy(alpha = 0.85f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        } else if (video.author.isNotBlank()) {
-                            Text(
-                                text = video.author,
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                color = Color.White.copy(alpha = 0.8f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                    if (bottomContent != null) {
+                        bottomContent()
+                    } else {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
-                            if (video.epSize > 0) {
+                            Text(
+                                text = video.title,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (video.desc.isNotBlank()) {
                                 Text(
-                                    text = "全${video.epSize}话",
+                                    text = video.desc,
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                    color = Color.White.copy(alpha = 0.9f),
+                                    color = Color.White.copy(alpha = 0.85f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                            } else {
-                                Spacer(modifier = Modifier.width(1.dp))
-                            }
-                            if (video.mediaScore > 0) {
+                            } else if (video.author.isNotBlank()) {
                                 Text(
-                                    text = String.format("%.1f", video.mediaScore),
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-                                    color = Color(0xFFFFD700),
+                                    text = video.author,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = Color.White.copy(alpha = 0.8f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (video.epSize > 0) {
+                                    Text(
+                                        text = "全${video.epSize}话",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                        color = Color.White.copy(alpha = 0.9f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                } else {
+                                    Spacer(modifier = Modifier.width(1.dp))
+                                }
+                                if (video.mediaScore > 0) {
+                                    Text(
+                                        text = String.format("%.1f", video.mediaScore),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                                        color = Color(0xFFFFD700),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
                     }

@@ -8,25 +8,23 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.bili.bilitv.BuildConfig
 import com.bili.bilitv.RefreshingIndicator
 import kotlinx.coroutines.Dispatchers
@@ -85,7 +83,29 @@ data class Stat(
  */
 enum class TabType(val title: String) {
     RECOMMEND("推荐"),
+    BANGUMI("番剧"),
     HOT("热门")
+}
+
+private fun dayLabel(day: TimelineDay): String {
+    if (day.isToday) return "最近更新"
+    val names = listOf("一", "二", "三", "四", "五", "六", "日")
+    val idx = (day.dayOfWeek - 1).coerceIn(0, names.lastIndex)
+    return "周${names[idx]}"
+}
+
+private fun TimelineEpisode.toVideoCard(): Video {
+    return Video(
+        id = "ep_$episodeId",
+        cid = episodeId,
+        title = title.ifBlank { episodeIndex },
+        coverUrl = cover,
+        author = "",
+        playCount = formatCount(viewCount),
+        duration = publishTime,
+        seasonId = seasonId,
+        isFollow = isFollowed
+    )
 }
 
 /**
@@ -172,6 +192,9 @@ fun HomeScreen(
                     }
                 }
             }
+            TabType.BANGUMI -> {
+                viewModel.ensureTimelineLoaded()
+            }
         }
     }
     
@@ -220,7 +243,7 @@ fun HomeScreen(
                     when (viewModel.selectedTab) {
                         TabType.HOT -> viewModel.hotVideos.map { mapVideoItemDataToVideo(it) }
                         TabType.RECOMMEND -> viewModel.recommendVideos.map { mapVideoItemDataToVideo(it) }
-                        else -> getVideosForTab(viewModel.selectedTab)
+                        TabType.BANGUMI -> emptyList()
                     }
                 }
             }
@@ -229,6 +252,7 @@ fun HomeScreen(
             val isLoading = when (viewModel.selectedTab) {
                 TabType.HOT -> viewModel.isHotLoading && viewModel.hotVideos.isEmpty()
                 TabType.RECOMMEND -> viewModel.isRecommendLoading && viewModel.recommendVideos.isEmpty()
+                TabType.BANGUMI -> viewModel.isTimelineLoading && viewModel.timelineDays.isEmpty()
             }
             
             // 内容区域
@@ -241,37 +265,43 @@ fun HomeScreen(
                 if (isLoading) {
                     CircularProgressIndicator()
                 } else {
-                    // 使用 key 确保切换 Tab 时重新创建 Grid，从而应用新的初始滚动位置
-                    key(viewModel.selectedTab) {
-                        CommonVideoGrid(
-                            videos = videosToDisplay,
-                            stateManager = viewModel,
-                            stateKey = viewModel.selectedTab,
-                            columns = 4,
-                            onVideoClick = handleVideoClick,
-                            onLoadMore = {
-                                when (viewModel.selectedTab) {
-                                    TabType.RECOMMEND -> {
-                                        if (viewModel.canLoadMore(TabType.RECOMMEND)) {
-                                            coroutineScope.launch {
-                                                viewModel.loadNextPage(TabType.RECOMMEND)
-                                            }
-                                        }
-                                    }
-                                    TabType.HOT -> {
-                                        if (viewModel.canLoadMore(TabType.HOT)) {
-                                            coroutineScope.launch {
-                                                viewModel.loadNextPage(TabType.HOT)
-                                            }
-                                        }
-                                    }
-                                }
-                            },
-                            horizontalSpacing = 12.dp,
-                            verticalSpacing = 12.dp,
-                            contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp),
-                            scrollToTopSignal = viewModel.refreshSignal
+                    if (viewModel.selectedTab == TabType.BANGUMI) {
+                        BangumiTimelineSection(
+                            viewModel = viewModel
                         )
+                    } else {
+                        key(viewModel.selectedTab) {
+                            CommonVideoGrid(
+                                videos = videosToDisplay,
+                                stateManager = viewModel,
+                                stateKey = viewModel.selectedTab,
+                                columns = 4,
+                                onVideoClick = handleVideoClick,
+                                onLoadMore = {
+                                    when (viewModel.selectedTab) {
+                                        TabType.RECOMMEND -> {
+                                            if (viewModel.canLoadMore(TabType.RECOMMEND)) {
+                                                coroutineScope.launch {
+                                                    viewModel.loadNextPage(TabType.RECOMMEND)
+                                                }
+                                            }
+                                        }
+                                        TabType.HOT -> {
+                                            if (viewModel.canLoadMore(TabType.HOT)) {
+                                                coroutineScope.launch {
+                                                    viewModel.loadNextPage(TabType.HOT)
+                                                }
+                                            }
+                                        }
+                                        else -> {}
+                                    }
+                                },
+                                horizontalSpacing = 12.dp,
+                                verticalSpacing = 12.dp,
+                                contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp),
+                                scrollToTopSignal = viewModel.refreshSignal
+                            )
+                        }
                     }
                 }
             }
@@ -280,29 +310,6 @@ fun HomeScreen(
 }
 
 // 使用通用选项卡组件，无需重复定义
-
-/**
- * 获取对应Tab的视频数据
- */
-private fun getVideosForTab(tabType: TabType): List<Video> {
-    val prefix = when (tabType) {
-        TabType.RECOMMEND -> "推荐视频"
-        TabType.HOT -> "热门视频"
-    }
-    
-    return List(12) { index ->
-        Video(
-            id = "${tabType.name}_$index",
-            title = "$prefix ${index + 1}: 这是一个有趣的视频标题，内容非常精彩",
-            coverUrl = "", // 这里使用空字符串，会显示占位图
-            author = "UP主${index + 1}",
-            playCount = "${(index + 1) * 1000}",
-            danmakuCount = "${(index + 1) * 100}",
-            duration = String.format("%02d:%02d", (index + 1), (index * 10) % 60),
-            durationSeconds = ((index + 1) * 60L) + ((index * 10) % 60)
-        )
-    }
-}
 
 private fun mapVideoItemDataToVideo(videoItemData: VideoItemData): Video {
     return Video(
@@ -321,7 +328,7 @@ private fun mapVideoItemDataToVideo(videoItemData: VideoItemData): Video {
     )
 }
 
-private fun formatCount(count: Int): String {
+private fun formatCount(count: Long): String {
     return when {
         count >= 10000 -> String.format("%.1f万", count / 10000f)
         else -> count.toString()
@@ -337,5 +344,140 @@ private fun formatDuration(seconds: Long): String {
         String.format("%d:%02d:%02d", hours, minutes, secs)
     } else {
         String.format("%02d:%02d", minutes, secs)
+    }
+}
+
+@Composable
+private fun BangumiTimelineSection(
+    viewModel: HomeViewModel
+) {
+    val days = viewModel.timelineDays
+    val selectedIndex = viewModel.timelineSelectedIndex.coerceIn(0, (days.size - 1).coerceAtLeast(0))
+    val currentDay = days.getOrNull(selectedIndex)
+    val isLoading = viewModel.isTimelineLoading
+    val error = viewModel.timelineError
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        if (days.isNotEmpty()) {
+            ScrollableTabRow(
+                selectedTabIndex = selectedIndex,
+                edgePadding = 0.dp,
+                divider = {},
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedIndex])
+                    )
+                }
+            ) {
+                days.forEachIndexed { index, day ->
+                    Tab(
+                        selected = selectedIndex == index,
+                        onClick = { viewModel.timelineSelectedIndex = index },
+                        text = {
+                            val todayLabel = if (day.isToday) "今天" else ""
+                            Text("${day.date} ${if (todayLabel.isNotEmpty()) todayLabel else "周${day.dayOfWeek}"}")
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        when {
+            isLoading && days.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+            error != null && days.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(text = "加载失败：$error")
+                        Button(onClick = { viewModel.refreshCurrentTab() }) {
+                            Text("重试")
+                        }
+                    }
+                }
+            }
+            currentDay == null -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("暂无数据")
+                }
+            }
+            else -> {
+                if (error != null) {
+                    Text(
+                        text = "部分数据加载异常：$error",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                val episodes = currentDay.episodes
+                LazyRow(
+                    modifier = Modifier
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    items(episodes) { episode ->
+                        VerticalMediaCard(
+                            video = episode.toVideoCard(),
+                            onClick = { /* TODO: 番剧详情 */ },
+                            bottomContent = {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = episode.title.ifBlank { episode.episodeIndex },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.White,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = episode.episodeIndex,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = episode.publishTime,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+                if (isLoading) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
     }
 }
