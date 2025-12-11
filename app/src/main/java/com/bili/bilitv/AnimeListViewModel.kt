@@ -1,10 +1,12 @@
 package com.bili.bilitv
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.bili.bilitv.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -223,6 +225,23 @@ class AnimeListViewModel : ViewModel() {
                         val resp = json.decodeFromString<PgcResultResponse>(body)
                         if (resp.code == 0 && resp.data != null) {
                             val newVideos = resp.data.list
+                            
+                            if (BuildConfig.DEBUG) {
+                                Log.d("AnimeList", "======= 番剧列表数据 =======")
+                                Log.d("AnimeList", "总数: ${resp.data.total}, 当前页数量: ${newVideos.size}, 有下一页: ${resp.data.has_next == 1}")
+                                newVideos.forEachIndexed { index, item ->
+                                    Log.d("AnimeList", "[$index] ${item}")
+                                    Log.d("AnimeList", "  season_id: ${item.season_id}, media_id: ${item.media_id}")
+                                    Log.d("AnimeList", "  index_show: ${item.index_show}")
+                                    Log.d("AnimeList", "  order: ${item.order}")
+                                    Log.d("AnimeList", "  score: ${item.score}")
+                                    Log.d("AnimeList", "  badge: ${item.badge}")
+                                    Log.d("AnimeList", "  badge_info: bg_color=${item.badge_info?.bg_color}, text=${item.badge_info?.text}")
+                                    Log.d("AnimeList", "  is_finish: ${item.is_finish}")
+                                }
+                                Log.d("AnimeList", "========================")
+                            }
+                            
                             videos = if (reset) newVideos else videos + newVideos
                             hasNext = resp.data.has_next == 1
                             if (hasNext) page++

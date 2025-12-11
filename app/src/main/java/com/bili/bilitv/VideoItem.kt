@@ -131,7 +131,8 @@ data class Video(
     val orgTitle: String = "",
     val cv: String = "",
     val staff: String = "",
-    val episodes: List<MediaEpisode> = emptyList()
+    val episodes: List<MediaEpisode> = emptyList(),
+    val bottomText: String? = null
 )
 
 private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -407,9 +408,18 @@ fun VerticalMediaCard(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                if (video.epSize > 0) {
+                                if (!video.bottomText.isNullOrBlank()) {
                                     Text(
-                                        text = "全${video.epSize}话",
+                                        text = video.bottomText,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                        color = Color.White.copy(alpha = 0.9f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                } else if (video.epSize > 0) {
+                                    val statusText = if (video.isFollow) "全${video.epSize}话" else "更新至第${video.epSize}话"
+                                    Text(
+                                        text = statusText,
                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                                         color = Color.White.copy(alpha = 0.9f),
                                         maxLines = 1,

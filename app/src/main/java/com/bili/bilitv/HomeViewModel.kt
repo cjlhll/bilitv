@@ -711,7 +711,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
             )
         }?.takeIf { it.text.isNotBlank() }
 
-        val desc = subTitle.ifBlank { order.ifBlank { indexShow } }
+        val desc = ""
+        val bottomText = indexShow
         val epSize = parseEpisodeCount(indexShow)
         val mediaScore = parseScoreValue(score)
 
@@ -739,7 +740,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
             url = link,
             buttonText = "",
             isFollow = isFinish == 1,
-            cid = firstEp?.epId ?: 0
+            cid = firstEp?.epId ?: 0,
+            bottomText = bottomText
         )
     }
 

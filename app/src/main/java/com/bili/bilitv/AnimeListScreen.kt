@@ -122,26 +122,36 @@ fun AnimeListScreen(
         } else {
             // Convert PgcIndexItem to Video for the generic grid
             val videoItems = videos.map { pgcItem ->
-                Video(
-                    id = pgcItem.season_id.toString(),
-                    title = pgcItem.title,
-                    coverUrl = pgcItem.cover,
-                    author = "",
-                    playCount = "",
-                    desc = pgcItem.index_show?.takeIf { it.isNotBlank() } 
-                        ?: pgcItem.order?.takeIf { it.isNotBlank() } 
-                        ?: pgcItem.score?.takeIf { it.isNotBlank() } 
-                        ?: "",
-                    seasonId = pgcItem.season_id,
-                    mediaId = pgcItem.media_id,
-                    isFollow = pgcItem.is_finish == 1,
-                    mediaScore = pgcItem.score?.replace("分", "")?.toDoubleOrNull() ?: 0.0,
-                    badges = pgcItem.badge?.let { 
-                         listOf(Badge(text = it, bgColor = pgcItem.badge_info?.bg_color ?: "", borderColor = "", textColor = ""))
-                    } ?: emptyList()
-                )
-            }
+                val epSize = pgcItem.index_show?.let { text ->
+                    Regex("(\\d+)").find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                } ?: 0
 
+                val mediaScore = pgcItem.score?.let { text ->
+                    text.replace("分", "").replace(Regex("[^0-9.]"), "").toDoubleOrNull()
+                } ?: 0.0
+
+                                val bottomText = pgcItem.index_show
+                
+                                val desc = "" // Clear desc as requested
+                
+                                Video(
+                                    id = pgcItem.season_id.toString(),
+                                    title = pgcItem.title,
+                                    coverUrl = pgcItem.cover,
+                                    author = "",
+                                    playCount = "",
+                                    desc = desc,
+                                    seasonId = pgcItem.season_id,
+                                    mediaId = pgcItem.media_id,
+                                    isFollow = pgcItem.is_finish == 1,
+                                    mediaScore = mediaScore,
+                                    epSize = epSize,
+                                    bottomText = bottomText,
+                                    badges = pgcItem.badge?.let { 
+                                         listOf(Badge(text = it, bgColor = pgcItem.badge_info?.bg_color ?: "", borderColor = "", textColor = ""))
+                                    } ?: emptyList()
+                                )
+                            }
             CommonVideoGrid(
                 videos = videoItems,
                 stateManager = stateManager,
