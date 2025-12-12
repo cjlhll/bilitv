@@ -236,8 +236,13 @@ enum class NavRoute(val title: String, val icon: ImageVector) {
     LIVE("直播", Icons.Default.PlayArrow),
     USER("用户", Icons.Default.AccountCircle),
     SETTINGS("设置", Icons.Default.Settings),
-    ANIME_LIST("番剧索引", Icons.Default.List)
+    PGC_LIST("PGC索引", Icons.Default.List)
 }
+
+data class PgcListConfig(
+    val initialSeasonType: Int,
+    val tabs: List<Pair<String, Int>> = emptyList() // Pair of tab name and season_type
+)
 
 @Composable
 fun MainScreen() {
@@ -248,7 +253,7 @@ fun MainScreen() {
     var fullScreenLivePlayInfo by remember { mutableStateOf<LivePlayInfo?>(null) }
     var fullScreenVideoTitle by remember { mutableStateOf("") }
     var selectedMedia by remember { mutableStateOf<Video?>(null) }
-    var animeListSeasonType by remember { mutableStateOf(1) }
+    var pgcListConfig by remember { mutableStateOf<PgcListConfig?>(null) }
     
     // 直播模块的导航状态 - 提升到顶层以保持状态
     var selectedLiveArea by remember { mutableStateOf<LiveAreaItem?>(null) }
@@ -382,7 +387,7 @@ fun MainScreen() {
     }
 
     // 判断是否应该隐藏导航栏（直播列表页面全屏显示，或搜索结果页）
-    val shouldHideNavigation = (currentRoute == NavRoute.LIVE && selectedLiveArea != null) || currentRoute == NavRoute.SEARCH_RESULT || currentRoute == NavRoute.MEDIA_DETAIL || currentRoute == NavRoute.ANIME_LIST
+    val shouldHideNavigation = (currentRoute == NavRoute.LIVE && selectedLiveArea != null) || currentRoute == NavRoute.SEARCH_RESULT || currentRoute == NavRoute.MEDIA_DETAIL || currentRoute == NavRoute.PGC_LIST
 
     // 使用Crossfade实现播放器与列表之间的平滑过渡
     Crossfade(
@@ -478,9 +483,11 @@ fun MainScreen() {
                             )
                         }
                     }
-                    NavRoute.ANIME_LIST -> {
-                        AnimeListScreen(
-                            seasonType = animeListSeasonType,
+                    NavRoute.PGC_LIST -> {
+                        val config = pgcListConfig ?: PgcListConfig(1) // Default to anime if config is null
+                        PgcListScreen(
+                            initialSeasonType = config.initialSeasonType,
+                            tabs = config.tabs,
                             onMediaClick = { video ->
                                 selectedMedia = video
                                 currentRoute = NavRoute.MEDIA_DETAIL
@@ -572,12 +579,25 @@ fun MainScreen() {
                             currentRoute = NavRoute.MEDIA_DETAIL
                         },
                         onNavigateToAnimeList = {
-                            animeListSeasonType = 1
-                            currentRoute = NavRoute.ANIME_LIST
+                            pgcListConfig = PgcListConfig(1)
+                            currentRoute = NavRoute.PGC_LIST
                         },
                         onNavigateToGuochuangList = {
-                            animeListSeasonType = 4
-                            currentRoute = NavRoute.ANIME_LIST
+                            pgcListConfig = PgcListConfig(4)
+                            currentRoute = NavRoute.PGC_LIST
+                        },
+                        onNavigateToCinemaList = {
+                            pgcListConfig = PgcListConfig(
+                                initialSeasonType = 1, // Default to "全部" tab
+                                tabs = listOf(
+                                    "全部" to 1, // 全部内容
+                                    "电影" to 2, // 电影类型
+                                    "电视剧" to 3, // 电视剧类型
+                                    "纪录片" to 4, // 纪录片类型
+                                    "综艺" to 5 // 综艺类型
+                                )
+                            )
+                            currentRoute = NavRoute.PGC_LIST
                         }
                     )
                     NavRoute.USER -> UserLoginScreen(

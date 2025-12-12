@@ -1,63 +1,107 @@
-# 番剧索引筛选接口文档
+# 筛选条件API接口文档
 
-## 接口概述
+## 接口地址
+```
+GET https://api.bilibili.com/pgc/season/index/condition
+```
 
-本文档描述了 PiliPlus 项目中番剧索引页面的筛选功能相关API接口，包括获取筛选条件配置和获取筛选结果两个核心接口。
-
----
-
-## 1. 获取筛选条件配置
-
-### 基本信息
-
-- **接口地址**: `/pgc/season/index/condition`
-- **请求方法**: `GET`
-- **接口说明**: 获取番剧索引页的筛选条件配置，包括排序方式和各类筛选项（类型、地区、状态等）
-
-### 请求参数
+## 请求参数说明
 
 | 参数名 | 类型 | 必填 | 默认值 | 说明 |
 |--------|------|------|--------|------|
-| season_type | int | 否 | - | 内容类型：<br>1 = 番剧<br>3 = 电影<br>4 = 国创 |
-| type | int | 否 | 0 | 类型参数 |
-| index_type | int | 否 | - | 索引类型 |
+| season_type | int | 否 | 1 | 季类型：1-番剧，2-电影，3-纪录片，4-国创，5-电视剧，7-综艺 |
+| type | int | 否 | 0 | 类型：固定为0 |
+| index_type | int | 否 | null | 索引类型：102-影视，null-番剧 |
 
-### 请求示例
+## 请求示例
 
-```http
-GET /pgc/season/index/condition?season_type=1&type=0
+### 番剧筛选条件
+```bash
+GET https://api.bilibili.com/pgc/season/index/condition?season_type=1&type=0
 ```
 
-### 响应示例
+### 影视筛选条件
+```bash
+GET https://api.bilibili.com/pgc/season/index/condition?season_type=1&type=0&index_type=102
+```
 
+## 返回参数说明
+
+### 响应结构
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "filter": [],
+    "order": []
+  }
+}
+```
+
+### data字段说明
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| filter | array | 筛选条件列表（地区、年份、风格等） |
+| order | array | 排序选项列表 |
+
+## filter数组结构说明
+
+### filter对象结构
+```json
+{
+  "field": "area",
+  "name": "地区",
+  "values": []
+}
+```
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| field | string | 筛选字段名，用于请求参数 |
+| name | string | 筛选类别名称，用于显示 |
+| values | array | 筛选选项列表 |
+
+### values对象结构
+```json
+{
+  "keyword": "1",
+  "name": "日本"
+}
+```
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| keyword | string | 筛选选项值，用于请求参数 |
+| name | string | 筛选选项名称，用于显示 |
+
+## order数组结构说明
+
+### order对象结构
+```json
+{
+  "field": "order",
+  "name": "排序",
+  "sort": "0"
+}
+```
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| field | string | 排序字段名，用于请求参数 |
+| name | string | 排序类别名称，用于显示 |
+| sort | string | 排序值，用于请求参数 |
+
+## 完整返回示例
+
+### 番剧筛选条件返回示例
 ```json
 {
   "code": 0,
   "message": "success",
   "data": {
     "filter": [
-      {
-        "field": "style_id",
-        "name": "类型",
-        "values": [
-          {
-            "keyword": "-1",
-            "name": "全部"
-          },
-          {
-            "keyword": "1",
-            "name": "搞笑"
-          },
-          {
-            "keyword": "2",
-            "name": "运动"
-          },
-          {
-            "keyword": "3",
-            "name": "热血"
-          }
-        ]
-      },
       {
         "field": "area",
         "name": "地区",
@@ -68,21 +112,167 @@ GET /pgc/season/index/condition?season_type=1&type=0
           },
           {
             "keyword": "1",
-            "name": "日本"
+            "name": "国产"
           },
           {
             "keyword": "2",
-            "name": "美国"
+            "name": "日本"
           },
           {
             "keyword": "3",
-            "name": "中国"
+            "name": "韩国"
+          },
+          {
+            "keyword": "4",
+            "name": "美国"
+          },
+          {
+            "keyword": "5",
+            "name": "英国"
+          },
+          {
+            "keyword": "6",
+            "name": "法国"
+          },
+          {
+            "keyword": "7",
+            "name": "其他"
+          }
+        ]
+      },
+      {
+        "field": "style_id",
+        "name": "风格",
+        "values": [
+          {
+            "keyword": "-1",
+            "name": "全部"
+          },
+          {
+            "keyword": "1",
+            "name": "原创"
+          },
+          {
+            "keyword": "2",
+            "name": "漫画改"
+          },
+          {
+            "keyword": "3",
+            "name": "小说改"
+          },
+          {
+            "keyword": "4",
+            "name": "游戏改"
+          },
+          {
+            "keyword": "5",
+            "name": "特摄"
+          },
+          {
+            "keyword": "6",
+            "name": "布袋戏"
+          },
+          {
+            "keyword": "7",
+            "name": "热血"
+          },
+          {
+            "keyword": "8",
+            "name": "穿越"
+          },
+          {
+            "keyword": "9",
+            "name": "奇幻"
+          },
+          {
+            "keyword": "10",
+            "name": "恋爱"
+          },
+          {
+            "keyword": "11",
+            "name": "校园"
+          },
+          {
+            "keyword": "12",
+            "name": "搞笑"
+          },
+          {
+            "keyword": "13",
+            "name": "日常"
+          },
+          {
+            "keyword": "14",
+            "name": "科幻"
+          },
+          {
+            "keyword": "15",
+            "name": "萌系"
+          },
+          {
+            "keyword": "16",
+            "name": "治愈"
+          },
+          {
+            "keyword": "17",
+            "name": "职场"
+          },
+          {
+            "keyword": "18",
+            "name": "推理"
+          },
+          {
+            "keyword": "19",
+            "name": "冒险"
+          },
+          {
+            "keyword": "20",
+            "name": "悬疑"
+          },
+          {
+            "keyword": "21",
+            "name": "历史"
+          },
+          {
+            "keyword": "22",
+            "name": "战争"
+          },
+          {
+            "keyword": "23",
+            "name": "竞技"
+          },
+          {
+            "keyword": "24",
+            "name": "魔法"
+          },
+          {
+            "keyword": "25",
+            "name": "机战"
+          },
+          {
+            "keyword": "26",
+            "name": "未来"
+          },
+          {
+            "keyword": "27",
+            "name": "美食"
+          },
+          {
+            "keyword": "28",
+            "name": "偶像"
+          },
+          {
+            "keyword": "29",
+            "name": "乙女"
+          },
+          {
+            "keyword": "30",
+            "name": "音乐"
           }
         ]
       },
       {
         "field": "is_finish",
-        "name": "状态",
+        "name": "连载状态",
         "values": [
           {
             "keyword": "-1",
@@ -90,468 +280,421 @@ GET /pgc/season/index/condition?season_type=1&type=0
           },
           {
             "keyword": "0",
-            "name": "连载"
+            "name": "连载中"
           },
           {
             "keyword": "1",
-            "name": "完结"
+            "name": "已完结"
+          }
+        ]
+      },
+      {
+        "field": "season_status",
+        "name": "付费类型",
+        "values": [
+          {
+            "keyword": "-1",
+            "name": "全部"
+          },
+          {
+            "keyword": "1",
+            "name": "免费"
+          },
+          {
+            "keyword": "2",
+            "name": "付费"
+          },
+          {
+            "keyword": "3",
+            "name": "大会员"
+          }
+        ]
+      },
+      {
+        "field": "season_month",
+        "name": "播出时间",
+        "values": [
+          {
+            "keyword": "-1",
+            "name": "全部"
+          },
+          {
+            "keyword": "1",
+            "name": "1月"
+          },
+          {
+            "keyword": "2",
+            "name": "2月"
+          },
+          {
+            "keyword": "3",
+            "name": "3月"
+          },
+          {
+            "keyword": "4",
+            "name": "4月"
+          },
+          {
+            "keyword": "5",
+            "name": "5月"
+          },
+          {
+            "keyword": "6",
+            "name": "6月"
+          },
+          {
+            "keyword": "7",
+            "name": "7月"
+          },
+          {
+            "keyword": "8",
+            "name": "8月"
+          },
+          {
+            "keyword": "9",
+            "name": "9月"
+          },
+          {
+            "keyword": "10",
+            "name": "10月"
+          },
+          {
+            "keyword": "11",
+            "name": "11月"
+          },
+          {
+            "keyword": "12",
+            "name": "12月"
+          }
+        ]
+      },
+      {
+        "field": "year",
+        "name": "年份",
+        "values": [
+          {
+            "keyword": "-1",
+            "name": "全部"
+          },
+          {
+            "keyword": "2024",
+            "name": "2024"
+          },
+          {
+            "keyword": "2023",
+            "name": "2023"
+          },
+          {
+            "keyword": "2022",
+            "name": "2022"
+          },
+          {
+            "keyword": "2021",
+            "name": "2021"
+          },
+          {
+            "keyword": "2020",
+            "name": "2020"
+          },
+          {
+            "keyword": "2019",
+            "name": "2019"
+          },
+          {
+            "keyword": "2018",
+            "name": "2018"
+          },
+          {
+            "keyword": "2017",
+            "name": "2017"
+          },
+          {
+            "keyword": "2016",
+            "name": "2016"
+          },
+          {
+            "keyword": "2015",
+            "name": "2015"
+          }
+        ]
+      },
+      {
+        "field": "season_version",
+        "name": "版本",
+        "values": [
+          {
+            "keyword": "-1",
+            "name": "全部"
+          },
+          {
+            "keyword": "1",
+            "name": "正片"
+          },
+          {
+            "keyword": "2",
+            "name": "电影"
+          },
+          {
+            "keyword": "3",
+            "name": "其他"
           }
         ]
       }
     ],
     "order": [
       {
-        "field": "3",
-        "name": "追番人数",
-        "sort": ""
+        "field": "order",
+        "name": "排序",
+        "sort": "0"
       },
       {
-        "field": "0",
-        "name": "更新时间",
-        "sort": ""
+        "field": "order",
+        "name": "播放最多",
+        "sort": "2"
       },
       {
-        "field": "2",
-        "name": "评分",
-        "sort": ""
+        "field": "order",
+        "name": "最新上架",
+        "sort": "1"
+      },
+      {
+        "field": "order",
+        "name": "评分最高",
+        "sort": "3"
       }
     ]
   }
 }
 ```
 
-### 响应字段说明
-
-#### data 对象
-
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| filter | array | 筛选条件列表，包含多个筛选维度 |
-| order | array | 排序方式列表 |
-
-#### filter 数组元素
-
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| field | string | 筛选字段标识，用于请求结果接口时作为参数名 |
-| name | string | 筛选条件的显示名称（中文） |
-| values | array | 该筛选条件的所有可选值 |
-
-#### values 数组元素
-
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| keyword | string | 筛选值的关键字，用于请求结果接口时作为参数值 |
-| name | string | 筛选值的显示名称（中文） |
-
-#### order 数组元素
-
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| field | string | 排序字段标识 |
-| name | string | 排序方式的显示名称 |
-| sort | string | 排序方式（预留字段，当前为空） |
-
-### 常见筛选字段说明
-
-| field 字段值 | 中文名称 | 说明 | 常见 keyword 值 |
-|-------------|---------|------|----------------|
-| style_id | 类型/风格 | 番剧的题材类型 | -1=全部, 1=搞笑, 2=运动, 3=热血, 4=恋爱, 5=科幻 等 |
-| area | 地区 | 番剧制作地区 | -1=全部, 1=日本, 2=美国, 3=中国, 4=韩国 等 |
-| is_finish | 完结状态 | 番剧是否完结 | -1=全部, 0=连载, 1=完结 |
-| copyright | 版权 | 版权类型 | -1=全部, 1=独家, 2=其他 |
-| season_version | 版本 | 番剧版本类型 | -1=全部, 1=正片, 2=电影, 3=其他 |
-| spoken_language_type | 配音 | 音频语言 | -1=全部, 1=原声, 2=中配 |
-| season_status | 付费状态 | 观看权限 | -1=全部, 1=免费, 2=付费, 3=会员专享 |
-| season_month | 月份 | 上线月份 | -1=全部, 1-12=具体月份 |
-| year | 年份 | 上线年份 | -1=全部, 2020, 2021, 2022... |
-
----
-
-## 2. 获取筛选结果
-
-### 基本信息
-
-- **接口地址**: `/pgc/season/index/result`
-- **请求方法**: `GET`
-- **接口说明**: 根据筛选条件获取番剧列表结果，支持分页
-
-### 请求参数
-
-#### 基础参数
-
-| 参数名 | 类型 | 必填 | 默认值 | 说明 |
-|--------|------|------|--------|------|
-| season_type | int | 否 | - | 内容类型：1=番剧, 3=电影, 4=国创 |
-| type | int | 否 | 0 | 类型参数 |
-| index_type | int | 否 | - | 索引类型 |
-| page | int | 是 | - | 页码，从 1 开始 |
-| pagesize | int | 是 | - | 每页数量，建议 20-21 |
-
-#### 排序参数
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| order | string | 否 | 排序字段，值来自条件接口的 `order[].field` |
-
-#### 筛选参数（动态）
-
-根据条件接口返回的 `filter[].field` 动态添加，常见参数如下：
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| style_id | string | 否 | 类型筛选，值来自条件接口对应 filter 的 `values[].keyword` |
-| area | string | 否 | 地区筛选 |
-| is_finish | string | 否 | 完结状态筛选 |
-| copyright | string | 否 | 版权筛选 |
-| season_version | string | 否 | 版本筛选 |
-| spoken_language_type | string | 否 | 配音筛选 |
-| season_status | string | 否 | 付费状态筛选 |
-| season_month | string | 否 | 月份筛选 |
-| year | string | 否 | 年份筛选 |
-
-> **注意**: 所有筛选参数的值必须使用条件接口返回的 `keyword` 字段，不可自定义
-
-### 请求示例
-
-```http
-GET /pgc/season/index/result?season_type=1&type=0&page=1&pagesize=21&order=3&style_id=-1&area=1&is_finish=-1&copyright=-1&season_version=-1&spoken_language_type=-1&season_status=-1&season_month=-1&year=-1
-```
-
-### 响应示例
-
+### 影视筛选条件返回示例
 ```json
 {
   "code": 0,
   "message": "success",
   "data": {
-    "has_next": 1,
-    "list": [
+    "filter": [
       {
-        "badge": "会员专享",
-        "badge_info": {
-          "bg_color": "#FB7299",
-          "bg_color_night": "#BB5B76",
-          "text": "会员专享"
-        },
-        "badge_type": 0,
-        "cover": "http://i0.hdslb.com/bfs/bangumi/image/xxx.jpg",
-        "first_ep": {
-          "cover": "http://i0.hdslb.com/bfs/archive/xxx.jpg",
-          "id": 123456,
-          "title": "第1话"
-        },
-        "index_show": "更新至第12话",
-        "is_finish": 0,
-        "link": "https://www.bilibili.com/bangumi/play/ss12345",
-        "media_id": 12345,
-        "order": "9.8",
-        "order_type": "score",
-        "score": "9.8",
-        "season_id": 12345,
-        "season_status": 2,
-        "season_type": 1,
-        "sub_title": "全12话",
-        "title": "番剧标题",
-        "title_icon": ""
+        "field": "area",
+        "name": "地区",
+        "values": [
+          {
+            "keyword": "-1",
+            "name": "全部"
+          },
+          {
+            "keyword": "1",
+            "name": "国产"
+          },
+          {
+            "keyword": "2",
+            "name": "日本"
+          },
+          {
+            "keyword": "3",
+            "name": "韩国"
+          },
+          {
+            "keyword": "4",
+            "name": "美国"
+          },
+          {
+            "keyword": "5",
+            "name": "英国"
+          },
+          {
+            "keyword": "6",
+            "name": "法国"
+          },
+          {
+            "keyword": "7",
+            "name": "其他"
+          }
+        ]
+      },
+      {
+        "field": "style_id",
+        "name": "类型",
+        "values": [
+          {
+            "keyword": "-1",
+            "name": "全部"
+          },
+          {
+            "keyword": "2",
+            "name": "电影"
+          },
+          {
+            "keyword": "5",
+            "name": "电视剧"
+          },
+          {
+            "keyword": "3",
+            "name": "纪录片"
+          },
+          {
+            "keyword": "7",
+            "name": "综艺"
+          }
+        ]
+      },
+      {
+        "field": "is_finish",
+        "name": "完结状态",
+        "values": [
+          {
+            "keyword": "-1",
+            "name": "全部"
+          },
+          {
+            "keyword": "0",
+            "name": "连载中"
+          },
+          {
+            "keyword": "1",
+            "name": "已完结"
+          }
+        ]
+      },
+      {
+        "field": "season_status",
+        "name": "付费类型",
+        "values": [
+          {
+            "keyword": "-1",
+            "name": "全部"
+          },
+          {
+            "keyword": "1",
+            "name": "免费"
+          },
+          {
+            "keyword": "2",
+            "name": "付费"
+          },
+          {
+            "keyword": "3",
+            "name": "大会员"
+          }
+        ]
+      },
+      {
+        "field": "year",
+        "name": "年份",
+        "values": [
+          {
+            "keyword": "-1",
+            "name": "全部"
+          },
+          {
+            "keyword": "2024",
+            "name": "2024"
+          },
+          {
+            "keyword": "2023",
+            "name": "2023"
+          },
+          {
+            "keyword": "2022",
+            "name": "2022"
+          },
+          {
+            "keyword": "2021",
+            "name": "2021"
+          },
+          {
+            "keyword": "2020",
+            "name": "2020"
+          }
+        ]
       }
     ],
-    "num": 1,
-    "size": 21,
-    "total": 1234
+    "order": [
+      {
+        "field": "order",
+        "name": "排序",
+        "sort": "0"
+      },
+      {
+        "field": "order",
+        "name": "播放最多",
+        "sort": "2"
+      },
+      {
+        "field": "order",
+        "name": "最新上架",
+        "sort": "1"
+      },
+      {
+        "field": "order",
+        "name": "评分最高",
+        "sort": "3"
+      }
+    ]
   }
 }
 ```
 
-### 响应字段说明
+## 使用说明
 
-#### data 对象
+### 1. 获取筛选条件
 
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| has_next | int | 是否有下一页：0=无, 1=有 |
-| list | array | 番剧列表数据 |
-| num | int | 当前页码 |
-| size | int | 每页数量 |
-| total | int | 符合条件的总结果数 |
-
-#### list 数组元素
-
-| 字段名 | 类型 | 可空 | 说明 |
-|--------|------|------|------|
-| badge | string | 是 | 角标文字，如 "会员专享"、"独家"、"限免" |
-| badge_info | object | 是 | 角标样式信息，包含背景色和文本 |
-| badge_type | int | 是 | 角标类型标识 |
-| cover | string | 否 | 番剧封面图URL |
-| first_ep | object | 是 | 第一集信息 |
-| index_show | string | 是 | 进度显示文本，如 "更新至第12话"、"全12话" |
-| is_finish | int | 否 | 完结状态：0=连载中, 1=已完结 |
-| link | string | 否 | 番剧详情页链接 |
-| media_id | int | 否 | 媒体ID |
-| order | string | 是 | 排序值，根据排序类型显示评分或追番数等 |
-| order_type | string | 是 | 排序类型，如 "score"、"follow" |
-| score | string | 是 | 评分（0-10分） |
-| season_id | int | 否 | 番剧季度ID（ssid） |
-| season_status | int | 否 | 番剧状态 |
-| season_type | int | 否 | 内容类型：1=番剧, 3=电影, 4=国创 |
-| sub_title | string | 是 | 副标题 |
-| title | string | 否 | 番剧标题 |
-| title_icon | string | 是 | 标题图标URL |
-
-#### badge_info 对象
-
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| bg_color | string | 日间模式背景色（十六进制颜色代码） |
-| bg_color_night | string | 夜间模式背景色（十六进制颜色代码） |
-| text | string | 角标显示文本 |
-
-#### first_ep 对象
-
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| cover | string | 第一集封面图URL |
-| id | int | 剧集ID（epid） |
-| title | string | 剧集标题，如 "第1话"、"第1集" |
-
----
-
-## 使用流程
-
-### 完整流程图
-
-```
-1. 进入番剧索引页
-   ↓
-2. 调用条件接口获取筛选配置
-   ↓
-3. 使用默认筛选条件调用结果接口
-   ↓
-4. 展示番剧列表（第1页）
-   ↓
-5. 用户选择筛选条件
-   ↓
-6. 调用结果接口（重置为第1页）
-   ↓
-7. 展示筛选后的列表
-   ↓
-8. 用户下拉加载更多
-   ↓
-9. page+1 继续调用结果接口
-   ↓
-10. 追加数据到列表
-    ↓
-11. 判断 has_next，决定是否可继续加载
-```
-
-### 初始化流程
+首先调用筛选条件接口获取可用的筛选选项：
 
 ```javascript
-// 1. 获取筛选条件配置
-const conditionResponse = await fetch('/pgc/season/index/condition?season_type=1&type=0');
-const conditionData = conditionResponse.data;
+// 获取番剧筛选条件
+fetch('https://api.bilibili.com/pgc/season/index/condition?season_type=1&type=0')
+  .then(response => response.json())
+  .then(data => {
+    // 处理筛选条件数据
+    const filters = data.data.filter;
+    const orders = data.data.order;
+  });
+```
 
-// 2. 构建默认参数（选择每个filter的第一个值）
+### 2. 应用筛选条件
+
+使用获取到的筛选条件构建请求参数：
+
+```javascript
+// 构建筛选参数
 const params = {
-  season_type: 1,
-  type: 0,
   page: 1,
-  pagesize: 21
+  pagesize: 20,
+  season_type: 1,
+  type: 1,
+  // 从筛选条件中选择
+  area: '2',  // 日本
+  style_id: '7',  // 热血
+  is_finish: '0',  // 连载中
+  order: '3',  // 评分最高
+  year: '2023'  // 2023年
 };
 
-// 添加默认排序
-if (conditionData.order && conditionData.order.length > 0) {
-  params.order = conditionData.order[0].field;
-}
-
-// 添加默认筛选
-conditionData.filter.forEach(item => {
-  if (item.values && item.values.length > 0) {
-    params[item.field] = item.values[0].keyword;
-  }
-});
-
-// 3. 获取第一页数据
-const resultResponse = await fetch('/pgc/season/index/result?' + new URLSearchParams(params));
+// 使用筛选参数请求列表
+fetch(`https://api.bilibili.com/pgc/season/index/result?${new URLSearchParams(params)}`)
+  .then(response => response.json())
+  .then(data => {
+    // 处理列表数据
+  });
 ```
-
-### 更新筛选条件
-
-```javascript
-// 用户点击筛选项
-function onFilterChange(field, keyword) {
-  // 更新参数
-  params[field] = keyword;
-  // 重置页码
-  params.page = 1;
-  // 重新请求
-  fetchResult(params);
-}
-```
-
-### 分页加载
-
-```javascript
-// 加载下一页
-function loadMore() {
-  if (has_next === 1) {
-    params.page += 1;
-    fetchResult(params, true); // true表示追加数据
-  }
-}
-```
-
----
-
-## 错误处理
-
-### 错误响应格式
-
-```json
-{
-  "code": -400,
-  "message": "请求错误",
-  "data": null
-}
-```
-
-### 常见错误码
-
-| 错误码 | 说明 | 可能原因 |
-|--------|------|---------|
-| 0 | 成功 | - |
-| -400 | 请求错误 | 参数格式错误、缺少必填参数 |
-| -403 | 访问权限不足 | 未登录或权限不够 |
-| -404 | 资源不存在 | 请求的资源不存在 |
-| -500 | 服务器错误 | 服务器内部错误 |
-
-### 错误处理建议
-
-1. **参数验证**: 确保所有参数值来自条件接口，避免传入非法值
-2. **网络重试**: 对于网络错误，实现重试机制
-3. **用户提示**: 向用户展示友好的错误信息
-4. **降级处理**: 筛选条件获取失败时，可使用默认配置
-
----
-
-## 数据模型
-
-### TypeScript 类型定义
-
-```typescript
-// 筛选条件配置响应
-interface ConditionResponse {
-  code: number;
-  message: string;
-  data: {
-    filter: FilterItem[];
-    order: OrderItem[];
-  };
-}
-
-interface FilterItem {
-  field: string;      // 筛选字段标识
-  name: string;       // 显示名称
-  values: FilterValue[];
-}
-
-interface FilterValue {
-  keyword: string;    // 参数值
-  name: string;       // 显示名称
-}
-
-interface OrderItem {
-  field: string;      // 排序字段
-  name: string;       // 显示名称
-  sort: string;       // 排序方式
-}
-
-// 筛选结果响应
-interface ResultResponse {
-  code: number;
-  message: string;
-  data: {
-    has_next: number;
-    list: PgcIndexItem[];
-    num: number;
-    size: number;
-    total: number;
-  };
-}
-
-interface PgcIndexItem {
-  badge?: string;
-  badge_info?: {
-    bg_color: string;
-    bg_color_night: string;
-    text: string;
-  };
-  badge_type?: number;
-  cover: string;
-  first_ep?: {
-    cover: string;
-    id: number;
-    title: string;
-  };
-  index_show?: string;
-  is_finish: number;
-  link: string;
-  media_id: number;
-  order?: string;
-  order_type?: string;
-  score?: string;
-  season_id: number;
-  season_status: number;
-  season_type: number;
-  sub_title?: string;
-  title: string;
-  title_icon?: string;
-}
-```
-
----
 
 ## 注意事项
 
-1. **参数值规范**: 所有筛选参数的值必须使用条件接口返回的 `keyword`，不能自定义
-2. **分页处理**: 
-   - 切换筛选条件时需要重置 `page` 为 1
-   - 根据 `has_next` 判断是否还有更多数据
-3. **性能优化**:
-   - 条件配置数据可缓存，不需要每次都请求
-   - 使用虚拟滚动处理大量列表数据
-4. **UI展示**:
-   - 建议支持展开/收起功能（超过5行筛选项时）
-   - 高亮显示当前选中的筛选值
-5. **兼容性**: 不同 `season_type` 可能返回不同的筛选字段
+1. **参数映射**：筛选条件中的 `field` 字段对应列表接口的参数名
+2. **值映射**：筛选选项中的 `keyword` 字段对应列表接口的参数值
+3. **默认值**：通常使用第一个选项作为默认值（keyword为-1的"全部"选项）
+4. **动态性**：筛选条件可能会根据后台配置动态变化，建议每次都重新获取
+5. **错误处理**：接口可能返回错误，需要做好错误处理和降级方案
 
----
+## 错误码说明
 
-## 版本历史
-
-- **v1.0** (2024): 初始版本
-- 接口路径: `/pgc/season/index/condition` 和 `/pgc/season/index/result`
-
----
-
-## 相关接口
-
-- 番剧详情: `/pgc/view/web/season`
-- 番剧时间表: `/pgc/web/timeline`
-- 追番/追剧: `/pgc/web/follow/add`
-
----
-
-## 附录
-
-### 代码位置
-
-- **Controller**: `lib/pages/pgc_index/controller.dart`
-- **View**: `lib/pages/pgc_index/view.dart`
-- **HTTP请求**: `lib/http/pgc.dart`
-- **数据模型**: `lib/models_new/pgc/pgc_index_condition/`
-
-### 相关文档
-
-- [BiliBili API 收集](https://github.com/SocialSisterYi/bilibili-API-collect)
-- [Flutter GetX 文档](https://pub.dev/packages/get)
+| 错误码 | 说明 |
+|--------|------|
+| 0 | 成功 |
+| -400 | 请求错误 |
+| -404 | 资源不存在 |
+| -500 | 服务器内部错误 |
+| 10001 | 参数错误 |
+| 10002 | 签名错误 |
+| 10003 | 权限不足 |

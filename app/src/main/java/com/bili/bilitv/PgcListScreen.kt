@@ -1,5 +1,6 @@
 package com.bili.bilitv
 
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -15,21 +16,37 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
-fun AnimeListScreen(
-    seasonType: Int = 1,
-    viewModel: AnimeListViewModel = viewModel(),
+fun PgcListScreen(
+    initialSeasonType: Int = 1,
+    tabs: List<Pair<String, Int>> = emptyList(),
+    viewModel: PgcListViewModel = viewModel(),
     onMediaClick: (Video) -> Unit,
     onBack: () -> Unit
 ) {
-    LaunchedEffect(seasonType) {
-        viewModel.initWithSeasonType(seasonType)
+    // 建立season_type到index_type的映射关系
+    val seasonTypeToIndexType = mapOf(
+        1 to 102, // 全部
+        2 to 2,   // 电影
+        3 to 5,   // 电视剧
+        4 to 3,   // 纪录片
+        5 to 7    // 综艺
+    )
+    
+    var currentSeasonType by remember(initialSeasonType) { mutableStateOf(initialSeasonType) }
+    val currentIndexType = seasonTypeToIndexType[currentSeasonType] ?: 102
+
+    LaunchedEffect(currentSeasonType) {
+        viewModel.initWithSeasonType(currentSeasonType, currentIndexType)
     }
 
     BackHandler {
@@ -74,6 +91,21 @@ fun AnimeListScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        // Optional Tabs
+        if (tabs.isNotEmpty()) {
+            CommonTabRow(
+                tabs = tabs.map { pair -> TabItem(pair.second, pair.first) },
+                selectedTab = currentSeasonType,
+                onTabSelected = { seasonType ->
+                    if (seasonType != currentSeasonType) {
+                        Log.d("PgcListScreen", "切换tab：seasonType=$seasonType, indexType=${seasonTypeToIndexType[seasonType]}")
+                        currentSeasonType = seasonType
+                    }
+                },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            )
+        }
+
         // Filters Row
         Row(
             modifier = Modifier
@@ -160,7 +192,7 @@ fun AnimeListScreen(
             CommonVideoGrid(
                 videos = videoItems,
                 stateManager = stateManager,
-                stateKey = "AnimeList",
+                stateKey = "PgcList_$currentSeasonType",
                 columns = 5,
                 onVideoClick = { video ->
                     viewModel.shouldRestoreFocusToGrid = true

@@ -87,11 +87,14 @@ data class PgcBadgeInfo(
     val text: String? = null
 )
 
-class AnimeListViewModel : ViewModel() {
+class PgcListViewModel : ViewModel() {
     private val httpClient = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
 
     var seasonType by mutableStateOf(1)
+        private set
+
+    var indexType by mutableStateOf(102) // 默认全部：102
         private set
 
     var filters by mutableStateOf<List<PgcFilterItem>>(emptyList())
@@ -123,9 +126,10 @@ class AnimeListViewModel : ViewModel() {
     private var hasNext = true
     private var isInitialized = false
 
-    fun initWithSeasonType(type: Int) {
-        if (isInitialized && seasonType == type) return
-        seasonType = type
+    fun initWithSeasonType(seasonType: Int, indexType: Int) {
+        if (isInitialized && this.seasonType == seasonType && this.indexType == indexType) return
+        this.seasonType = seasonType
+        this.indexType = indexType
         isInitialized = true
         loadCondition()
     }
@@ -133,7 +137,7 @@ class AnimeListViewModel : ViewModel() {
     fun loadCondition() {
         viewModelScope.launch {
             try {
-                val url = "https://api.bilibili.com/pgc/season/index/condition?season_type=$seasonType&type=0"
+                val url = "https://api.bilibili.com/pgc/season/index/condition?season_type=$seasonType&type=0&index_type=$indexType"
                 val request = Request.Builder().url(url).build()
                 
                 val response = withContext(Dispatchers.IO) {
@@ -148,29 +152,29 @@ class AnimeListViewModel : ViewModel() {
                             filters = resp.data.filter
                             orders = resp.data.order ?: emptyList()
                             
-                            Log.d("AnimeListVM", "======= 筛选条件API返回数据 =======")
-                            Log.d("AnimeListVM", "season_type: $seasonType")
-                            Log.d("AnimeListVM", "筛选条件数量: ${filters.size}")
+                            Log.d("PgcListVM", "======= 筛选条件API返回数据 =======")
+                            Log.d("PgcListVM", "season_type: $seasonType, index_type: $indexType")
+                            Log.d("PgcListVM", "筛选条件数量: ${filters.size}")
                             filters.forEachIndexed { index, filter ->
-                                Log.d("AnimeListVM", "[$index] field: ${filter.field}, name: ${filter.name}, 选项数: ${filter.values.size}")
+                                Log.d("PgcListVM", "[$index] field: ${filter.field}, name: ${filter.name}, 选项数: ${filter.values.size}")
                                 filter.values.forEach { value ->
-                                    Log.d("AnimeListVM", "  - keyword: ${value.keyword}, name: ${value.name}")
+                                    Log.d("PgcListVM", "  - keyword: ${value.keyword}, name: ${value.name}")
                                 }
                             }
-                            Log.d("AnimeListVM", "排序方式数量: ${orders.size}")
+                            Log.d("PgcListVM", "排序方式数量: ${orders.size}")
                             orders.forEach { order ->
-                                Log.d("AnimeListVM", "  排序: field=${order.field}, name=${order.name}")
+                                Log.d("PgcListVM", "  排序: field=${order.field}, name=${order.name}")
                             }
-                            Log.d("AnimeListVM", "============================")
+                            Log.d("PgcListVM", "============================")
                             
                             val initialFilters = mutableMapOf<String, String>()
                             resp.data.filter.forEach { filter ->
                                 if (filter.values.isNotEmpty()) {
-                                    if (seasonType == 4 && filter.field == "area") {
+                                    if (indexType == 3 && filter.field == "area") {
                                         val guochanValue = filter.values.find { it.name.contains("国") || it.name.contains("中国") }
                                         if (guochanValue != null) {
                                             initialFilters[filter.field] = guochanValue.keyword
-                                            Log.d("AnimeListVM", "国创列表：地区默认设置为 ${guochanValue.name} (keyword=${guochanValue.keyword})")
+                                            Log.d("PgcListVM", "纪录片列表：地区默认设置为 ${guochanValue.name} (keyword=${guochanValue.keyword})")
                                         } else {
                                             initialFilters[filter.field] = filter.values[0].keyword
                                         }
@@ -229,7 +233,7 @@ class AnimeListViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                val params = StringBuilder("season_type=$seasonType&type=0&page=$page&pagesize=21")
+                val params = StringBuilder("season_type=$seasonType&type=0&index_type=$indexType&page=$page&pagesize=21")
                 params.append("&order=$selectedOrder")
                 
                 selectedFilters.forEach { (field, keyword) ->
@@ -251,19 +255,19 @@ class AnimeListViewModel : ViewModel() {
                             val newVideos = resp.data.list
                             
                             if (BuildConfig.DEBUG) {
-                                Log.d("AnimeList", "======= 番剧列表数据 =======")
-                                Log.d("AnimeList", "总数: ${resp.data.total}, 当前页数量: ${newVideos.size}, 有下一页: ${resp.data.has_next == 1}")
+                                Log.d("PgcList", "======= 番剧列表数据 =======")
+                                Log.d("PgcList", "总数: ${resp.data.total}, 当前页数量: ${newVideos.size}, 有下一页: ${resp.data.has_next == 1}")
                                 newVideos.forEachIndexed { index, item ->
-                                    Log.d("AnimeList", "[$index] ${item}")
-                                    Log.d("AnimeList", "  season_id: ${item.season_id}, media_id: ${item.media_id}")
-                                    Log.d("AnimeList", "  index_show: ${item.index_show}")
-                                    Log.d("AnimeList", "  order: ${item.order}")
-                                    Log.d("AnimeList", "  score: ${item.score}")
-                                    Log.d("AnimeList", "  badge: ${item.badge}")
-                                    Log.d("AnimeList", "  badge_info: bg_color=${item.badge_info?.bg_color}, text=${item.badge_info?.text}")
-                                    Log.d("AnimeList", "  is_finish: ${item.is_finish}")
+                                    Log.d("PgcList", "[$index] ${item}")
+                                    Log.d("PgcList", "  season_id: ${item.season_id}, media_id: ${item.media_id}")
+                                    Log.d("PgcList", "  index_show: ${item.index_show}")
+                                    Log.d("PgcList", "  order: ${item.order}")
+                                    Log.d("PgcList", "  score: ${item.score}")
+                                    Log.d("PgcList", "  badge: ${item.badge}")
+                                    Log.d("PgcList", "  badge_info: bg_color=${item.badge_info?.bg_color}, text=${item.badge_info?.text}")
+                                    Log.d("PgcList", "  is_finish: ${item.is_finish}")
                                 }
-                                Log.d("AnimeList", "========================")
+                                Log.d("PgcList", "========================")
                             }
                             
                             videos = if (reset) newVideos else videos + newVideos

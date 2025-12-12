@@ -98,7 +98,7 @@ enum class TabType(val title: String) {
     RECOMMEND("推荐"),
     HOT("热门"),
     BANGUMI("番剧"),
-    CINEMA("电影")
+    CINEMA("影视")
 }
 
 private fun dayLabel(day: TimelineDay): String {
@@ -134,7 +134,8 @@ fun HomeScreen(
     onEnterFullScreen: (VideoPlayInfo, String) -> Unit = { _, _ -> },
     onMediaClick: (Video) -> Unit = {},
     onNavigateToAnimeList: () -> Unit = {},
-    onNavigateToGuochuangList: () -> Unit = {}
+    onNavigateToGuochuangList: () -> Unit = {},
+    onNavigateToCinemaList: () -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     var isVisible by remember { mutableStateOf(false) }
@@ -306,7 +307,8 @@ fun HomeScreen(
                                 onMediaClick = {
                                     viewModel.shouldRestoreFocusToGrid = true
                                     onMediaClick(it)
-                                }
+                                },
+                                onNavigateToCinemaList = onNavigateToCinemaList
                             )
                         }
                         else -> {
@@ -570,7 +572,8 @@ private fun BangumiTabContent(
 @Composable
 private fun CinemaTabContent(
     viewModel: HomeViewModel,
-    onMediaClick: (Video) -> Unit
+    onMediaClick: (Video) -> Unit,
+    onNavigateToCinemaList: () -> Unit // Added new parameter
 ) {
     val coroutineScope = rememberCoroutineScope()
     val modules = viewModel.cinemaTabModules
@@ -636,6 +639,8 @@ private fun CinemaTabContent(
                 
                 if (showHeader) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
+                        var isHeaderFocused by remember { mutableStateOf(false) }
+                        val isClickableHeader = !module.title.contains("猜你喜欢")
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -643,14 +648,44 @@ private fun CinemaTabContent(
                         ) {
                             Row(
                                 modifier = Modifier
-                                    .padding(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 8.dp),
+                                    .padding(bottom = 8.dp)
+                                    .then(
+                                        if (isClickableHeader) {
+                                            Modifier
+                                                .focusable()
+                                                .onFocusChanged { isHeaderFocused = it.isFocused }
+                                                .clickable(onClick = onNavigateToCinemaList)
+                                                .background(
+                                                    color = if (isHeaderFocused) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                                    shape = MaterialTheme.shapes.small
+                                                )
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = module.title,
                                     style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onBackground
+                                    color = if (isClickableHeader && isHeaderFocused)
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    else
+                                        MaterialTheme.colorScheme.onBackground
                                 )
+                                if (isClickableHeader) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                        contentDescription = "更多",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (isHeaderFocused)
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        else
+                                            MaterialTheme.colorScheme.onBackground
+                                    )
+                                }
                             }
                         }
                     }
