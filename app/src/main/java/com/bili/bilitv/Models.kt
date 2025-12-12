@@ -100,3 +100,90 @@ data class LiveStreamUrl(
     val current_qn: Int? = null,
     val accept_qn: List<Int>? = null
 )
+
+@Serializable
+data class BangumiTabResponse(
+    val code: Int,
+    val message: String,
+    val data: BangumiTabData? = null
+)
+
+@Serializable
+data class BangumiTabData(
+    val has_next: Int,
+    val modules: List<BangumiModule>,
+    val next_cursor: String? = null
+)
+
+@Serializable
+data class BangumiModule(
+    val module_id: Int,
+    val title: String,
+    val style: String,
+    val items: List<BangumiModuleItem> = emptyList(),
+    val headers: List<BangumiModuleHeader> = emptyList(),
+    val size: Int = 0,
+    val attr: BangumiModuleAttr? = null
+)
+
+@Serializable
+data class BangumiModuleHeader(
+    val title: String,
+    val url: String? = null
+)
+
+@Serializable
+data class BangumiModuleAttr(
+    val auto: Int = 0,
+    val follow: Int = 0,
+    val header: Int = 0,
+    val random: Int = 0,
+    val show_timeline: Int = 0
+)
+
+@Serializable
+data class BangumiModuleItem(
+    val season_id: Long,
+    val title: String,
+    val cover: String,
+    val desc: String? = null,
+    val link: String? = null,
+    val season_type: Int = 0,
+    val badge_info: BangumiItemBadgeInfo? = null,
+    val bottom_right_badge: BangumiItemBadge? = null,
+    val bottom_left_badge: BangumiItemBadge? = null,
+    val stat: BangumiItemStat? = null,
+    val oid: Long = 0,
+    val link_type: Int = 0,
+    val link_value: Long = 0,
+    val is_preview: Int = 0,
+    val sub_title: String? = null,
+    val episode_id: Long = 0,
+    val desc_type: Int = 0
+)
+
+@Serializable
+data class BangumiItemBadgeInfo(
+    val text: String,
+    val bg_color: String? = null,
+    val bg_color_night: String? = null,
+    val text_color: String? = null,
+    val text_color_night: String? = null,
+    val img: String? = null,
+    val text_size: Int = 0
+)
+
+@Serializable
+data class BangumiItemBadge(
+    val text: String? = null,
+    val img: String? = null,
+    val text_size: Int = 0
+)
+
+@Serializable
+data class BangumiItemStat(
+    val follow: Long = 0,
+    val view: Long = 0,
+    val danmaku: Long = 0,
+    val follow_view: String? = null
+)

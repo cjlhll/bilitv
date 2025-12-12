@@ -210,8 +210,7 @@ fun HomeScreen(
             }
             TabType.BANGUMI -> {
                 viewModel.ensureTimelineLoaded()
-                viewModel.ensureBangumiRecommendLoaded()
-                viewModel.ensureGuochuangRecommendLoaded()
+                viewModel.ensureBangumiTabLoaded()
             }
         }
     }
@@ -379,9 +378,9 @@ private fun BangumiTabContent(
     onGuochuangHeaderClick: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val recommendList = viewModel.bangumiRecommendVideos
-    val isRecommendLoading = viewModel.isBangumiRecommendLoading
-    val recommendError = viewModel.bangumiRecommendError
+    val modules = viewModel.bangumiTabModules
+    val isLoading = viewModel.isBangumiTabLoading
+    val error = viewModel.bangumiTabError
     val (initialIndex, initialOffset) = remember { viewModel.getScrollState(TabType.BANGUMI) }
     val initialFocusIndex = remember { viewModel.getFocusedIndex(TabType.BANGUMI) }
     val gridState = rememberLazyGridState(
@@ -395,26 +394,6 @@ private fun BangumiTabContent(
             .collect { (idx, offset) ->
                 viewModel.updateScrollState(TabType.BANGUMI, idx, offset)
             }
-    }
-
-    if (viewModel.canLoadMoreBangumiRecommend()) {
-        val shouldLoadMore by remember {
-            derivedStateOf {
-                val layoutInfo = gridState.layoutInfo
-                val total = layoutInfo.totalItemsCount
-                val last = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                total > 0 && last >= total - 10
-            }
-        }
-        LaunchedEffect(gridState) {
-            snapshotFlow { shouldLoadMore }.collect { need ->
-                if (need && viewModel.canLoadMoreBangumiRecommend()) {
-                    coroutineScope.launch {
-                        viewModel.loadBangumiRecommend(reset = false)
-                    }
-                }
-            }
-        }
     }
 
     LaunchedEffect(viewModel.refreshSignal) {
@@ -437,226 +416,133 @@ private fun BangumiTabContent(
             )
         }
 
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            var isHeaderFocused by remember { mutableStateOf(false) }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(bottom = 8.dp)
-                        .focusable()
-                        .onFocusChanged { isHeaderFocused = it.isFocused }
-                        .clickable(onClick = onHeaderClick)
-                        .background(
-                            color = if (isHeaderFocused) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                            shape = MaterialTheme.shapes.small
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "推荐",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (isHeaderFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "更多",
-                        modifier = Modifier.size(16.dp),
-                        tint = if (isHeaderFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onBackground
-                    )
-                }
-                
-                if (isRecommendLoading && recommendList.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                } else if (recommendError != null && recommendList.isEmpty()) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(text = "加载失败：$recommendError")
-                        Button(onClick = { coroutineScope.launch { viewModel.loadBangumiRecommend(reset = true) } }) {
-                            Text("重试")
-                        }
-                    }
-                } else if (recommendList.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("暂无推荐")
-                    }
-                }
-            }
-        }
-
-        itemsIndexed(
-            items = recommendList,
-            key = { index, video -> "bangumi_rcmd_${index}_${video.id}" }
-        ) { index, video ->
-            val focusRequester = remember { FocusRequester() }
-            LaunchedEffect(shouldRestoreFocus, recommendList.size) {
-                if (shouldRestoreFocus && recommendList.isNotEmpty()) {
-                    if (index == initialFocusIndex || (initialFocusIndex == -1 && index == 0)) {
-                        focusRequester.requestFocus()
-                    }
-                }
-            }
-            VerticalMediaCard(
-                video = video,
-                onClick = {
-                    viewModel.shouldRestoreFocusToGrid = true
-                    onMediaClick(video)
-                },
-                modifier = Modifier
-                    .focusRequester(focusRequester)
-                    .onFocusChanged {
-                        if (it.isFocused) {
-                            viewModel.updateFocusedIndex(TabType.BANGUMI, index)
-                        }
-                    }
-            )
-        }
-
-        if (isRecommendLoading && recommendList.isNotEmpty()) {
+        if (isLoading && modules.isEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                LinearProgressIndicator(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 0.dp, vertical = 8.dp)
-                )
-            }
-        } else if (recommendError != null && recommendList.isNotEmpty()) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Text(
-                    text = "部分数据加载异常：$recommendError",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-        }
-
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            var isGuochuangHeaderFocused by remember { mutableStateOf(false) }
-            val guochuangList = viewModel.guochuangRecommendVideos
-            val isGuochuangLoading = viewModel.isGuochuangRecommendLoading
-            val guochuangError = viewModel.guochuangRecommendError
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(bottom = 8.dp)
-                        .focusable()
-                        .onFocusChanged { isGuochuangHeaderFocused = it.isFocused }
-                        .clickable(onClick = onGuochuangHeaderClick)
-                        .background(
-                            color = if (isGuochuangHeaderFocused) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                            shape = MaterialTheme.shapes.small
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "国创",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (isGuochuangHeaderFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "更多",
-                        modifier = Modifier.size(16.dp),
-                        tint = if (isGuochuangHeaderFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onBackground
-                    )
+                    CircularProgressIndicator()
+                }
+            }
+        } else if (error != null && modules.isEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(text = "加载失败：$error")
+                    Button(onClick = { coroutineScope.launch { viewModel.loadBangumiTab() } }) {
+                        Text("重试")
+                    }
+                }
+            }
+        } else {
+            modules.forEachIndexed { moduleIndex, module ->
+                if (module.items.isEmpty()) return@forEachIndexed
+                
+                val showHeader = module.title.isNotBlank()
+                val headerClickable = module.title.contains("推荐") || module.title.contains("国创")
+                
+                if (showHeader) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        var isHeaderFocused by remember { mutableStateOf(false) }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(bottom = 8.dp)
+                                    .then(
+                                        if (headerClickable) {
+                                            Modifier
+                                                .focusable()
+                                                .onFocusChanged { isHeaderFocused = it.isFocused }
+                                                .clickable(onClick = {
+                                                    when {
+                                                        module.title.contains("推荐") && !module.title.contains("国创") -> onHeaderClick()
+                                                        module.title.contains("国创") -> onGuochuangHeaderClick()
+                                                    }
+                                                })
+                                                .background(
+                                                    color = if (isHeaderFocused) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                                    shape = MaterialTheme.shapes.small
+                                                )
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = module.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = if (headerClickable && isHeaderFocused) 
+                                        MaterialTheme.colorScheme.onPrimaryContainer 
+                                    else 
+                                        MaterialTheme.colorScheme.onBackground
+                                )
+                                if (headerClickable) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                        contentDescription = "更多",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (isHeaderFocused) 
+                                            MaterialTheme.colorScheme.onPrimaryContainer 
+                                        else 
+                                            MaterialTheme.colorScheme.onBackground
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
                 
-                if (isGuochuangLoading && guochuangList.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                } else if (guochuangError != null && guochuangList.isEmpty()) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(text = "加载失败：$guochuangError")
-                        Button(onClick = { coroutineScope.launch { viewModel.loadGuochuangRecommend(reset = true) } }) {
-                            Text("重试")
-                        }
-                    }
-                } else if (guochuangList.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("暂无推荐")
+                module.items.forEachIndexed { itemIndex, item ->
+                    item {
+                        val video = Video(
+                            id = item.season_id.toString(),
+                            aid = 0,
+                            bvid = "",
+                            cid = 0,
+                            title = item.title,
+                            coverUrl = item.cover,
+                            author = item.desc ?: "",
+                            seasonId = item.season_id,
+                            mediaId = item.oid,
+                            seasonType = item.season_type,
+                            badges = listOf(
+                                Badge(
+                                    text = item.badge_info?.text ?: "",
+                                    textColor = "",
+                                    bgColor = item.badge_info?.bg_color ?: "",
+                                    borderColor = item.badge_info?.bg_color ?: ""
+                                )
+                            ),
+                            bottomText = item.bottom_right_badge?.text
+                        )
+                        VerticalMediaCard(
+                            video = video,
+                            onClick = {
+                                viewModel.shouldRestoreFocusToGrid = true
+                                onMediaClick(video)
+                            },
+                            modifier = Modifier
+                                .onFocusChanged {
+                                    if (it.isFocused) {
+                                        viewModel.updateFocusedIndex(TabType.BANGUMI, moduleIndex * 100 + itemIndex)
+                                    }
+                                }
+                        )
                     }
                 }
-            }
-        }
-
-        itemsIndexed(
-            items = viewModel.guochuangRecommendVideos,
-            key = { index, video -> "guochuang_rcmd_${index}_${video.id}" }
-        ) { index, video ->
-            VerticalMediaCard(
-                video = video,
-                onClick = {
-                    viewModel.shouldRestoreFocusToGrid = true
-                    onMediaClick(video)
-                },
-                modifier = Modifier
-                    .onFocusChanged {
-                        if (it.isFocused) {
-                            viewModel.updateFocusedIndex(TabType.BANGUMI, index + recommendList.size)
-                        }
-                    }
-            )
-        }
-
-        if (viewModel.isGuochuangRecommendLoading && viewModel.guochuangRecommendVideos.isNotEmpty()) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 0.dp, vertical = 8.dp)
-                )
-            }
-        } else if (viewModel.guochuangRecommendError != null && viewModel.guochuangRecommendVideos.isNotEmpty()) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Text(
-                    text = "部分数据加载异常：${viewModel.guochuangRecommendError}",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
             }
         }
     }

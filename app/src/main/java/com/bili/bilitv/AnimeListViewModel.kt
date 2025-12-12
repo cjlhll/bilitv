@@ -121,9 +121,12 @@ class AnimeListViewModel : ViewModel() {
 
     private var page = 1
     private var hasNext = true
+    private var isInitialized = false
 
     fun initWithSeasonType(type: Int) {
+        if (isInitialized && seasonType == type) return
         seasonType = type
+        isInitialized = true
         loadCondition()
     }
 

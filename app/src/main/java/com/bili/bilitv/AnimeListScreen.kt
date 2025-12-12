@@ -29,9 +29,7 @@ fun AnimeListScreen(
     onBack: () -> Unit
 ) {
     LaunchedEffect(seasonType) {
-        if (viewModel.seasonType != seasonType) {
-            viewModel.initWithSeasonType(seasonType)
-        }
+        viewModel.initWithSeasonType(seasonType)
     }
 
     BackHandler {
