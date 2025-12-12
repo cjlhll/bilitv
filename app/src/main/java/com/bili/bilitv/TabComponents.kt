@@ -9,7 +9,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 /**
  * 通用选项卡项数据类
@@ -128,11 +130,113 @@ fun <T : Enum<T>> CommonTabRowWithEnum(
 }
 
 /**
+ * 日期标签栏组件 - TV版（紧凑设计）
+ * 包含最近更新和周一到周日共8个选项
+ */
+@Composable
+fun DateTabBarForTV(
+    selectedIndex: Int,
+    onTabSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    title: String = "新番更新表"
+) {
+    // 生成8个日期选项：最近更新 + 周一到周日
+    val tabItems = remember {
+        (listOf("最近更新") + listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日"))
+    }
+
+    Row(
+        modifier = modifier.wrapContentWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // 标题
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(end = 16.dp)
+        )
+        
+        // 外层浅灰色背景容器（宽度自适应）
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            shape = RoundedCornerShape(18.dp),
+            modifier = Modifier.wrapContentWidth()
+        ) {
+            LazyRow(
+                modifier = Modifier.wrapContentWidth(),
+                horizontalArrangement = Arrangement.spacedBy(0.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                items(tabItems.size) { index ->
+                    val isSelected = selectedIndex == index
+                    val isFirst = index == 0
+                    val isLast = index == tabItems.size - 1
+                    
+                    Card(
+                        onClick = { onTabSelected(index) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelected) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.surface
+                        ),
+                        modifier = Modifier
+                            .wrapContentWidth()
+                            .height(28.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        elevation = if (isSelected) CardDefaults.cardElevation(defaultElevation = 2.dp) else CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(
+                                    start = if (isFirst) 0.dp else 12.dp,
+                                    end = if (isLast) 0.dp else 12.dp
+                                )
+                        ) {
+                            Text(
+                                text = tabItems[index],
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isSelected) 
+                                    MaterialTheme.colorScheme.onPrimary 
+                                else 
+                                    MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * 扩展函数，为枚举类型提供自定义标题
  */
 fun <T : Enum<T>> T.getTitle(): String {
     return when (this) {
         is TabType -> this.title
         else -> this.name
+    }
+}
+
+// 预览函数
+@Preview(showBackground = true)
+@Composable
+fun DateTabBarForTVPreview() {
+    var selectedIndex by remember { mutableStateOf(0) }
+    
+    BiliTVTheme {
+        Surface {
+            DateTabBarForTV(
+                selectedIndex = selectedIndex,
+                onTabSelected = { selectedIndex = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            )
+        }
     }
 }

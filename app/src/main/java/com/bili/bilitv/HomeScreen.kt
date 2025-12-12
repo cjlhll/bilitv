@@ -801,30 +801,23 @@ private fun BangumiTimelineSection(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 0.dp, vertical = 8.dp)
     ) {
         if (days.isNotEmpty()) {
-            ScrollableTabRow(
-                selectedTabIndex = selectedIndex,
-                edgePadding = 0.dp,
-                divider = {},
-                indicator = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedIndex])
-                    )
-                }
-            ) {
-                days.forEachIndexed { index, day ->
-                    Tab(
-                        selected = selectedIndex == index,
-                        onClick = { viewModel.timelineSelectedIndex = index },
-                        text = {
-                            val todayLabel = if (day.isToday) "今天" else ""
-                            Text("${day.date} ${if (todayLabel.isNotEmpty()) todayLabel else "周${day.dayOfWeek}"}")
-                        }
-                    )
-                }
+            // 限制显示最近8个日期选项（最近更新 + 周一到周日）
+            val displayDays = remember(days) {
+                days.take(8)
             }
+            val displayIndex = remember(selectedIndex) { 
+                selectedIndex.coerceIn(0, (displayDays.size - 1).coerceAtLeast(0))
+            }
+            
+            DateTabBarForTV(
+                selectedIndex = displayIndex,
+                onTabSelected = { newIndex ->
+                    viewModel.timelineSelectedIndex = newIndex
+                }
+            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -881,7 +874,7 @@ private fun BangumiTimelineSection(
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    contentPadding = PaddingValues(start = 0.dp, top = 4.dp, end = 0.dp, bottom = 4.dp)
                 ) {
                     items(episodes) { episode ->
                         VerticalMediaCard(
