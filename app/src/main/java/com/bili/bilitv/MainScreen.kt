@@ -275,6 +275,25 @@ fun MainScreen() {
     var showLogoutDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
+    val navBackStack = remember { mutableStateListOf<NavRoute>() }
+
+    fun navigateTo(route: NavRoute) {
+        navBackStack.add(currentRoute)
+        currentRoute = route
+    }
+
+    fun navigateBack() {
+        if (navBackStack.isNotEmpty()) {
+            val prev = navBackStack.removeAt(navBackStack.size - 1)
+            if (currentRoute == NavRoute.MEDIA_DETAIL) {
+                selectedMedia = null
+            }
+            currentRoute = prev
+        } else if (currentRoute != NavRoute.HOME) {
+            currentRoute = NavRoute.HOME
+        }
+    }
+
     // 获取用户信息
     LaunchedEffect(loggedInSession) {
         if (loggedInSession != null && userInfo == null) {
@@ -378,12 +397,8 @@ fun MainScreen() {
     }
 
     // 处理从搜索结果返回搜索页面的逻辑
-    BackHandler(enabled = !isFullScreenPlayer && currentRoute == NavRoute.SEARCH_RESULT) {
-        currentRoute = NavRoute.SEARCH
-    }
-    BackHandler(enabled = !isFullScreenPlayer && currentRoute == NavRoute.MEDIA_DETAIL) {
-        selectedMedia = null
-        currentRoute = NavRoute.SEARCH_RESULT
+    BackHandler(enabled = !isFullScreenPlayer && (navBackStack.isNotEmpty() || currentRoute == NavRoute.SEARCH_RESULT || currentRoute == NavRoute.MEDIA_DETAIL) && selectedLiveArea == null) {
+        navigateBack()
     }
 
     // 判断是否应该隐藏导航栏（直播列表页面全屏显示，或搜索结果页）
@@ -425,7 +440,10 @@ fun MainScreen() {
             if (!shouldHideNavigation) {
                 NavigationRail(
                     currentRoute = currentRoute,
-                    onNavigate = { currentRoute = it },
+                    onNavigate = { 
+                        navBackStack.clear()
+                        currentRoute = it 
+                    },
                     userAvatarUrl = userInfo?.face
                 )
             }
@@ -450,30 +468,21 @@ fun MainScreen() {
                             searchViewModel.addHistory(query)
                             searchQuery = query
                             searchViewModel.search(query)
-                            currentRoute = NavRoute.SEARCH_RESULT
+                            navigateTo(NavRoute.SEARCH_RESULT)
                         }
                     )
                     NavRoute.MEDIA_DETAIL -> {
                         val media = selectedMedia
                         if (media == null) {
-                            currentRoute = NavRoute.SEARCH_RESULT
+                            LaunchedEffect(Unit) {
+                                navigateBack()
+                            }
                         } else {
                             MediaDetailScreen(
                                 media = media,
                                 viewModel = mediaDetailViewModel,
                                 onBack = {
-                                    selectedMedia = null
-                                    // Try to determine where to go back based on context, or default to HOME/SEARCH
-                                    // For now, if we came from AnimeList, we probably want to go back there?
-                                    // But simple logic: if came from search result, go there.
-                                    // If came from Home, go Home.
-                                    // Ideally we need a 'previousRoute' stack.
-                                    // Current implementation simple back to SEARCH_RESULT for search flow.
-                                    // For Home flow, we handled it inside HomeScreen callback.
-                                    // But here we are at top level.
-                                    // Let's just go back to Home if we are not in search flow context?
-                                    // Or simply:
-                                    currentRoute = NavRoute.HOME 
+                                    navigateBack()
                                 },
                                 onPlay = { playInfo, title ->
                                     isFullScreenPlayer = true
@@ -490,9 +499,9 @@ fun MainScreen() {
                             tabs = config.tabs,
                             onMediaClick = { video ->
                                 selectedMedia = video
-                                currentRoute = NavRoute.MEDIA_DETAIL
+                                navigateTo(NavRoute.MEDIA_DETAIL)
                             },
-                            onBack = { currentRoute = NavRoute.HOME }
+                            onBack = { navigateBack() }
                         )
                     }
                     NavRoute.SEARCH_RESULT -> SearchResultsScreen(
@@ -559,9 +568,9 @@ fun MainScreen() {
                         onMediaClick = { video ->
                             searchViewModel.shouldRestoreFocusToGrid = true
                             selectedMedia = video
-                            currentRoute = NavRoute.MEDIA_DETAIL
+                            navigateTo(NavRoute.MEDIA_DETAIL)
                         },
-                        onBack = { currentRoute = NavRoute.SEARCH },
+                        onBack = { navigateBack() },
                         onSearch = { newQuery ->
                             searchQuery = newQuery
                             searchViewModel.search(newQuery)
@@ -576,15 +585,15 @@ fun MainScreen() {
                         },
                         onMediaClick = { video ->
                             selectedMedia = video
-                            currentRoute = NavRoute.MEDIA_DETAIL
+                            navigateTo(NavRoute.MEDIA_DETAIL)
                         },
                         onNavigateToAnimeList = {
                             pgcListConfig = PgcListConfig(1)
-                            currentRoute = NavRoute.PGC_LIST
+                            navigateTo(NavRoute.PGC_LIST)
                         },
                         onNavigateToGuochuangList = {
                             pgcListConfig = PgcListConfig(4)
-                            currentRoute = NavRoute.PGC_LIST
+                            navigateTo(NavRoute.PGC_LIST)
                         },
                         onNavigateToCinemaList = { moduleTitle ->
                             val seasonType = when {
@@ -604,7 +613,7 @@ fun MainScreen() {
                                     "综艺" to 5
                                 )
                             )
-                            currentRoute = NavRoute.PGC_LIST
+                            navigateTo(NavRoute.PGC_LIST)
                         }
                     )
                     NavRoute.USER -> UserLoginScreen(

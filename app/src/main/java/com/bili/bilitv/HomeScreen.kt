@@ -464,64 +464,17 @@ private fun BangumiTabContent(
             modules.forEachIndexed { moduleIndex, module ->
                 if (module.items.isEmpty()) return@forEachIndexed
                 
-                val showHeader = module.title.isNotBlank()
-                val headerClickable = module.title.contains("推荐") || module.title.contains("国创")
-                
-                if (showHeader) {
+                if (module.title.isNotBlank()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        var isHeaderFocused by remember { mutableStateOf(false) }
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(bottom = 8.dp)
-                                    .then(
-                                        if (headerClickable) {
-                                            Modifier
-                                                .focusable()
-                                                .onFocusChanged { isHeaderFocused = it.isFocused }
-                                                .clickable(onClick = {
-                                                    when {
-                                                        module.title.contains("推荐") && !module.title.contains("国创") -> onHeaderClick()
-                                                        module.title.contains("国创") -> onGuochuangHeaderClick()
-                                                    }
-                                                })
-                                                .background(
-                                                    color = if (isHeaderFocused) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                                    shape = MaterialTheme.shapes.small
-                                                )
-                                        } else {
-                                            Modifier
-                                        }
-                                    )
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = module.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = if (headerClickable && isHeaderFocused) 
-                                        MaterialTheme.colorScheme.onPrimaryContainer 
-                                    else 
-                                        MaterialTheme.colorScheme.onBackground
-                                )
-                                if (headerClickable) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                        contentDescription = "更多",
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (isHeaderFocused) 
-                                            MaterialTheme.colorScheme.onPrimaryContainer 
-                                        else 
-                                            MaterialTheme.colorScheme.onBackground
-                                    )
+                        ModuleHeader(
+                            title = module.title,
+                            onClick = {
+                                when {
+                                    module.title.contains("国创") -> onGuochuangHeaderClick()
+                                    else -> onHeaderClick()
                                 }
                             }
-                        }
+                        )
                     }
                 }
                 
@@ -635,59 +588,14 @@ private fun CinemaTabContent(
             modules.forEachIndexed { moduleIndex, module ->
                 if (module.items.isEmpty()) return@forEachIndexed
                 
-                val showHeader = module.title.isNotBlank()
-                
-                if (showHeader) {
+                if (module.title.isNotBlank()) {
+                    val isClickableHeader = !module.title.contains("猜你喜欢")
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        var isHeaderFocused by remember { mutableStateOf(false) }
-                        val isClickableHeader = !module.title.contains("猜你喜欢")
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(bottom = 8.dp)
-                                    .then(
-                                        if (isClickableHeader) {
-                                            Modifier
-                                                .focusable()
-                                                .onFocusChanged { isHeaderFocused = it.isFocused }
-                                                .clickable(onClick = { onNavigateToCinemaList(module.title) })
-                                                .background(
-                                                    color = if (isHeaderFocused) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                                    shape = MaterialTheme.shapes.small
-                                                )
-                                        } else {
-                                            Modifier
-                                        }
-                                    )
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = module.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = if (isClickableHeader && isHeaderFocused)
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    else
-                                        MaterialTheme.colorScheme.onBackground
-                                )
-                                if (isClickableHeader) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                        contentDescription = "更多",
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (isHeaderFocused)
-                                            MaterialTheme.colorScheme.onPrimaryContainer
-                                        else
-                                            MaterialTheme.colorScheme.onBackground
-                                    )
-                                }
-                            }
-                        }
+                        ModuleHeader(
+                            title = module.title,
+                            onClick = { onNavigateToCinemaList(module.title) },
+                            isFocusable = isClickableHeader
+                        )
                     }
                 }
                 
@@ -874,6 +782,51 @@ private fun BangumiTimelineSection(
                 if (isLoading) {
                     Spacer(modifier = Modifier.height(8.dp))
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ModuleHeader(
+    title: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isFocusable: Boolean = true
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp)
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.small,
+            color = if (isFocused) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+            border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+            modifier = Modifier
+                .onFocusChanged { isFocused = it.isFocused }
+                .then(if (isFocusable) Modifier.clickable(onClick = onClick) else Modifier)
+        ) {
+             Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (isFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
+                )
+                if (isFocusable) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "更多",
+                        modifier = Modifier.size(16.dp),
+                        tint = if (isFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
+                    )
                 }
             }
         }
