@@ -132,7 +132,8 @@ data class Video(
     val cv: String = "",
     val staff: String = "",
     val episodes: List<MediaEpisode> = emptyList(),
-    val bottomText: String? = null
+    val bottomText: String? = null,
+    val followCount: Long = 0
 )
 
 private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -376,8 +377,23 @@ fun VerticalMediaCard(
                         bottomContent()
                     } else {
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
+                            if (video.followCount > 0) {
+                                Surface(
+                                    color = Color.Black.copy(alpha = 0.6f),
+                                    shape = RoundedCornerShape(4.dp),
+                                    modifier = Modifier.wrapContentWidth()
+                                ) {
+                                    Text(
+                                        text = "${FormatUtils.formatCount(video.followCount.toString())}人追",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            
                             Text(
                                 text = video.title,
                                 style = MaterialTheme.typography.bodySmall,
@@ -385,50 +401,15 @@ fun VerticalMediaCard(
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            if (video.author.isNotBlank()) {
+
+                            if (!video.bottomText.isNullOrBlank()) {
                                 Text(
-                                    text = video.author,
+                                    text = video.bottomText,
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                    color = Color.White.copy(alpha = 0.8f),
+                                    color = Color.White.copy(alpha = 0.9f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (!video.bottomText.isNullOrBlank()) {
-                                    Text(
-                                        text = video.bottomText,
-                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                        color = Color.White.copy(alpha = 0.9f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                } else if (video.epSize > 0) {
-                                    val statusText = if (video.isFollow) "全${video.epSize}话" else "更新至第${video.epSize}话"
-                                    Text(
-                                        text = statusText,
-                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                        color = Color.White.copy(alpha = 0.9f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                } else {
-                                    Spacer(modifier = Modifier.width(1.dp))
-                                }
-                                if (video.mediaScore > 0) {
-                                    Text(
-                                        text = String.format("%.1f", video.mediaScore),
-                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-                                        color = Color(0xFFFFD700),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
                             }
                         }
                     }

@@ -238,6 +238,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
     var isBangumiTabLoading by mutableStateOf(false)
     var bangumiTabError by mutableStateOf<String?>(null)
 
+    // Cinema tab modules
+    val cinemaTabModules: SnapshotStateList<BangumiModule> = mutableStateListOf()
+    var isCinemaTabLoading by mutableStateOf(false)
+    var cinemaTabError by mutableStateOf<String?>(null)
+
     // Store state per tab
     // Pair(index, offset)
     private val _tabScrollStates = mutableStateMapOf<TabType, Pair<Int, Int>>()
@@ -274,6 +279,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                     TabType.RECOMMEND -> fetchRecommendPage()
                     TabType.HOT -> fetchHotPage()
                     TabType.BANGUMI -> null
+                    TabType.CINEMA -> null
                 }
                 
                 // 在主线程更新UI状态
@@ -292,6 +298,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                                     hotHasMore = newVideos.size >= 20
                                 }
                                 TabType.BANGUMI -> {}
+                                TabType.CINEMA -> {}
                             }
                             
                             if (BuildConfig.DEBUG) {
@@ -303,6 +310,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                                 TabType.RECOMMEND -> recommendHasMore = false
                                 TabType.HOT -> hotHasMore = false
                                 TabType.BANGUMI -> {}
+                                TabType.CINEMA -> {}
                             }
                         }
                     }
@@ -329,6 +337,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         if (bangumiTabModules.isEmpty() && !isBangumiTabLoading) {
             viewModelScope.launch {
                 loadBangumiTab()
+            }
+        }
+    }
+
+    fun ensureCinemaTabLoaded() {
+        if (cinemaTabModules.isEmpty() && !isCinemaTabLoading) {
+            viewModelScope.launch {
+                loadCinemaTab()
             }
         }
     }
@@ -426,6 +442,74 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) {
                 Log.e("BiliTV", "Bangumi tab parse error", e)
+            }
+            null
+        }
+    }
+
+    suspend fun loadCinemaTab() {
+        if (isCinemaTabLoading) return
+        
+        isCinemaTabLoading = true
+        cinemaTabError = null
+
+        try {
+            val data = withContext(Dispatchers.IO) {
+                fetchCinemaTab()
+            }
+            withContext(Dispatchers.Main) {
+                data?.let { modules ->
+                    cinemaTabModules.clear()
+                    cinemaTabModules.addAll(modules)
+                    cinemaTabError = null
+                } ?: run {
+                    cinemaTabError = "加载失败"
+                }
+            }
+        } catch (e: Exception) {
+            cinemaTabError = e.localizedMessage ?: "加载失败"
+            if (BuildConfig.DEBUG) {
+                Log.e("BiliTV", "cinema tab load error", e)
+            }
+        } finally {
+            isCinemaTabLoading = false
+        }
+    }
+
+    private suspend fun fetchCinemaTab(): List<BangumiModule>? {
+        val url = "https://api.bilibili.com/pgc/page/pc/cinema/tab"
+        
+        val requestBuilder = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
+            .header("Referer", "https://www.bilibili.com")
+
+        SessionManager.getCookieString()?.let {
+            requestBuilder.header("Cookie", it)
+        }
+
+        val response = httpClient.newCall(requestBuilder.build()).execute()
+        if (!response.isSuccessful) {
+            if (BuildConfig.DEBUG) {
+                Log.e("BiliTV", "Cinema tab HTTP error: ${response.code}")
+            }
+            return null
+        }
+        
+        val body = response.body?.string() ?: return null
+        return try {
+            val resp = json.decodeFromString<BangumiTabResponse>(body)
+            if (resp.code == 0 && resp.data != null) {
+                resp.data.modules
+            } else {
+                if (BuildConfig.DEBUG) {
+                    Log.e("BiliTV", "Cinema tab API error: ${resp.message} (code=${resp.code})")
+                }
+                null
+            }
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) {
+                Log.e("BiliTV", "Cinema tab parse error", e)
             }
             null
         }
@@ -727,6 +811,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
             TabType.HOT -> isHotLoading
             TabType.RECOMMEND -> isRecommendLoading
             TabType.BANGUMI -> isTimelineLoading
+            TabType.CINEMA -> isCinemaTabLoading
         }
     }
 
@@ -735,6 +820,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
             TabType.HOT -> hotHasMore
             TabType.RECOMMEND -> recommendHasMore
             TabType.BANGUMI -> false
+            TabType.CINEMA -> false
         }
     }
 
@@ -743,6 +829,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
             TabType.HOT -> isHotLoading = loading
             TabType.RECOMMEND -> isRecommendLoading = loading
             TabType.BANGUMI -> isTimelineLoading = loading
+            TabType.CINEMA -> isCinemaTabLoading = loading
         }
     }
 
@@ -751,6 +838,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
             TabType.HOT -> _hotVideos.size
             TabType.RECOMMEND -> _recommendVideos.size
             TabType.BANGUMI -> timelineDays.sumOf { it.episodes.size }
+            TabType.CINEMA -> cinemaTabModules.sumOf { it.items.size }
         }
     }
 
@@ -847,6 +935,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                         bangumiTabModules.clear()
                         bangumiTabError = null
                         loadBangumiTab()
+                        _tabScrollStates[targetTab] = 0 to 0
+                        _tabFocusStates[targetTab] = 0
+                        refreshSignal++
+                    }
+                    TabType.CINEMA -> {
+                        cinemaTabModules.clear()
+                        cinemaTabError = null
+                        loadCinemaTab()
                         _tabScrollStates[targetTab] = 0 to 0
                         _tabFocusStates[targetTab] = 0
                         refreshSignal++

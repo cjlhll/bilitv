@@ -958,6 +958,17 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
         val cv = obj.stringOrEmpty("cv")
         val staff = obj.stringOrEmpty("staff")
         val episodes = parseEpisodes(obj["eps"])
+        
+        val bottomText = obj.stringOrEmpty("index_show")
+            .ifBlank { 
+                (obj["new_ep"] as? JsonObject)?.stringOrEmpty("index_show") ?: ""
+            }
+            .ifBlank { 
+                (obj["bottom_right_badge"] as? JsonObject)?.stringOrEmpty("text") ?: ""
+            }
+            .takeIf { it.isNotBlank() }
+        
+        val followCount = (obj["stat"] as? JsonObject)?.longOrZero("follow") ?: 0L
 
         return Video(
             id = id,
@@ -989,7 +1000,9 @@ class SearchViewModel : ViewModel(), VideoGridStateManager {
             orgTitle = orgTitle,
             cv = cv,
             staff = staff,
-            episodes = episodes
+            episodes = episodes,
+            bottomText = bottomText,
+            followCount = followCount
         )
     }
 

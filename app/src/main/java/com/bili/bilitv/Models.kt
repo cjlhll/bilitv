@@ -159,7 +159,15 @@ data class BangumiModuleItem(
     val is_preview: Int = 0,
     val sub_title: String? = null,
     val episode_id: Long = 0,
-    val desc_type: Int = 0
+    val desc_type: Int = 0,
+    val index_show: String? = null,
+    val new_ep: BangumiNewEp? = null
+)
+
+@Serializable
+data class BangumiNewEp(
+    val index_show: String? = null,
+    val id: Long = 0
 )
 
 @Serializable

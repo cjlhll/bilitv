@@ -96,8 +96,9 @@ data class Stat(
  */
 enum class TabType(val title: String) {
     RECOMMEND("推荐"),
+    HOT("热门"),
     BANGUMI("番剧"),
-    HOT("热门")
+    CINEMA("电影")
 }
 
 private fun dayLabel(day: TimelineDay): String {
@@ -212,6 +213,9 @@ fun HomeScreen(
                 viewModel.ensureTimelineLoaded()
                 viewModel.ensureBangumiTabLoaded()
             }
+            TabType.CINEMA -> {
+                viewModel.ensureCinemaTabLoaded()
+            }
         }
     }
     
@@ -261,6 +265,7 @@ fun HomeScreen(
                         TabType.HOT -> viewModel.hotVideos.map { mapVideoItemDataToVideo(it) }
                         TabType.RECOMMEND -> viewModel.recommendVideos.map { mapVideoItemDataToVideo(it) }
                         TabType.BANGUMI -> emptyList()
+                        TabType.CINEMA -> emptyList()
                     }
                 }
             }
@@ -270,6 +275,7 @@ fun HomeScreen(
                 TabType.HOT -> viewModel.isHotLoading && viewModel.hotVideos.isEmpty()
                 TabType.RECOMMEND -> viewModel.isRecommendLoading && viewModel.recommendVideos.isEmpty()
                 TabType.BANGUMI -> viewModel.isTimelineLoading && viewModel.timelineDays.isEmpty()
+                TabType.CINEMA -> viewModel.isCinemaTabLoading && viewModel.cinemaTabModules.isEmpty()
             }
             
             // 内容区域
@@ -282,48 +288,60 @@ fun HomeScreen(
                 if (isLoading) {
                     CircularProgressIndicator()
                 } else {
-                    if (viewModel.selectedTab == TabType.BANGUMI) {
-                        BangumiTabContent(
-                            viewModel = viewModel,
-                            onMediaClick = {
-                                viewModel.shouldRestoreFocusToGrid = true
-                                onMediaClick(it)
-                            },
-                            onHeaderClick = onNavigateToAnimeList,
-                            onGuochuangHeaderClick = onNavigateToGuochuangList
-                        )
-                    } else {
-                        key(viewModel.selectedTab) {
-                            CommonVideoGrid(
-                                videos = videosToDisplay,
-                                stateManager = viewModel,
-                                stateKey = viewModel.selectedTab,
-                                columns = 4,
-                                onVideoClick = handleVideoClick,
-                                onLoadMore = {
-                                    when (viewModel.selectedTab) {
-                                        TabType.RECOMMEND -> {
-                                            if (viewModel.canLoadMore(TabType.RECOMMEND)) {
-                                                coroutineScope.launch {
-                                                    viewModel.loadNextPage(TabType.RECOMMEND)
-                                                }
-                                            }
-                                        }
-                                        TabType.HOT -> {
-                                            if (viewModel.canLoadMore(TabType.HOT)) {
-                                                coroutineScope.launch {
-                                                    viewModel.loadNextPage(TabType.HOT)
-                                                }
-                                            }
-                                        }
-                                        else -> {}
-                                    }
+                    when (viewModel.selectedTab) {
+                        TabType.BANGUMI -> {
+                            BangumiTabContent(
+                                viewModel = viewModel,
+                                onMediaClick = {
+                                    viewModel.shouldRestoreFocusToGrid = true
+                                    onMediaClick(it)
                                 },
-                                horizontalSpacing = 12.dp,
-                                verticalSpacing = 12.dp,
-                                contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp),
-                                scrollToTopSignal = viewModel.refreshSignal
+                                onHeaderClick = onNavigateToAnimeList,
+                                onGuochuangHeaderClick = onNavigateToGuochuangList
                             )
+                        }
+                        TabType.CINEMA -> {
+                            CinemaTabContent(
+                                viewModel = viewModel,
+                                onMediaClick = {
+                                    viewModel.shouldRestoreFocusToGrid = true
+                                    onMediaClick(it)
+                                }
+                            )
+                        }
+                        else -> {
+                            key(viewModel.selectedTab) {
+                                CommonVideoGrid(
+                                    videos = videosToDisplay,
+                                    stateManager = viewModel,
+                                    stateKey = viewModel.selectedTab,
+                                    columns = 4,
+                                    onVideoClick = handleVideoClick,
+                                    onLoadMore = {
+                                        when (viewModel.selectedTab) {
+                                            TabType.RECOMMEND -> {
+                                                if (viewModel.canLoadMore(TabType.RECOMMEND)) {
+                                                    coroutineScope.launch {
+                                                        viewModel.loadNextPage(TabType.RECOMMEND)
+                                                    }
+                                                }
+                                            }
+                                            TabType.HOT -> {
+                                                if (viewModel.canLoadMore(TabType.HOT)) {
+                                                    coroutineScope.launch {
+                                                        viewModel.loadNextPage(TabType.HOT)
+                                                    }
+                                                }
+                                            }
+                                            else -> {}
+                                        }
+                                    },
+                                    horizontalSpacing = 12.dp,
+                                    verticalSpacing = 12.dp,
+                                    contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp),
+                                    scrollToTopSignal = viewModel.refreshSignal
+                                )
+                            }
                         }
                     }
                 }
@@ -526,7 +544,8 @@ private fun BangumiTabContent(
                                     borderColor = item.badge_info?.bg_color ?: ""
                                 )
                             ),
-                            bottomText = item.bottom_right_badge?.text
+                            bottomText = item.bottom_right_badge?.text,
+                            followCount = item.stat?.follow ?: 0
                         )
                         VerticalMediaCard(
                             video = video,
@@ -538,6 +557,143 @@ private fun BangumiTabContent(
                                 .onFocusChanged {
                                     if (it.isFocused) {
                                         viewModel.updateFocusedIndex(TabType.BANGUMI, moduleIndex * 100 + itemIndex)
+                                    }
+                                }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CinemaTabContent(
+    viewModel: HomeViewModel,
+    onMediaClick: (Video) -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val modules = viewModel.cinemaTabModules
+    val isLoading = viewModel.isCinemaTabLoading
+    val error = viewModel.cinemaTabError
+    val (initialIndex, initialOffset) = remember { viewModel.getScrollState(TabType.CINEMA) }
+    val initialFocusIndex = remember { viewModel.getFocusedIndex(TabType.CINEMA) }
+    val gridState = rememberLazyGridState(
+        initialFirstVisibleItemIndex = initialIndex,
+        initialFirstVisibleItemScrollOffset = initialOffset
+    )
+    val shouldRestoreFocus = viewModel.shouldRestoreFocusToGrid
+
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+            .collect { (idx, offset) ->
+                viewModel.updateScrollState(TabType.CINEMA, idx, offset)
+            }
+    }
+
+    LaunchedEffect(viewModel.refreshSignal) {
+        gridState.scrollToItem(0)
+        viewModel.updateScrollState(TabType.CINEMA, 0, 0)
+    }
+
+    LazyVerticalGrid(
+        state = gridState,
+        columns = GridCells.Fixed(5),
+        modifier = Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(bottom = 32.dp, start = 12.dp, end = 12.dp, top = 8.dp)
+    ) {
+        if (isLoading && modules.isEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        } else if (error != null && modules.isEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(text = "加载失败：$error")
+                    Button(onClick = { coroutineScope.launch { viewModel.loadCinemaTab() } }) {
+                        Text("重试")
+                    }
+                }
+            }
+        } else {
+            modules.forEachIndexed { moduleIndex, module ->
+                if (module.items.isEmpty()) return@forEachIndexed
+                
+                val showHeader = module.title.isNotBlank()
+                
+                if (showHeader) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = module.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                module.items.forEachIndexed { itemIndex, item ->
+                    item {
+                        val bottomText = item.index_show?.takeIf { it.isNotBlank() }
+                            ?: item.new_ep?.index_show?.takeIf { it.isNotBlank() }
+                            ?: item.bottom_right_badge?.text?.takeIf { it.isNotBlank() }
+                        
+                        val video = Video(
+                            id = item.season_id.toString(),
+                            aid = 0,
+                            bvid = "",
+                            cid = 0,
+                            title = item.title,
+                            coverUrl = item.cover,
+                            author = item.desc ?: "",
+                            seasonId = item.season_id,
+                            mediaId = item.oid,
+                            seasonType = item.season_type,
+                            badges = listOf(
+                                Badge(
+                                    text = item.badge_info?.text ?: "",
+                                    textColor = "",
+                                    bgColor = item.badge_info?.bg_color ?: "",
+                                    borderColor = item.badge_info?.bg_color ?: ""
+                                )
+                            ),
+                            bottomText = bottomText,
+                            followCount = item.stat?.follow ?: 0
+                        )
+                        VerticalMediaCard(
+                            video = video,
+                            onClick = {
+                                viewModel.shouldRestoreFocusToGrid = true
+                                onMediaClick(video)
+                            },
+                            modifier = Modifier
+                                .onFocusChanged {
+                                    if (it.isFocused) {
+                                        viewModel.updateFocusedIndex(TabType.CINEMA, moduleIndex * 100 + itemIndex)
                                     }
                                 }
                         )
