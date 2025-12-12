@@ -41,6 +41,7 @@ import coil.compose.AsyncImage
 import com.bili.bilitv.BuildConfig
 import com.bili.bilitv.RefreshingIndicator
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -401,24 +402,50 @@ private fun BangumiTabContent(
     val modules = viewModel.bangumiTabModules
     val isLoading = viewModel.isBangumiTabLoading
     val error = viewModel.bangumiTabError
-    val (initialIndex, initialOffset) = remember { viewModel.getScrollState(TabType.BANGUMI) }
-    val initialFocusIndex = remember { viewModel.getFocusedIndex(TabType.BANGUMI) }
+    val (initialIndex, initialOffset) = remember(viewModel.shouldRestoreFocusToGrid) { 
+        val state = viewModel.getScrollState(TabType.BANGUMI)
+        Log.d("BiliTV_Focus", "BangumiTab: getScrollState index=${state.first} offset=${state.second} restore=${viewModel.shouldRestoreFocusToGrid}")
+        state
+    }
+    val initialFocusIndex = remember(viewModel.shouldRestoreFocusToGrid) { 
+        val idx = viewModel.getFocusedIndex(TabType.BANGUMI)
+        Log.d("BiliTV_Focus", "BangumiTab: getFocusedIndex index=$idx restore=${viewModel.shouldRestoreFocusToGrid}")
+        idx
+    }
     val gridState = rememberLazyGridState(
         initialFirstVisibleItemIndex = initialIndex,
         initialFirstVisibleItemScrollOffset = initialOffset
     )
     val shouldRestoreFocus = viewModel.shouldRestoreFocusToGrid
 
+    // 记录是否是初次组合
+    var isFirstComposition by remember { mutableStateOf(true) }
+
     LaunchedEffect(gridState) {
         snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
             .collect { (idx, offset) ->
+                // Log.d("BiliTV_Focus", "BangumiTab: Scroll update $idx $offset")
                 viewModel.updateScrollState(TabType.BANGUMI, idx, offset)
             }
     }
 
     LaunchedEffect(viewModel.refreshSignal) {
+        if (isFirstComposition) {
+            isFirstComposition = false
+            Log.d("BiliTV_Focus", "BangumiTab: Initial composition, skipping refresh reset")
+            return@LaunchedEffect
+        }
+        Log.d("BiliTV_Focus", "BangumiTab: Refresh signal received")
         gridState.scrollToItem(0)
         viewModel.updateScrollState(TabType.BANGUMI, 0, 0)
+    }
+
+    LaunchedEffect(modules.size) {
+        Log.d("BiliTV_Focus", "BangumiTab: Modules loaded size=${modules.size} initialIndex=$initialIndex")
+        if (modules.isNotEmpty() && initialIndex > 0) {
+             Log.d("BiliTV_Focus", "BangumiTab: Restoring scroll to $initialIndex")
+             gridState.scrollToItem(initialIndex, initialOffset)
+        }
     }
 
     LazyVerticalGrid(
@@ -466,55 +493,97 @@ private fun BangumiTabContent(
                 
                 if (module.title.isNotBlank()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        ModuleHeader(
-                            title = module.title,
-                            onClick = {
-                                when {
-                                    module.title.contains("国创") -> onGuochuangHeaderClick()
-                                    else -> onHeaderClick()
+                            val headerIndex = moduleIndex * 10000 + 9999
+                            val focusRequester = remember { FocusRequester() }
+                            
+                            LaunchedEffect(shouldRestoreFocus, modules.size) {
+                                if (shouldRestoreFocus && headerIndex == initialFocusIndex) {
+                                    Log.d("BiliTV_Focus", "BangumiTab: Requesting focus for Header $headerIndex")
+                                    delay(100)
+                                    focusRequester.requestFocus()
                                 }
                             }
-                        )
+                            
+                            ModuleHeader(
+                                title = module.title,
+                                onClick = {
+                                    Log.d("BiliTV_Focus", "BangumiTab: Header clicked, setting restore=true")
+                                    viewModel.shouldRestoreFocusToGrid = true
+                                    when {
+                                        module.title.contains("国创") -> onGuochuangHeaderClick()
+                                        else -> onHeaderClick()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .focusRequester(focusRequester)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            if (viewModel.shouldRestoreFocusToGrid && headerIndex == initialFocusIndex) {
+                                                Log.d("BiliTV_Focus", "BangumiTab: Focus restored to Header $headerIndex")
+                                                viewModel.shouldRestoreFocusToGrid = false
+                                            }
+                                            viewModel.updateFocusedIndex(TabType.BANGUMI, headerIndex)
+                                        }
+                                    }
+                            )
                     }
                 }
                 
                 module.items.forEachIndexed { itemIndex, item ->
                     item {
-                        val video = Video(
-                            id = item.season_id.toString(),
-                            aid = 0,
-                            bvid = "",
-                            cid = 0,
-                            title = item.title,
-                            coverUrl = item.cover,
-                            author = item.desc ?: "",
-                            seasonId = item.season_id,
-                            mediaId = item.oid,
-                            seasonType = item.season_type,
-                            badges = listOf(
-                                Badge(
-                                    text = item.badge_info?.text ?: "",
-                                    textColor = "",
-                                    bgColor = item.badge_info?.bg_color ?: "",
-                                    borderColor = item.badge_info?.bg_color ?: ""
-                                )
-                            ),
-                            bottomText = item.bottom_right_badge?.text,
-                            followCount = item.stat?.follow ?: 0
-                        )
-                        VerticalMediaCard(
-                            video = video,
-                            onClick = {
-                                viewModel.shouldRestoreFocusToGrid = true
-                                onMediaClick(video)
-                            },
-                            modifier = Modifier
-                                .onFocusChanged {
-                                    if (it.isFocused) {
-                                        viewModel.updateFocusedIndex(TabType.BANGUMI, moduleIndex * 100 + itemIndex)
-                                    }
+                            val video = Video(
+                                id = item.season_id.toString(),
+                                aid = 0,
+                                bvid = "",
+                                cid = 0,
+                                title = item.title,
+                                coverUrl = item.cover,
+                                author = item.desc ?: "",
+                                seasonId = item.season_id,
+                                mediaId = item.oid,
+                                seasonType = item.season_type,
+                                badges = listOf(
+                                    Badge(
+                                        text = item.badge_info?.text ?: "",
+                                        textColor = "",
+                                        bgColor = item.badge_info?.bg_color ?: "",
+                                        borderColor = item.badge_info?.bg_color ?: ""
+                                    )
+                                ),
+                                bottomText = item.bottom_right_badge?.text,
+                                followCount = item.stat?.follow ?: 0
+                            )
+
+                            val focusRequester = remember { FocusRequester() }
+                            val currentIndex = moduleIndex * 10000 + itemIndex
+                            
+                            LaunchedEffect(shouldRestoreFocus, modules.size) {
+                                if (shouldRestoreFocus && currentIndex == initialFocusIndex) {
+                                    Log.d("BiliTV_Focus", "BangumiTab: Requesting focus for Item $currentIndex")
+                                    delay(100)
+                                    focusRequester.requestFocus()
                                 }
-                        )
+                            }
+
+                            VerticalMediaCard(
+                                video = video,
+                                onClick = {
+                                    Log.d("BiliTV_Focus", "BangumiTab: Item clicked, setting restore=true")
+                                    viewModel.shouldRestoreFocusToGrid = true
+                                    onMediaClick(video)
+                                },
+                                modifier = Modifier
+                                    .focusRequester(focusRequester)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            if (viewModel.shouldRestoreFocusToGrid && currentIndex == initialFocusIndex) {
+                                                Log.d("BiliTV_Focus", "BangumiTab: Focus restored to Item $currentIndex")
+                                                viewModel.shouldRestoreFocusToGrid = false
+                                            }
+                                            viewModel.updateFocusedIndex(TabType.BANGUMI, currentIndex)
+                                        }
+                                    }
+                            )
                     }
                 }
             }
@@ -532,24 +601,51 @@ private fun CinemaTabContent(
     val modules = viewModel.cinemaTabModules
     val isLoading = viewModel.isCinemaTabLoading
     val error = viewModel.cinemaTabError
-    val (initialIndex, initialOffset) = remember { viewModel.getScrollState(TabType.CINEMA) }
-    val initialFocusIndex = remember { viewModel.getFocusedIndex(TabType.CINEMA) }
+    val (initialIndex, initialOffset) = remember(viewModel.shouldRestoreFocusToGrid) { 
+        val state = viewModel.getScrollState(TabType.CINEMA)
+        Log.d("BiliTV_Focus", "CinemaTab: getScrollState index=${state.first} offset=${state.second} restore=${viewModel.shouldRestoreFocusToGrid}")
+        state
+    }
+    // 使用带 key 的 remember，确保在需要恢复焦点时重新获取最新的焦点位置
+    val initialFocusIndex = remember(viewModel.shouldRestoreFocusToGrid) { 
+        val idx = viewModel.getFocusedIndex(TabType.CINEMA) 
+        Log.d("BiliTV_Focus", "CinemaTab: getFocusedIndex index=$idx restore=${viewModel.shouldRestoreFocusToGrid}")
+        idx
+    }
     val gridState = rememberLazyGridState(
         initialFirstVisibleItemIndex = initialIndex,
         initialFirstVisibleItemScrollOffset = initialOffset
     )
     val shouldRestoreFocus = viewModel.shouldRestoreFocusToGrid
 
+    // 记录是否是初次组合
+    var isFirstComposition by remember { mutableStateOf(true) }
+
     LaunchedEffect(gridState) {
         snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
             .collect { (idx, offset) ->
+                // Log.d("BiliTV_Focus", "CinemaTab: Scroll update $idx $offset")
                 viewModel.updateScrollState(TabType.CINEMA, idx, offset)
             }
     }
 
     LaunchedEffect(viewModel.refreshSignal) {
+        if (isFirstComposition) {
+            isFirstComposition = false
+            Log.d("BiliTV_Focus", "CinemaTab: Initial composition, skipping refresh reset")
+            return@LaunchedEffect
+        }
+        Log.d("BiliTV_Focus", "CinemaTab: Refresh signal received")
         gridState.scrollToItem(0)
         viewModel.updateScrollState(TabType.CINEMA, 0, 0)
+    }
+
+    LaunchedEffect(modules.size) {
+        Log.d("BiliTV_Focus", "CinemaTab: Modules loaded size=${modules.size} initialIndex=$initialIndex")
+        if (modules.isNotEmpty() && initialIndex > 0) {
+             Log.d("BiliTV_Focus", "CinemaTab: Restoring scroll to $initialIndex")
+             gridState.scrollToItem(initialIndex, initialOffset)
+        }
     }
 
     LazyVerticalGrid(
@@ -591,11 +687,37 @@ private fun CinemaTabContent(
                 if (module.title.isNotBlank()) {
                     val isClickableHeader = !module.title.contains("猜你喜欢")
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        ModuleHeader(
-                            title = module.title,
-                            onClick = { onNavigateToCinemaList(module.title) },
-                            isFocusable = isClickableHeader
-                        )
+                            val headerIndex = moduleIndex * 10000 + 9999
+                            val focusRequester = remember { FocusRequester() }
+                            
+                            LaunchedEffect(shouldRestoreFocus, modules.size) {
+                                if (shouldRestoreFocus && headerIndex == initialFocusIndex) {
+                                    Log.d("BiliTV_Focus", "CinemaTab: Requesting focus for Header $headerIndex")
+                                    delay(100)
+                                    focusRequester.requestFocus()
+                                }
+                            }
+
+                            ModuleHeader(
+                                title = module.title,
+                                onClick = {
+                                    Log.d("BiliTV_Focus", "CinemaTab: Header clicked, setting restore=true")
+                                    viewModel.shouldRestoreFocusToGrid = true
+                                    onNavigateToCinemaList(module.title) 
+                                },
+                                isFocusable = isClickableHeader,
+                                modifier = Modifier
+                                    .focusRequester(focusRequester)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            if (viewModel.shouldRestoreFocusToGrid && headerIndex == initialFocusIndex) {
+                                                Log.d("BiliTV_Focus", "CinemaTab: Focus restored to Header $headerIndex")
+                                                viewModel.shouldRestoreFocusToGrid = false
+                                            }
+                                            viewModel.updateFocusedIndex(TabType.CINEMA, headerIndex)
+                                        }
+                                    }
+                            )
                     }
                 }
                 
@@ -627,16 +749,34 @@ private fun CinemaTabContent(
                             bottomText = bottomText,
                             followCount = item.stat?.follow ?: 0
                         )
+
+                        val focusRequester = remember { FocusRequester() }
+                        val currentIndex = moduleIndex * 10000 + itemIndex
+                        
+                        LaunchedEffect(shouldRestoreFocus, modules.size) {
+                            if (shouldRestoreFocus && currentIndex == initialFocusIndex) {
+                                Log.d("BiliTV_Focus", "CinemaTab: Requesting focus for Item $currentIndex")
+                                delay(100)
+                                focusRequester.requestFocus()
+                            }
+                        }
+
                         VerticalMediaCard(
                             video = video,
                             onClick = {
+                                Log.d("BiliTV_Focus", "CinemaTab: Item clicked, setting restore=true")
                                 viewModel.shouldRestoreFocusToGrid = true
                                 onMediaClick(video)
                             },
                             modifier = Modifier
+                                .focusRequester(focusRequester)
                                 .onFocusChanged {
                                     if (it.isFocused) {
-                                        viewModel.updateFocusedIndex(TabType.CINEMA, moduleIndex * 100 + itemIndex)
+                                        if (viewModel.shouldRestoreFocusToGrid && currentIndex == initialFocusIndex) {
+                                            Log.d("BiliTV_Focus", "CinemaTab: Focus restored to Item $currentIndex")
+                                            viewModel.shouldRestoreFocusToGrid = false
+                                        }
+                                        viewModel.updateFocusedIndex(TabType.CINEMA, currentIndex)
                                     }
                                 }
                         )
