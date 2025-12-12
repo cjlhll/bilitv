@@ -248,6 +248,7 @@ fun MainScreen() {
     var fullScreenLivePlayInfo by remember { mutableStateOf<LivePlayInfo?>(null) }
     var fullScreenVideoTitle by remember { mutableStateOf("") }
     var selectedMedia by remember { mutableStateOf<Video?>(null) }
+    var animeListSeasonType by remember { mutableStateOf(1) }
     
     // 直播模块的导航状态 - 提升到顶层以保持状态
     var selectedLiveArea by remember { mutableStateOf<LiveAreaItem?>(null) }
@@ -479,6 +480,7 @@ fun MainScreen() {
                     }
                     NavRoute.ANIME_LIST -> {
                         AnimeListScreen(
+                            seasonType = animeListSeasonType,
                             onMediaClick = { video ->
                                 selectedMedia = video
                                 currentRoute = NavRoute.MEDIA_DETAIL
@@ -570,6 +572,11 @@ fun MainScreen() {
                             currentRoute = NavRoute.MEDIA_DETAIL
                         },
                         onNavigateToAnimeList = {
+                            animeListSeasonType = 1
+                            currentRoute = NavRoute.ANIME_LIST
+                        },
+                        onNavigateToGuochuangList = {
+                            animeListSeasonType = 4
                             currentRoute = NavRoute.ANIME_LIST
                         }
                     )

@@ -385,15 +385,7 @@ fun VerticalMediaCard(
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            if (video.desc.isNotBlank()) {
-                                Text(
-                                    text = video.desc,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                    color = Color.White.copy(alpha = 0.85f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            } else if (video.author.isNotBlank()) {
+                            if (video.author.isNotBlank()) {
                                 Text(
                                     text = video.author,
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),

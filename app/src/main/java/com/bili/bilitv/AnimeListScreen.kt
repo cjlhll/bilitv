@@ -23,10 +23,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun AnimeListScreen(
+    seasonType: Int = 1,
     viewModel: AnimeListViewModel = viewModel(),
     onMediaClick: (Video) -> Unit,
     onBack: () -> Unit
 ) {
+    LaunchedEffect(seasonType) {
+        if (viewModel.seasonType != seasonType) {
+            viewModel.initWithSeasonType(seasonType)
+        }
+    }
+
     BackHandler {
         onBack()
     }

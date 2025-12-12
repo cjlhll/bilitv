@@ -240,6 +240,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
     private var bangumiRecommendPage = 1
     private var bangumiRecommendHasMore = true
 
+    // Guochuang recommend states
+    val guochuangRecommendVideos: SnapshotStateList<Video> = mutableStateListOf()
+    var isGuochuangRecommendLoading by mutableStateOf(false)
+    var guochuangRecommendError by mutableStateOf<String?>(null)
+    private var guochuangRecommendPage = 1
+    private var guochuangRecommendHasMore = true
+
     // Store state per tab
     // Pair(index, offset)
     private val _tabScrollStates = mutableStateMapOf<TabType, Pair<Int, Int>>()
@@ -335,6 +342,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         }
     }
 
+    fun ensureGuochuangRecommendLoaded() {
+        if (guochuangRecommendVideos.isEmpty() && !isGuochuangRecommendLoading) {
+            viewModelScope.launch {
+                loadGuochuangRecommend(reset = false)
+            }
+        }
+    }
+
     suspend fun loadTimeline(forceRefresh: Boolean = false) {
         if (isTimelineLoading) return
         if (!forceRefresh && timelineDays.isNotEmpty()) return
@@ -412,6 +427,49 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         }
     }
 
+    suspend fun loadGuochuangRecommend(reset: Boolean = false) {
+        if (isGuochuangRecommendLoading) return
+        if (!reset && !guochuangRecommendHasMore) return
+
+        isGuochuangRecommendLoading = true
+        if (reset) {
+            guochuangRecommendPage = 1
+            guochuangRecommendHasMore = true
+        }
+        guochuangRecommendError = null
+
+        try {
+            val targetPage = guochuangRecommendPage
+            val data = withContext(Dispatchers.IO) {
+                fetchGuochuangRecommendPage(targetPage)
+            }
+            withContext(Dispatchers.Main) {
+                data?.let { payload ->
+                    guochuangRecommendError = null
+                    if (reset) {
+                        guochuangRecommendVideos.clear()
+                    }
+                    val mapped = payload.list.map { it.toVideo() }
+                    if (mapped.isNotEmpty()) {
+                        guochuangRecommendVideos.addAll(mapped)
+                    }
+                    guochuangRecommendHasMore = false
+                    guochuangRecommendPage = targetPage + 1
+                } ?: run {
+                    guochuangRecommendError = guochuangRecommendError ?: "加载失败"
+                    if (reset) guochuangRecommendHasMore = false
+                }
+            }
+        } catch (e: Exception) {
+            guochuangRecommendError = e.localizedMessage ?: "加载失败"
+            if (BuildConfig.DEBUG) {
+                Log.e("BiliTV", "guochuang recommend load error", e)
+            }
+        } finally {
+            isGuochuangRecommendLoading = false
+        }
+    }
+
     private suspend fun fetchBangumiRecommendPage(page: Int): BangumiIndexData? {
         // 请求15个数据，只展示3行
         val url = okhttp3.HttpUrl.Builder()
@@ -466,6 +524,64 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) {
                 Log.e("BiliTV", "Bangumi recommend parse error", e)
+            }
+            null
+        }
+    }
+
+    private suspend fun fetchGuochuangRecommendPage(page: Int): BangumiIndexData? {
+        val url = okhttp3.HttpUrl.Builder()
+            .scheme("https")
+            .host("api.bilibili.com")
+            .addPathSegments("pgc/season/index/result")
+            .addQueryParameter("st", "1")
+            .addQueryParameter("order", "3")
+            .addQueryParameter("season_version", "-1")
+            .addQueryParameter("spoken_language_type", "-1")
+            .addQueryParameter("area", "-1")
+            .addQueryParameter("is_finish", "-1")
+            .addQueryParameter("copyright", "-1")
+            .addQueryParameter("season_status", "-1")
+            .addQueryParameter("season_month", "-1")
+            .addQueryParameter("year", "-1")
+            .addQueryParameter("style_id", "-1")
+            .addQueryParameter("sort", "0")
+            .addQueryParameter("season_type", "4")
+            .addQueryParameter("pagesize", "15")
+            .addQueryParameter("type", "1")
+            .addQueryParameter("page", page.toString())
+            .build()
+
+        val requestBuilder = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
+            .header("Referer", "https://www.bilibili.com")
+
+        SessionManager.getCookieString()?.let {
+            requestBuilder.header("Cookie", it)
+        }
+
+        val response = httpClient.newCall(requestBuilder.build()).execute()
+        if (!response.isSuccessful) {
+            if (BuildConfig.DEBUG) {
+                Log.e("BiliTV", "Guochuang recommend HTTP error: ${response.code}")
+            }
+            return null
+        }
+        val body = response.body?.string() ?: return null
+        return try {
+            val resp = json.decodeFromString<BangumiIndexResponse>(body)
+            if (resp.code == 0) {
+                resp.data
+            } else {
+                if (BuildConfig.DEBUG) {
+                    Log.e("BiliTV", "Guochuang recommend API error: ${resp.message} (code=${resp.code})")
+                }
+                null
+            }
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) {
+                Log.e("BiliTV", "Guochuang recommend parse error", e)
             }
             null
         }
@@ -843,6 +959,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
         return !isBangumiRecommendLoading && bangumiRecommendHasMore
     }
 
+    fun canLoadMoreGuochuangRecommend(): Boolean {
+        return !isGuochuangRecommendLoading && guochuangRecommendHasMore
+    }
+
     fun refreshCurrentTab(restoreFocusToGrid: Boolean = true) {
         if (isRefreshing) return
         val targetTab = selectedTab
@@ -893,6 +1013,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                         bangumiRecommendError = null
                         bangumiRecommendVideos.clear()
                         loadBangumiRecommend(reset = true)
+                        guochuangRecommendPage = 1
+                        guochuangRecommendHasMore = true
+                        guochuangRecommendError = null
+                        guochuangRecommendVideos.clear()
+                        loadGuochuangRecommend(reset = true)
                         _tabScrollStates[targetTab] = 0 to 0
                         _tabFocusStates[targetTab] = 0
                         refreshSignal++

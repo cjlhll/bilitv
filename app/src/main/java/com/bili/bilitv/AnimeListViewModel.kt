@@ -91,6 +91,9 @@ class AnimeListViewModel : ViewModel() {
     private val httpClient = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
 
+    var seasonType by mutableStateOf(1)
+        private set
+
     var filters by mutableStateOf<List<PgcFilterItem>>(emptyList())
         private set
     
@@ -100,7 +103,7 @@ class AnimeListViewModel : ViewModel() {
     var selectedFilters by mutableStateOf<Map<String, String>>(emptyMap())
         private set
         
-    var selectedOrder by mutableStateOf<String>("3") // Default to 追番人数 usually
+    var selectedOrder by mutableStateOf<String>("3")
 
     var videos by mutableStateOf<List<PgcIndexItem>>(emptyList())
         private set
@@ -111,10 +114,6 @@ class AnimeListViewModel : ViewModel() {
     var error by mutableStateOf<String?>(null)
         private set
     
-    // Grid state management (focus/scroll)
-    // We can implement VideoGridStateManager if we want to persist state, 
-    // but for now let's just keep it simple or minimal.
-    // If needed we can add similar logic to HomeViewModel.
     var focusedIndex by mutableStateOf(-1)
     var firstVisibleItemIndex by mutableStateOf(0)
     var firstVisibleItemScrollOffset by mutableStateOf(0)
@@ -123,15 +122,15 @@ class AnimeListViewModel : ViewModel() {
     private var page = 1
     private var hasNext = true
 
-    init {
+    fun initWithSeasonType(type: Int) {
+        seasonType = type
         loadCondition()
     }
 
     fun loadCondition() {
         viewModelScope.launch {
             try {
-                // season_type=1 (Anime), type=0
-                val url = "https://api.bilibili.com/pgc/season/index/condition?season_type=1&type=0"
+                val url = "https://api.bilibili.com/pgc/season/index/condition?season_type=$seasonType&type=0"
                 val request = Request.Builder().url(url).build()
                 
                 val response = withContext(Dispatchers.IO) {
@@ -146,21 +145,43 @@ class AnimeListViewModel : ViewModel() {
                             filters = resp.data.filter
                             orders = resp.data.order ?: emptyList()
                             
-                            // Initialize selected filters
+                            Log.d("AnimeListVM", "======= 筛选条件API返回数据 =======")
+                            Log.d("AnimeListVM", "season_type: $seasonType")
+                            Log.d("AnimeListVM", "筛选条件数量: ${filters.size}")
+                            filters.forEachIndexed { index, filter ->
+                                Log.d("AnimeListVM", "[$index] field: ${filter.field}, name: ${filter.name}, 选项数: ${filter.values.size}")
+                                filter.values.forEach { value ->
+                                    Log.d("AnimeListVM", "  - keyword: ${value.keyword}, name: ${value.name}")
+                                }
+                            }
+                            Log.d("AnimeListVM", "排序方式数量: ${orders.size}")
+                            orders.forEach { order ->
+                                Log.d("AnimeListVM", "  排序: field=${order.field}, name=${order.name}")
+                            }
+                            Log.d("AnimeListVM", "============================")
+                            
                             val initialFilters = mutableMapOf<String, String>()
                             resp.data.filter.forEach { filter ->
                                 if (filter.values.isNotEmpty()) {
-                                    initialFilters[filter.field] = filter.values[0].keyword
+                                    if (seasonType == 4 && filter.field == "area") {
+                                        val guochanValue = filter.values.find { it.name.contains("国") || it.name.contains("中国") }
+                                        if (guochanValue != null) {
+                                            initialFilters[filter.field] = guochanValue.keyword
+                                            Log.d("AnimeListVM", "国创列表：地区默认设置为 ${guochanValue.name} (keyword=${guochanValue.keyword})")
+                                        } else {
+                                            initialFilters[filter.field] = filter.values[0].keyword
+                                        }
+                                    } else {
+                                        initialFilters[filter.field] = filter.values[0].keyword
+                                    }
                                 }
                             }
                             selectedFilters = initialFilters
                             
-                            // Initialize order
-                             if (!orders.isNullOrEmpty()) {
+                            if (!orders.isNullOrEmpty()) {
                                 selectedOrder = orders[0].field
                             }
 
-                            // Load initial results
                             loadResults(reset = true)
                         } else {
                             error = "Condition API Error: ${resp.message}"
@@ -205,7 +226,7 @@ class AnimeListViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                val params = StringBuilder("season_type=1&type=0&page=$page&pagesize=21")
+                val params = StringBuilder("season_type=$seasonType&type=0&page=$page&pagesize=21")
                 params.append("&order=$selectedOrder")
                 
                 selectedFilters.forEach { (field, keyword) ->

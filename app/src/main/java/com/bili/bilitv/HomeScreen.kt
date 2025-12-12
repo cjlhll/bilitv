@@ -132,7 +132,8 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     onEnterFullScreen: (VideoPlayInfo, String) -> Unit = { _, _ -> },
     onMediaClick: (Video) -> Unit = {},
-    onNavigateToAnimeList: () -> Unit = {}
+    onNavigateToAnimeList: () -> Unit = {},
+    onNavigateToGuochuangList: () -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     var isVisible by remember { mutableStateOf(false) }
@@ -210,6 +211,7 @@ fun HomeScreen(
             TabType.BANGUMI -> {
                 viewModel.ensureTimelineLoaded()
                 viewModel.ensureBangumiRecommendLoaded()
+                viewModel.ensureGuochuangRecommendLoaded()
             }
         }
     }
@@ -288,7 +290,8 @@ fun HomeScreen(
                                 viewModel.shouldRestoreFocusToGrid = true
                                 onMediaClick(it)
                             },
-                            onHeaderClick = onNavigateToAnimeList
+                            onHeaderClick = onNavigateToAnimeList,
+                            onGuochuangHeaderClick = onNavigateToGuochuangList
                         )
                     } else {
                         key(viewModel.selectedTab) {
@@ -372,7 +375,8 @@ private fun formatDuration(seconds: Long): String {
 private fun BangumiTabContent(
     viewModel: HomeViewModel,
     onMediaClick: (Video) -> Unit,
-    onHeaderClick: () -> Unit
+    onHeaderClick: () -> Unit,
+    onGuochuangHeaderClick: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val recommendList = viewModel.bangumiRecommendVideos
@@ -540,6 +544,115 @@ private fun BangumiTabContent(
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Text(
                     text = "部分数据加载异常：$recommendError",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+        }
+
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            var isGuochuangHeaderFocused by remember { mutableStateOf(false) }
+            val guochuangList = viewModel.guochuangRecommendVideos
+            val isGuochuangLoading = viewModel.isGuochuangRecommendLoading
+            val guochuangError = viewModel.guochuangRecommendError
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(bottom = 8.dp)
+                        .focusable()
+                        .onFocusChanged { isGuochuangHeaderFocused = it.isFocused }
+                        .clickable(onClick = onGuochuangHeaderClick)
+                        .background(
+                            color = if (isGuochuangHeaderFocused) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                            shape = MaterialTheme.shapes.small
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "国创",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isGuochuangHeaderFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "更多",
+                        modifier = Modifier.size(16.dp),
+                        tint = if (isGuochuangHeaderFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onBackground
+                    )
+                }
+                
+                if (isGuochuangLoading && guochuangList.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                } else if (guochuangError != null && guochuangList.isEmpty()) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(text = "加载失败：$guochuangError")
+                        Button(onClick = { coroutineScope.launch { viewModel.loadGuochuangRecommend(reset = true) } }) {
+                            Text("重试")
+                        }
+                    }
+                } else if (guochuangList.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("暂无推荐")
+                    }
+                }
+            }
+        }
+
+        itemsIndexed(
+            items = viewModel.guochuangRecommendVideos,
+            key = { index, video -> "guochuang_rcmd_${index}_${video.id}" }
+        ) { index, video ->
+            VerticalMediaCard(
+                video = video,
+                onClick = {
+                    viewModel.shouldRestoreFocusToGrid = true
+                    onMediaClick(video)
+                },
+                modifier = Modifier
+                    .onFocusChanged {
+                        if (it.isFocused) {
+                            viewModel.updateFocusedIndex(TabType.BANGUMI, index + recommendList.size)
+                        }
+                    }
+            )
+        }
+
+        if (viewModel.isGuochuangRecommendLoading && viewModel.guochuangRecommendVideos.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 0.dp, vertical = 8.dp)
+                )
+            }
+        } else if (viewModel.guochuangRecommendError != null && viewModel.guochuangRecommendVideos.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    text = "部分数据加载异常：${viewModel.guochuangRecommendError}",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier.padding(vertical = 8.dp)
