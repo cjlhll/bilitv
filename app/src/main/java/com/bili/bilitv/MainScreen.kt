@@ -586,15 +586,22 @@ fun MainScreen() {
                             pgcListConfig = PgcListConfig(4)
                             currentRoute = NavRoute.PGC_LIST
                         },
-                        onNavigateToCinemaList = {
+                        onNavigateToCinemaList = { moduleTitle ->
+                            val seasonType = when {
+                                moduleTitle.contains("电影") -> 2
+                                moduleTitle.contains("电视剧") -> 3
+                                moduleTitle.contains("纪录片") -> 4
+                                moduleTitle.contains("综艺") -> 5
+                                else -> 1
+                            }
                             pgcListConfig = PgcListConfig(
-                                initialSeasonType = 1, // Default to "全部" tab
+                                initialSeasonType = seasonType,
                                 tabs = listOf(
-                                    "全部" to 1, // 全部内容
-                                    "电影" to 2, // 电影类型
-                                    "电视剧" to 3, // 电视剧类型
-                                    "纪录片" to 4, // 纪录片类型
-                                    "综艺" to 5 // 综艺类型
+                                    "全部" to 1,
+                                    "电影" to 2,
+                                    "电视剧" to 3,
+                                    "纪录片" to 4,
+                                    "综艺" to 5
                                 )
                             )
                             currentRoute = NavRoute.PGC_LIST

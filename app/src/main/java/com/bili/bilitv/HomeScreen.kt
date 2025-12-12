@@ -135,7 +135,7 @@ fun HomeScreen(
     onMediaClick: (Video) -> Unit = {},
     onNavigateToAnimeList: () -> Unit = {},
     onNavigateToGuochuangList: () -> Unit = {},
-    onNavigateToCinemaList: () -> Unit = {}
+    onNavigateToCinemaList: (String) -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     var isVisible by remember { mutableStateOf(false) }
@@ -573,7 +573,7 @@ private fun BangumiTabContent(
 private fun CinemaTabContent(
     viewModel: HomeViewModel,
     onMediaClick: (Video) -> Unit,
-    onNavigateToCinemaList: () -> Unit // Added new parameter
+    onNavigateToCinemaList: (String) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val modules = viewModel.cinemaTabModules
@@ -654,7 +654,7 @@ private fun CinemaTabContent(
                                             Modifier
                                                 .focusable()
                                                 .onFocusChanged { isHeaderFocused = it.isFocused }
-                                                .clickable(onClick = onNavigateToCinemaList)
+                                                .clickable(onClick = { onNavigateToCinemaList(module.title) })
                                                 .background(
                                                     color = if (isHeaderFocused) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
                                                     shape = MaterialTheme.shapes.small
