@@ -75,6 +75,77 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusProperties
+import okhttp3.FormBody
+import java.net.URLEncoder
+
+suspend fun toggleFollow(
+    seasonId: Long,
+    currentFollowed: Boolean,
+    sessdata: String,
+    csrf: String
+): Boolean {
+    return withContext(Dispatchers.IO) {
+        try {
+            val url = if (currentFollowed) {
+                "https://api.bilibili.com/pgc/web/follow/del"
+            } else {
+                "https://api.bilibili.com/pgc/web/follow/add"
+            }
+            
+            Log.d("FollowAction", "开始${if (currentFollowed) "取消追番" else "追番"} seasonId=$seasonId")
+            
+            val encodedSessdata = URLEncoder.encode(sessdata, "UTF-8")
+            
+            val formBody = FormBody.Builder()
+                .add("season_id", seasonId.toString())
+                .add("csrf", csrf)
+                .build()
+            
+            Log.d("FollowAction", "请求URL: $url")
+            Log.d("FollowAction", "请求参数: season_id=$seasonId, csrf=$csrf")
+            Log.d("FollowAction", "原始SESSDATA: ${sessdata.take(50)}...")
+            Log.d("FollowAction", "编码后SESSDATA: ${encodedSessdata.take(50)}...")
+            
+            val request = Request.Builder()
+                .url(url)
+                .post(formBody)
+                .addHeader("Cookie", "SESSDATA=$encodedSessdata")
+                .addHeader("Referer", "https://www.bilibili.com/anime/?spm_id_from=333.1007.0.0")
+                .build()
+            
+            val client = OkHttpClient()
+            client.newCall(request).execute().use { response ->
+                Log.d("FollowAction", "响应状态码: ${response.code}")
+                
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    Log.d("FollowAction", "响应内容: $body")
+                    
+                    if (body != null) {
+                        val json = Json { ignoreUnknownKeys = true }
+                        val result = json.decodeFromString<FollowResponse>(body)
+                        Log.d("FollowAction", "解析结果: code=${result.code}, message=${result.message}")
+                        
+                        val success = result.code == 0
+                        Log.d("FollowAction", "操作${if (success) "成功" else "失败"}")
+                        return@use success
+                    }
+                }
+                Log.d("FollowAction", "请求失败或响应体为空")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e("FollowAction", "异常: ${e.message}", e)
+            false
+        }
+    }
+}
+
+@Serializable
+data class FollowResponse(
+    val code: Int,
+    val message: String = ""
+)
 
 @Composable
 fun MediaDetailScreen(
@@ -306,8 +377,49 @@ fun MediaDetailScreen(
                             }
 
                             var isFollowFocused by remember { mutableStateOf(false) }
+                            var isFollowed by remember(detailMedia.seasonId) { mutableStateOf(detailMedia.isFollow) }
+                            var isFollowLoading by remember { mutableStateOf(false) }
+                            
                             Button(
-                                onClick = {},
+                                onClick = {
+                                    Log.d("FollowButton", "按钮被点击 seasonId=${detailMedia.seasonId} isFollowed=$isFollowed isLoading=$isFollowLoading")
+                                    
+                                    if (!isFollowLoading && detailMedia.seasonId > 0) {
+                                        isFollowLoading = true
+                                        Log.d("FollowButton", "开始处理追番操作")
+                                        
+                                        coroutineScope.launch {
+                                            val session = SessionManager.getSession()
+                                            Log.d("FollowButton", "获取Session: ${if (session != null) "成功" else "失败"}")
+                                            
+                                            if (session != null) {
+                                                Log.d("FollowButton", "SESSDATA: ${session.sessdata.take(50)}...")
+                                                
+                                                val result = toggleFollow(
+                                                    seasonId = detailMedia.seasonId,
+                                                    currentFollowed = isFollowed,
+                                                    sessdata = session.sessdata,
+                                                    csrf = session.biliJct
+                                                )
+                                                
+                                                Log.d("FollowButton", "toggleFollow返回结果: $result")
+                                                
+                                                if (result) {
+                                                    isFollowed = !isFollowed
+                                                    Log.d("FollowButton", "状态已更新: isFollowed=$isFollowed")
+                                                } else {
+                                                    Log.d("FollowButton", "状态未更新，接口返回失败")
+                                                }
+                                            } else {
+                                                Log.w("FollowButton", "未登录，无法追番")
+                                            }
+                                            isFollowLoading = false
+                                            Log.d("FollowButton", "追番操作完成")
+                                        }
+                                    } else {
+                                        Log.d("FollowButton", "无法执行: isLoading=$isFollowLoading seasonId=${detailMedia.seasonId}")
+                                    }
+                                },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color.White.copy(alpha = 0.15f),
                                     contentColor = Color.White
@@ -318,9 +430,10 @@ fun MediaDetailScreen(
                                         isFollowFocused = it.isFocused
                                         if (it.isFocused) viewModel.lastFocusedButton = "follow"
                                     },
-                                border = if (isFollowFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null
+                                border = if (isFollowFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null,
+                                enabled = !isFollowLoading
                             ) {
-                                Text(text = "追番/追剧", fontSize = 16.sp)
+                                Text(text = if (isFollowed) "已追" else "追番", fontSize = 16.sp)
                             }
                         }
                     }
