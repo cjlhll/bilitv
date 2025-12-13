@@ -540,6 +540,10 @@ private fun BangumiTabContent(
                 
                 module.items.forEachIndexed { itemIndex, item ->
                     item {
+                            val bottomText = item.index_show?.takeIf { it.isNotBlank() }
+                                ?: item.new_ep?.index_show?.takeIf { it.isNotBlank() }
+                                ?: item.bottom_right_badge?.text?.takeIf { it.isNotBlank() }
+                            
                             val video = Video(
                                 id = item.season_id.toString(),
                                 aid = 0,
@@ -559,7 +563,7 @@ private fun BangumiTabContent(
                                         borderColor = item.badge_info?.bg_color ?: ""
                                     )
                                 ),
-                                bottomText = item.bottom_right_badge?.text,
+                                bottomText = bottomText,
                                 followCount = item.stat?.follow ?: 0
                             )
 
