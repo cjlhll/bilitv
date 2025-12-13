@@ -255,6 +255,9 @@ fun MainScreen() {
     var selectedMedia by remember { mutableStateOf<Video?>(null) }
     var pgcListConfig by remember { mutableStateOf<PgcListConfig?>(null) }
     
+    // 媒体详情页导航栈，支持多级详情页导航
+    val mediaDetailBackStack = remember { mutableStateListOf<Video>() }
+    
     // 直播模块的导航状态 - 提升到顶层以保持状态
     var selectedLiveArea by remember { mutableStateOf<LiveAreaItem?>(null) }
     var liveListEnterTimestamp by remember { mutableLongStateOf(0L) }
@@ -286,10 +289,29 @@ fun MainScreen() {
         if (navBackStack.isNotEmpty()) {
             val prev = navBackStack.removeAt(navBackStack.size - 1)
             if (currentRoute == NavRoute.MEDIA_DETAIL) {
-                selectedMedia = null
+                // 如果是媒体详情页，检查是否有上一级详情页需要返回
+                if (mediaDetailBackStack.isNotEmpty()) {
+                    // 返回到上一级详情页
+                    selectedMedia = mediaDetailBackStack.removeAt(mediaDetailBackStack.size - 1)
+                    // 不改变当前路由，保持在MEDIA_DETAIL
+                    return
+                } else {
+                    // 没有上一级详情页，完全退出详情页
+                    selectedMedia = null
+                    mediaDetailViewModel.clearAllStates()
+                }
             }
             currentRoute = prev
         } else if (currentRoute != NavRoute.HOME) {
+            if (currentRoute == NavRoute.MEDIA_DETAIL && mediaDetailBackStack.isNotEmpty()) {
+                // 处理直接按返回键的情况
+                selectedMedia = mediaDetailBackStack.removeAt(mediaDetailBackStack.size - 1)
+                return
+            } else if (currentRoute == NavRoute.MEDIA_DETAIL) {
+                // 完全退出详情页
+                selectedMedia = null
+                mediaDetailViewModel.clearAllStates()
+            }
             currentRoute = NavRoute.HOME
         }
     }
@@ -488,8 +510,20 @@ fun MainScreen() {
                                     isFullScreenPlayer = true
                                     fullScreenPlayInfo = playInfo
                                     fullScreenVideoTitle = title
+                                },
+                                onNavigateToMedia = { newMedia ->
+                                    // 将当前媒体添加到返回栈
+                                    mediaDetailBackStack.add(media)
+                                    selectedMedia = newMedia
                                 }
                             )
+                        }
+                        
+                        // 当离开MEDIA_DETAIL路由且没有返回栈时，清空所有状态
+                        LaunchedEffect(currentRoute) {
+                            if (currentRoute != NavRoute.MEDIA_DETAIL && mediaDetailBackStack.isEmpty()) {
+                                mediaDetailViewModel.clearAllStates()
+                            }
                         }
                     }
                     NavRoute.PGC_LIST -> {
@@ -498,10 +532,10 @@ fun MainScreen() {
                             initialSeasonType = config.initialSeasonType,
                             tabs = config.tabs,
                             onMediaClick = { video ->
-                                selectedMedia = video
-                                navigateTo(NavRoute.MEDIA_DETAIL)
-                            },
-                            onBack = { navigateBack() }
+                                                        mediaDetailBackStack.clear() // 清空之前的详情页返回栈
+                                                        selectedMedia = video
+                                                        navigateTo(NavRoute.MEDIA_DETAIL)
+                                                    },                            onBack = { navigateBack() }
                         )
                     }
                     NavRoute.SEARCH_RESULT -> SearchResultsScreen(
@@ -567,6 +601,7 @@ fun MainScreen() {
                         },
                         onMediaClick = { video ->
                             searchViewModel.shouldRestoreFocusToGrid = true
+                            mediaDetailBackStack.clear() // 清空之前的详情页返回栈
                             selectedMedia = video
                             navigateTo(NavRoute.MEDIA_DETAIL)
                         },
@@ -584,6 +619,7 @@ fun MainScreen() {
                             fullScreenVideoTitle = title
                         },
                         onMediaClick = { video ->
+                            mediaDetailBackStack.clear() // 清空之前的详情页返回栈
                             selectedMedia = video
                             navigateTo(NavRoute.MEDIA_DETAIL)
                         },

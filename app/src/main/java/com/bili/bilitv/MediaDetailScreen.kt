@@ -46,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,8 +79,12 @@ fun MediaDetailScreen(
     media: Video,
     viewModel: MediaDetailViewModel,
     onBack: () -> Unit,
-    onPlay: (VideoPlayInfo, String) -> Unit = { _, _ -> }
+    onPlay: (VideoPlayInfo, String) -> Unit = { _, _ -> },
+    onNavigateToMedia: (Video) -> Unit = {}
 ) {
+    // 使用媒体ID作为key，确保每次切换媒体时重新创建组件
+    val mediaKey = "${media.seasonId}_${media.mediaId}"
+    key(mediaKey) {
     val logTag = "MediaDetail"
     val context = LocalContext.current
     
@@ -127,17 +132,18 @@ fun MediaDetailScreen(
     val playButtonRequester = remember { FocusRequester() }
     val followButtonRequester = remember { FocusRequester() }
 
-    // Focus restoration
-    var hasRestoredFocus by remember { mutableStateOf(false) }
+    // Focus restoration - managed by ViewModel state
+    val shouldRestoreFocus = viewModel.shouldRestoreFocus
 
     // Restore button focus if no episode focus is set
-    LaunchedEffect(hasRestoredFocus, viewModel.lastFocusedButton) {
-        if (!hasRestoredFocus && viewModel.lastFocusedId == null && viewModel.lastFocusedButton != null) {
+    LaunchedEffect(shouldRestoreFocus, viewModel.lastFocusedButton) {
+        if (shouldRestoreFocus && viewModel.lastFocusedId == null && viewModel.lastFocusedButton != null) {
+            kotlinx.coroutines.delay(100)
             when (viewModel.lastFocusedButton) {
                 "play" -> playButtonRequester.requestFocus()
                 "follow" -> followButtonRequester.requestFocus()
             }
-            hasRestoredFocus = true
+            viewModel.shouldRestoreFocus = false
         }
     }
 
@@ -151,6 +157,7 @@ fun MediaDetailScreen(
     
     val coroutineScope = rememberCoroutineScope()
     fun handlePlay(episode: MediaEpisode) {
+        viewModel.shouldRestoreFocus = true
         coroutineScope.launch {
             val cookie = SessionManager.getSession()?.toCookieString()
             // 使用ep_id获取播放地址
@@ -271,6 +278,7 @@ fun MediaDetailScreen(
                                     } else {
                                         val targetUrl = primaryEpisode?.url?.ifBlank { media.url } ?: media.url
                                         if (targetUrl.isNotBlank()) {
+                                            viewModel.shouldRestoreFocus = true
                                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
                                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                             context.startActivity(intent)
@@ -392,8 +400,8 @@ fun MediaDetailScreen(
                                         onClick = { handlePlay(ep) },
                                         modifier = Modifier.width(240.dp),
                                         onFocus = { viewModel.lastFocusedId = ep.id.toString() },
-                                        requestInitialFocus = !hasRestoredFocus && (viewModel.lastFocusedId == ep.id.toString()),
-                                        onInitialFocusRequested = { hasRestoredFocus = true }
+                                        requestInitialFocus = shouldRestoreFocus && (viewModel.lastFocusedId == ep.id.toString()),
+                                        onInitialFocusRequested = { viewModel.shouldRestoreFocus = false }
                                     )
                                 }
                             }
@@ -446,17 +454,29 @@ fun MediaDetailScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 items(section.seasons) { season ->
+                                    val focusRequester = remember { FocusRequester() }
+                                    val isTarget = shouldRestoreFocus && (viewModel.lastFocusedId == season.seasonId.toString())
+                                    
+                                    LaunchedEffect(isTarget) {
+                                        if (isTarget) {
+                                            kotlinx.coroutines.delay(100)
+                                            focusRequester.requestFocus()
+                                            viewModel.shouldRestoreFocus = false
+                                        }
+                                    }
+
                                     VerticalMediaCard(
                                         video = season,
                                         onClick = {
-                                            val targetUrl = season.url.ifBlank { detailMedia.url }
-                                            if (targetUrl.isNotBlank()) {
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
-                                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                context.startActivity(intent)
-                                            }
+                                            viewModel.shouldRestoreFocus = true
+                                            onNavigateToMedia(season)
                                         },
-                                        modifier = Modifier.width(156.dp)
+                                        modifier = Modifier
+                                            .width(156.dp)
+                                            .focusRequester(focusRequester)
+                                            .onFocusChanged {
+                                                if (it.isFocused) viewModel.lastFocusedId = season.seasonId.toString()
+                                            }
                                     )
                                 }
                             }
@@ -487,6 +507,7 @@ fun MediaDetailScreen(
             }
         }
     }
+    } // key(mediaKey)
 }
 
 @Serializable
@@ -676,6 +697,7 @@ private fun EpisodeCard(
 
     if (requestInitialFocus) {
         LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(100)
             focusRequester.requestFocus()
             onInitialFocusRequested()
         }

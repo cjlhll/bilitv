@@ -18,38 +18,108 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 
 class MediaDetailViewModel(application: Application) : AndroidViewModel(application) {
-    var detailMedia by mutableStateOf<Video?>(null)
-    var isAscending by mutableStateOf(false)
-    var isDetailLoading by mutableStateOf(false)
-    var detailError by mutableStateOf<String?>(null)
-    var sections by mutableStateOf<List<DetailSection>>(emptyList())
+    // 当前选中的媒体
+    var currentMediaId by mutableStateOf<String?>(null)
+    
+    // 为每个媒体维护独立的状态
+    private val mediaStates = mutableMapOf<String, MediaState>()
+    
+    // 当前状态，基于当前选中的媒体
+    var detailMedia: Video? by mutableStateOf(null)
+    var isAscending: Boolean by mutableStateOf(false)
+    var isDetailLoading: Boolean by mutableStateOf(false)
+    var detailError: String? by mutableStateOf(null)
+    var sections: List<DetailSection> by mutableStateOf(emptyList())
     
     // Scroll state persistence
-    var scrollPosition by mutableStateOf(0)
-    var lastFocusedId by mutableStateOf<String?>(null)
-    var lastFocusedButton by mutableStateOf<String?>(null)
+    var scrollPosition: Int by mutableStateOf(0)
+    var lastFocusedId: String? by mutableStateOf(null)
+    var lastFocusedButton: String? by mutableStateOf(null)
+    var shouldRestoreFocus: Boolean by mutableStateOf(false)
     
     // LazyRow scroll states map: key is section index (or some unique key), value is (index, offset)
-    var rowScrollStates = mutableMapOf<String, Pair<Int, Int>>()
+    var rowScrollStates: MutableMap<String, Pair<Int, Int>> by mutableStateOf(mutableMapOf())
+    
+    // 媒体状态数据类
+    data class MediaState(
+        var detailMedia: Video? = null,
+        var isAscending: Boolean = false,
+        var isDetailLoading: Boolean = false,
+        var detailError: String? = null,
+        var sections: List<DetailSection> = emptyList(),
+        var scrollPosition: Int = 0,
+        var lastFocusedId: String? = null,
+        var lastFocusedButton: String? = null,
+        var shouldRestoreFocus: Boolean = false,
+        var rowScrollStates: MutableMap<String, Pair<Int, Int>> = mutableMapOf()
+    )
     
     private val client = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
     
+    // 保存当前媒体的状态
+    private fun saveCurrentState() {
+        currentMediaId?.let { id ->
+            mediaStates[id] = MediaState(
+                detailMedia = detailMedia,
+                isAscending = isAscending,
+                isDetailLoading = isDetailLoading,
+                detailError = detailError,
+                sections = sections,
+                scrollPosition = scrollPosition,
+                lastFocusedId = lastFocusedId,
+                lastFocusedButton = lastFocusedButton,
+                shouldRestoreFocus = shouldRestoreFocus,
+                rowScrollStates = rowScrollStates.toMutableMap()
+            )
+        }
+    }
+    
+    // 切换到指定媒体的状态
+    private fun switchToMedia(mediaId: String) {
+        saveCurrentState()
+        currentMediaId = mediaId
+        
+        // 获取或创建媒体状态
+        val state = mediaStates.getOrPut(mediaId) { MediaState() }
+        
+        // 恢复状态
+        detailMedia = state.detailMedia
+        isAscending = state.isAscending
+        isDetailLoading = state.isDetailLoading
+        detailError = state.detailError
+        sections = state.sections
+        scrollPosition = state.scrollPosition
+        lastFocusedId = state.lastFocusedId
+        lastFocusedButton = state.lastFocusedButton
+        shouldRestoreFocus = state.shouldRestoreFocus
+        rowScrollStates = state.rowScrollStates.toMutableMap()
+    }
+    
     fun loadMedia(media: Video) {
-        // If we already have details for this video, don't reload unless force refresh (not implemented yet)
+        val mediaId = "${media.seasonId}_${media.mediaId}"
+        
+        // 切换到该媒体的状态
+        switchToMedia(mediaId)
+        
+        // 如果已经有完整的详情数据，不需要重新加载
         if (detailMedia?.mediaId == media.mediaId && detailMedia?.seasonId == media.seasonId) {
-            // Check if loaded details are complete (implied by sections not empty or detailMedia having episodes)
             if (sections.isNotEmpty() || (detailMedia?.episodes?.isNotEmpty() == true)) {
                 return
             }
         }
         
-        // Initial setup with passed media
+        // 如果是第一次加载该媒体，重置状态
+        if (mediaStates[mediaId]?.detailMedia == null) {
+            scrollPosition = 0
+            lastFocusedId = null
+            lastFocusedButton = null
+            shouldRestoreFocus = false
+            rowScrollStates.clear()
+        }
+        
+        // 设置初始媒体数据
         detailMedia = media
-        scrollPosition = 0 // Reset scroll position for new media
-        lastFocusedId = null // Reset focus for new media
-        lastFocusedButton = null // Reset button focus for new media
-        rowScrollStates.clear() // Reset horizontal scroll states
         isDetailLoading = true
         detailError = null
         
@@ -59,6 +129,9 @@ class MediaDetailViewModel(application: Application) : AndroidViewModel(applicat
                 Log.d("MediaDetail", "detail loaded id=${detail.id} sections=${sectionList.size}")
                 detailMedia = detail
                 sections = sectionList
+                
+                // 保存加载完成的状态
+                saveCurrentState()
             } catch (e: Exception) {
                 detailError = e.localizedMessage ?: "加载详情失败"
                 e.printStackTrace()
@@ -206,6 +279,9 @@ class MediaDetailViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun clearState() {
+        saveCurrentState()
+        currentMediaId = null
+        
         detailMedia = null
         isAscending = false
         isDetailLoading = false
@@ -214,6 +290,13 @@ class MediaDetailViewModel(application: Application) : AndroidViewModel(applicat
         scrollPosition = 0
         lastFocusedId = null
         lastFocusedButton = null
+        shouldRestoreFocus = false
         rowScrollStates.clear()
+    }
+    
+    // 清空所有媒体状态（用于完全退出详情页时）
+    fun clearAllStates() {
+        mediaStates.clear()
+        clearState()
     }
 }
