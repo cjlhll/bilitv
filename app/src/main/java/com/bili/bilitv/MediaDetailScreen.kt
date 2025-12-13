@@ -332,6 +332,8 @@ fun MediaDetailScreen(
             sections.forEachIndexed { index, section ->
                 when (section) {
                     is EpisodeCardSection -> {
+                        val rowKey = "episodes_$index"
+                        var resetToStartSignal by remember(rowKey) { mutableStateOf(0) }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -346,7 +348,11 @@ fun MediaDetailScreen(
                             if (section.isMain) {
                                 var isSortFocused by remember { mutableStateOf(false) }
                                 TextButton(
-                                    onClick = { isAscending = !isAscending },
+                                    onClick = {
+                                        isAscending = !isAscending
+                                        viewModel.rowScrollStates[rowKey] = 0 to 0
+                                        resetToStartSignal += 1
+                                    },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                     modifier = Modifier
                                         .focusProperties {
@@ -381,55 +387,57 @@ fun MediaDetailScreen(
                                 modifier = Modifier.padding(vertical = 12.dp)
                             )
                         } else {
-                            val rowKey = "episodes_$index"
-                            val savedRowState = viewModel.rowScrollStates[rowKey] ?: (0 to 0)
-                            val rowState = rememberLazyListState(
-                                initialFirstVisibleItemIndex = savedRowState.first,
-                                initialFirstVisibleItemScrollOffset = savedRowState.second
-                            )
-                            
-                            LaunchedEffect(rowState, rowKey) {
-                                snapshotFlow { 
-                                    rowState.firstVisibleItemIndex to rowState.firstVisibleItemScrollOffset 
-                                }.collect { (index, offset) ->
-                                    viewModel.rowScrollStates[rowKey] = index to offset
-                                }
-                            }
-                            
-                            LazyRow(
-                                state = rowState,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                contentPadding = PaddingValues(horizontal = 4.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(240.dp)
-                            ) {
-                                itemsIndexed(
-                                    items = episodesToShow,
-                                    key = { _, ep -> ep.id }
-                                ) { itemIndex, ep ->
-                                    val focusRequester = remember { FocusRequester() }
-                                    val isTarget = shouldRestoreFocus && (viewModel.lastFocusedId == ep.id.toString())
-
-                                    LaunchedEffect(shouldRestoreFocus, episodesToShow.size, viewModel.lastFocusedId) {
-                                        if (isTarget) {
-                                            kotlinx.coroutines.delay(50)
-                                            focusRequester.requestFocus()
-                                        }
+                            val rowResetKey = if (section.isMain) resetToStartSignal else 0
+                            key(rowKey, rowResetKey) {
+                                val savedRowState = viewModel.rowScrollStates[rowKey] ?: (0 to 0)
+                                val rowState = rememberLazyListState(
+                                    initialFirstVisibleItemIndex = savedRowState.first,
+                                    initialFirstVisibleItemScrollOffset = savedRowState.second
+                                )
+                                
+                                LaunchedEffect(rowState, rowKey) {
+                                    snapshotFlow { 
+                                        rowState.firstVisibleItemIndex to rowState.firstVisibleItemScrollOffset 
+                                    }.collect { (index, offset) ->
+                                        viewModel.rowScrollStates[rowKey] = index to offset
                                     }
-
-                                    EpisodeCard(
-                                        episode = ep,
-                                        onClick = { handlePlay(ep) },
-                                        modifier = Modifier.width(240.dp),
-                                        focusRequester = focusRequester,
-                                        onFocus = {
-                                            viewModel.lastFocusedId = ep.id.toString()
-                                            if (viewModel.shouldRestoreFocus && viewModel.lastFocusedId == ep.id.toString()) {
-                                                viewModel.shouldRestoreFocus = false
+                                }
+                                
+                                LazyRow(
+                                    state = rowState,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(240.dp)
+                                ) {
+                                    itemsIndexed(
+                                        items = episodesToShow,
+                                        key = { _, ep -> ep.id }
+                                    ) { itemIndex, ep ->
+                                        val focusRequester = remember { FocusRequester() }
+                                        val isTarget = shouldRestoreFocus && (viewModel.lastFocusedId == ep.id.toString())
+    
+                                        LaunchedEffect(shouldRestoreFocus, episodesToShow.size, viewModel.lastFocusedId) {
+                                            if (isTarget) {
+                                                kotlinx.coroutines.delay(50)
+                                                focusRequester.requestFocus()
                                             }
                                         }
-                                    )
+    
+                                        EpisodeCard(
+                                            episode = ep,
+                                            onClick = { handlePlay(ep) },
+                                            modifier = Modifier.width(240.dp),
+                                            focusRequester = focusRequester,
+                                            onFocus = {
+                                                viewModel.lastFocusedId = ep.id.toString()
+                                                if (viewModel.shouldRestoreFocus && viewModel.lastFocusedId == ep.id.toString()) {
+                                                    viewModel.shouldRestoreFocus = false
+                                                }
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
