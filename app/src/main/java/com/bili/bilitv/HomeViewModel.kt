@@ -243,11 +243,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
     var isCinemaTabLoading by mutableStateOf(false)
     var cinemaTabError by mutableStateOf<String?>(null)
 
-    // Store state per tab
+    sealed class BangumiSubComponent {
+        object DateTabBar : BangumiSubComponent()
+        object EpisodeList : BangumiSubComponent()
+    }
+
+    // Store state for different components
     // Pair(index, offset)
-    private val _tabScrollStates = mutableStateMapOf<TabType, Pair<Int, Int>>()
+    private val _scrollStates = mutableStateMapOf<Any, Pair<Int, Int>>()
     // Focused index
-    private val _tabFocusStates = mutableStateMapOf<TabType, Int>()
+    private val _focusStates = mutableStateMapOf<Any, Int>()
 
     // Flag to control focus restoration logic
     // When switching tabs explicitly, we want focus to stay on the tab bar (false)
@@ -844,31 +849,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
 
     // VideoGridStateManager 接口实现
     override fun updateScrollState(key: Any, index: Int, offset: Int) {
-        if (key is TabType) {
-            _tabScrollStates[key] = index to offset
-        }
+        _scrollStates[key] = index to offset
     }
 
     override fun updateFocusedIndex(key: Any, index: Int) {
-        if (key is TabType) {
-            _tabFocusStates[key] = index
-        }
+        _focusStates[key] = index
     }
     
     override fun getScrollState(key: Any): Pair<Int, Int> {
-        return if (key is TabType) {
-            _tabScrollStates[key] ?: (0 to 0)
-        } else {
-            (0 to 0)
-        }
+        return _scrollStates[key] ?: (0 to 0)
     }
     
     override fun getFocusedIndex(key: Any): Int {
-        return if (key is TabType) {
-            _tabFocusStates[key] ?: -1
-        } else {
-            -1
-        }
+        return _focusStates[key] ?: -1
     }
     
     fun onTabChanged(newTab: TabType) {
@@ -908,8 +901,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                                 _recommendVideos.addAll(newVideos)
                                 recommendFreshIdx = 2
                                 recommendHasMore = newVideos.size >= 30
-                                _tabScrollStates[targetTab] = 0 to 0
-                                _tabFocusStates[targetTab] = 0
+                                updateScrollState(targetTab, 0, 0)
+                                updateFocusedIndex(targetTab, 0)
                                 refreshSignal++
                             }
                         }
@@ -924,8 +917,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                                 _hotVideos.addAll(newVideos)
                                 hotPage = 2
                                 hotHasMore = newVideos.size >= 20
-                                _tabScrollStates[targetTab] = 0 to 0
-                                _tabFocusStates[targetTab] = 0
+                                updateScrollState(targetTab, 0, 0)
+                                updateFocusedIndex(targetTab, 0)
                                 refreshSignal++
                             }
                         }
@@ -935,16 +928,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
                         bangumiTabModules.clear()
                         bangumiTabError = null
                         loadBangumiTab()
-                        _tabScrollStates[targetTab] = 0 to 0
-                        _tabFocusStates[targetTab] = 0
+                        updateScrollState(TabType.BANGUMI, 0, 0) // Main grid scroll
+                        updateFocusedIndex(TabType.BANGUMI, 0) // Main grid focus
+                        updateScrollState(BangumiSubComponent.DateTabBar, 0, 0) // Date tab bar scroll
+                        updateFocusedIndex(BangumiSubComponent.DateTabBar, 0) // Date tab bar focus
+                        updateScrollState(BangumiSubComponent.EpisodeList, 0, 0) // Episode list scroll
+                        updateFocusedIndex(BangumiSubComponent.EpisodeList, 0) // Episode list focus
                         refreshSignal++
                     }
                     TabType.CINEMA -> {
                         cinemaTabModules.clear()
                         cinemaTabError = null
                         loadCinemaTab()
-                        _tabScrollStates[targetTab] = 0 to 0
-                        _tabFocusStates[targetTab] = 0
+                        updateScrollState(targetTab, 0, 0)
+                        updateFocusedIndex(targetTab, 0)
                         refreshSignal++
                     }
                 }
@@ -958,4 +955,5 @@ class HomeViewModel(application: Application) : AndroidViewModel(application), V
             }
         }
     }
+
 }

@@ -20,6 +20,9 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowForward
@@ -443,8 +446,11 @@ private fun BangumiTabContent(
     LaunchedEffect(modules.size) {
         Log.d("BiliTV_Focus", "BangumiTab: Modules loaded size=${modules.size} initialIndex=$initialIndex")
         if (modules.isNotEmpty() && initialIndex > 0) {
-             Log.d("BiliTV_Focus", "BangumiTab: Restoring scroll to $initialIndex")
-             gridState.scrollToItem(initialIndex, initialOffset)
+            val isVisible = gridState.layoutInfo.visibleItemsInfo.any { it.index == initialIndex }
+            if (!isVisible) {
+                Log.d("BiliTV_Focus", "BangumiTab: Restoring scroll to $initialIndex")
+                gridState.scrollToItem(initialIndex, initialOffset)
+            }
         }
     }
 
@@ -459,6 +465,7 @@ private fun BangumiTabContent(
         item(span = { GridItemSpan(maxLineSpan) }) {
             BangumiTimelineSection(
                 viewModel = viewModel,
+                onMediaClick = onMediaClick,
                 modifier = Modifier.padding(top = 8.dp)
             )
         }
@@ -643,8 +650,11 @@ private fun CinemaTabContent(
     LaunchedEffect(modules.size) {
         Log.d("BiliTV_Focus", "CinemaTab: Modules loaded size=${modules.size} initialIndex=$initialIndex")
         if (modules.isNotEmpty() && initialIndex > 0) {
-             Log.d("BiliTV_Focus", "CinemaTab: Restoring scroll to $initialIndex")
-             gridState.scrollToItem(initialIndex, initialOffset)
+            val isVisible = gridState.layoutInfo.visibleItemsInfo.any { it.index == initialIndex }
+            if (!isVisible) {
+                Log.d("BiliTV_Focus", "CinemaTab: Restoring scroll to $initialIndex")
+                gridState.scrollToItem(initialIndex, initialOffset)
+            }
         }
     }
 
@@ -790,13 +800,70 @@ private fun CinemaTabContent(
 @Composable
 private fun BangumiTimelineSection(
     viewModel: HomeViewModel,
+    onMediaClick: (Video) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val coroutineScope = rememberCoroutineScope()
     val days = viewModel.timelineDays
     val selectedIndex = viewModel.timelineSelectedIndex.coerceIn(0, (days.size - 1).coerceAtLeast(0))
     val currentDay = days.getOrNull(selectedIndex)
     val isLoading = viewModel.isTimelineLoading
     val error = viewModel.timelineError
+
+    // DateTabBarForTV states
+    val (dateTabIndex, dateTabOffset) = remember(viewModel.shouldRestoreFocusToGrid) {
+        viewModel.getScrollState(HomeViewModel.BangumiSubComponent.DateTabBar)
+    }
+    val dateTabLazyListState = rememberLazyListState(
+        initialFirstVisibleItemIndex = dateTabIndex,
+        initialFirstVisibleItemScrollOffset = dateTabOffset
+    )
+    val dateTabInitialFocusedIndex = remember(viewModel.shouldRestoreFocusToGrid) {
+        viewModel.getFocusedIndex(HomeViewModel.BangumiSubComponent.DateTabBar)
+    }
+
+    // EpisodeList LazyRow states
+    val (episodeListIndex, episodeListOffset) = remember(viewModel.shouldRestoreFocusToGrid, selectedIndex) { // selectedIndex as key to reset scroll when day changes
+        viewModel.getScrollState(HomeViewModel.BangumiSubComponent.EpisodeList)
+    }
+    val episodeListLazyListState = rememberLazyListState(
+        initialFirstVisibleItemIndex = episodeListIndex,
+        initialFirstVisibleItemScrollOffset = episodeListOffset
+    )
+    val episodeListInitialFocusedIndex = remember(viewModel.shouldRestoreFocusToGrid, selectedIndex) { // selectedIndex as key to reset focus when day changes
+        viewModel.getFocusedIndex(HomeViewModel.BangumiSubComponent.EpisodeList)
+    }
+
+    // Observe and update scroll states for DateTabBar
+    LaunchedEffect(dateTabLazyListState) {
+        snapshotFlow { dateTabLazyListState.firstVisibleItemIndex to dateTabLazyListState.firstVisibleItemScrollOffset }
+            .collect { (idx, offset) ->
+                viewModel.updateScrollState(HomeViewModel.BangumiSubComponent.DateTabBar, idx, offset)
+            }
+    }
+
+    // Observe and update scroll states for EpisodeList
+    LaunchedEffect(episodeListLazyListState) {
+        snapshotFlow { episodeListLazyListState.firstVisibleItemIndex to episodeListLazyListState.firstVisibleItemScrollOffset }
+            .collect { (idx, offset) ->
+                viewModel.updateScrollState(HomeViewModel.BangumiSubComponent.EpisodeList, idx, offset)
+            }
+    }
+    
+    // Reset scroll and focus when refresh signal or tab changes
+    LaunchedEffect(viewModel.refreshSignal, selectedIndex) {
+        if (viewModel.refreshSignal > 0) { // Only reset on refresh signal
+            // Reset DateTabBar scroll and focus
+            dateTabLazyListState.scrollToItem(0)
+            viewModel.updateScrollState(HomeViewModel.BangumiSubComponent.DateTabBar, 0, 0)
+            viewModel.updateFocusedIndex(HomeViewModel.BangumiSubComponent.DateTabBar, 0)
+
+            // Reset EpisodeList scroll and focus for current day
+            episodeListLazyListState.scrollToItem(0)
+            viewModel.updateScrollState(HomeViewModel.BangumiSubComponent.EpisodeList, 0, 0)
+            viewModel.updateFocusedIndex(HomeViewModel.BangumiSubComponent.EpisodeList, 0)
+        }
+    }
 
     Column(
         modifier = modifier
@@ -808,15 +875,20 @@ private fun BangumiTimelineSection(
             val displayDays = remember(days) {
                 days.take(8)
             }
-            val displayIndex = remember(selectedIndex) { 
+            val displayIndex = remember(selectedIndex) {
                 selectedIndex.coerceIn(0, (displayDays.size - 1).coerceAtLeast(0))
             }
-            
+
             DateTabBarForTV(
                 selectedIndex = displayIndex,
                 onTabSelected = { newIndex ->
                     viewModel.timelineSelectedIndex = newIndex
-                }
+                    // Also update focused index for DateTabBar
+                    viewModel.updateFocusedIndex(HomeViewModel.BangumiSubComponent.DateTabBar, newIndex)
+                },
+                lazyListState = dateTabLazyListState,
+                focusedIndex = dateTabInitialFocusedIndex,
+                shouldRestoreFocus = viewModel.shouldRestoreFocusToGrid
             )
         }
 
@@ -872,14 +944,41 @@ private fun BangumiTimelineSection(
                 }
                 val episodes = currentDay.episodes
                 LazyRow(
+                    state = episodeListLazyListState,
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(start = 0.dp, top = 4.dp, end = 0.dp, bottom = 4.dp)
                 ) {
-                    items(episodes) { episode ->
+                    itemsIndexed(episodes) { index, episode ->
+                        val focusRequester = remember { FocusRequester() }
+
+                        LaunchedEffect(viewModel.shouldRestoreFocusToGrid, episodes.size) {
+                            if (viewModel.shouldRestoreFocusToGrid && episodeListInitialFocusedIndex == index) {
+                                coroutineScope.launch {
+                                    val isVisible = episodeListLazyListState.layoutInfo.visibleItemsInfo.any { it.index == index }
+                                    if (!isVisible) {
+                                        episodeListLazyListState.animateScrollToItem(index)
+                                    }
+                                    delay(50) // give time for scroll to settle
+                                    focusRequester.requestFocus()
+                                }
+                            }
+                        }
+
                         VerticalMediaCard(
                             video = episode.toVideoCard(),
-                            onClick = { /* TODO: 番剧详情 */ },
+                            onClick = {
+                                viewModel.shouldRestoreFocusToGrid = true
+                                viewModel.updateFocusedIndex(HomeViewModel.BangumiSubComponent.EpisodeList, index)
+                                onMediaClick(episode.toVideoCard())
+                            },
+                            modifier = Modifier
+                                .focusRequester(focusRequester)
+                                .onFocusChanged {
+                                    if (it.isFocused) {
+                                        viewModel.updateFocusedIndex(HomeViewModel.BangumiSubComponent.EpisodeList, index)
+                                    }
+                                },
                             bottomContent = {
                                 Column(
                                     verticalArrangement = Arrangement.spacedBy(4.dp)

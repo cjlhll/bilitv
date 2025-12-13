@@ -12,6 +12,12 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.lazy.LazyListState
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 /**
  * 通用选项卡项数据类
@@ -138,8 +144,12 @@ fun DateTabBarForTV(
     selectedIndex: Int,
     onTabSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    title: String = "新番更新表"
+    title: String = "新番更新表",
+    lazyListState: LazyListState = rememberLazyListState(),
+    focusedIndex: Int = -1,
+    shouldRestoreFocus: Boolean = false
 ) {
+    val coroutineScope = rememberCoroutineScope()
     // 生成8个日期选项：最近更新 + 周一到周日
     val tabItems = remember {
         (listOf("最近更新") + listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日"))
@@ -164,6 +174,7 @@ fun DateTabBarForTV(
             modifier = Modifier.wrapContentWidth()
         ) {
             LazyRow(
+                state = lazyListState,
                 modifier = Modifier.wrapContentWidth(),
                 horizontalArrangement = Arrangement.spacedBy(0.dp),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
@@ -173,6 +184,22 @@ fun DateTabBarForTV(
                     val isFirst = index == 0
                     val isLast = index == tabItems.size - 1
                     
+                    val focusRequester = remember { FocusRequester() }
+                    
+                    LaunchedEffect(shouldRestoreFocus, tabItems.size) {
+                        if (shouldRestoreFocus && focusedIndex == index) {
+                            coroutineScope.launch {
+                                // Check if the item is already visible
+                                val isVisible = lazyListState.layoutInfo.visibleItemsInfo.any { it.index == index }
+                                if (!isVisible) {
+                                    lazyListState.animateScrollToItem(index)
+                                }
+                                delay(50) // give time for scroll to settle
+                                focusRequester.requestFocus()
+                            }
+                        }
+                    }
+
                     Card(
                         onClick = { onTabSelected(index) },
                         colors = CardDefaults.cardColors(
@@ -183,7 +210,14 @@ fun DateTabBarForTV(
                         ),
                         modifier = Modifier
                             .wrapContentWidth()
-                            .height(28.dp),
+                            .height(28.dp)
+                            .focusRequester(focusRequester)
+                            .onFocusChanged {
+                                if (it.isFocused && shouldRestoreFocus && focusedIndex == index) {
+                                    // Once focus is restored, reset the flag in the parent viewModel
+                                    // (This part will be handled in HomeScreen/HomeViewModel)
+                                }
+                            },
                         shape = RoundedCornerShape(14.dp),
                         elevation = if (isSelected) CardDefaults.cardElevation(defaultElevation = 2.dp) else CardDefaults.cardElevation(defaultElevation = 0.dp)
                     ) {
