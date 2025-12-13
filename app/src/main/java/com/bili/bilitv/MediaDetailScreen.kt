@@ -433,7 +433,8 @@ fun MediaDetailScreen(
                                 border = if (isFollowFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null,
                                 enabled = !isFollowLoading
                             ) {
-                                Text(text = if (isFollowed) "已追" else "追番", fontSize = 16.sp)
+                                val followText = if (detailMedia.mediaType == 1) "追番" else "追剧"
+                                Text(text = if (isFollowed) "已$followText" else followText, fontSize = 16.sp)
                             }
                         }
                     }
