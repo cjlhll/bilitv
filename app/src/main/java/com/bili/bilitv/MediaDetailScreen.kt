@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -73,6 +74,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 
 @Composable
 fun MediaDetailScreen(
@@ -89,14 +91,20 @@ fun MediaDetailScreen(
     val context = LocalContext.current
     
     // Initial data load
-    LaunchedEffect(media) {
+    LaunchedEffect(mediaKey) {
         viewModel.loadMedia(media)
     }
 
+    val isStateReady = viewModel.currentMediaId == mediaKey
+    if (!isStateReady) {
+        Box(modifier = Modifier.fillMaxSize())
+    } else {
     // Scroll state persistence
     val scrollState = rememberScrollState(initial = viewModel.scrollPosition)
-    LaunchedEffect(scrollState.value) {
-        viewModel.scrollPosition = scrollState.value
+    LaunchedEffect(scrollState) {
+        snapshotFlow { scrollState.value }.collect { pos ->
+            viewModel.scrollPosition = pos
+        }
     }
 
     val detailMedia = viewModel.detailMedia ?: media
@@ -340,7 +348,11 @@ fun MediaDetailScreen(
                                 TextButton(
                                     onClick = { isAscending = !isAscending },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                    modifier = Modifier.onFocusChanged { isSortFocused = it.isFocused },
+                                    modifier = Modifier
+                                        .focusProperties {
+                                            canFocus = !(shouldRestoreFocus && viewModel.lastFocusedId != null)
+                                        }
+                                        .onFocusChanged { isSortFocused = it.isFocused },
                                     border = if (isSortFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null
                                 ) {
                                     Icon(
@@ -370,12 +382,10 @@ fun MediaDetailScreen(
                             )
                         } else {
                             val rowKey = "episodes_$index"
-                            val (initialIndex, initialOffset) = remember(rowKey) {
-                                viewModel.rowScrollStates[rowKey] ?: (0 to 0)
-                            }
+                            val savedRowState = viewModel.rowScrollStates[rowKey] ?: (0 to 0)
                             val rowState = rememberLazyListState(
-                                initialFirstVisibleItemIndex = initialIndex,
-                                initialFirstVisibleItemScrollOffset = initialOffset
+                                initialFirstVisibleItemIndex = savedRowState.first,
+                                initialFirstVisibleItemScrollOffset = savedRowState.second
                             )
                             
                             LaunchedEffect(rowState, rowKey) {
@@ -394,14 +404,31 @@ fun MediaDetailScreen(
                                     .fillMaxWidth()
                                     .height(240.dp)
                             ) {
-                                items(episodesToShow) { ep ->
+                                itemsIndexed(
+                                    items = episodesToShow,
+                                    key = { _, ep -> ep.id }
+                                ) { itemIndex, ep ->
+                                    val focusRequester = remember { FocusRequester() }
+                                    val isTarget = shouldRestoreFocus && (viewModel.lastFocusedId == ep.id.toString())
+
+                                    LaunchedEffect(shouldRestoreFocus, episodesToShow.size, viewModel.lastFocusedId) {
+                                        if (isTarget) {
+                                            kotlinx.coroutines.delay(50)
+                                            focusRequester.requestFocus()
+                                        }
+                                    }
+
                                     EpisodeCard(
                                         episode = ep,
                                         onClick = { handlePlay(ep) },
                                         modifier = Modifier.width(240.dp),
-                                        onFocus = { viewModel.lastFocusedId = ep.id.toString() },
-                                        requestInitialFocus = shouldRestoreFocus && (viewModel.lastFocusedId == ep.id.toString()),
-                                        onInitialFocusRequested = { viewModel.shouldRestoreFocus = false }
+                                        focusRequester = focusRequester,
+                                        onFocus = {
+                                            viewModel.lastFocusedId = ep.id.toString()
+                                            if (viewModel.shouldRestoreFocus && viewModel.lastFocusedId == ep.id.toString()) {
+                                                viewModel.shouldRestoreFocus = false
+                                            }
+                                        }
                                     )
                                 }
                             }
@@ -431,12 +458,10 @@ fun MediaDetailScreen(
                             )
                         } else {
                             val rowKey = "seasons_$index"
-                            val (initialIndex, initialOffset) = remember(rowKey) {
-                                viewModel.rowScrollStates[rowKey] ?: (0 to 0)
-                            }
+                            val savedRowState = viewModel.rowScrollStates[rowKey] ?: (0 to 0)
                             val rowState = rememberLazyListState(
-                                initialFirstVisibleItemIndex = initialIndex,
-                                initialFirstVisibleItemScrollOffset = initialOffset
+                                initialFirstVisibleItemIndex = savedRowState.first,
+                                initialFirstVisibleItemScrollOffset = savedRowState.second
                             )
                             
                             LaunchedEffect(rowState, rowKey) {
@@ -453,15 +478,17 @@ fun MediaDetailScreen(
                                 contentPadding = PaddingValues(horizontal = 4.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                items(section.seasons) { season ->
+                                itemsIndexed(
+                                    items = section.seasons,
+                                    key = { _, season -> season.seasonId }
+                                ) { itemIndex, season ->
                                     val focusRequester = remember { FocusRequester() }
                                     val isTarget = shouldRestoreFocus && (viewModel.lastFocusedId == season.seasonId.toString())
-                                    
-                                    LaunchedEffect(isTarget) {
+
+                                    LaunchedEffect(shouldRestoreFocus, section.seasons.size, viewModel.lastFocusedId) {
                                         if (isTarget) {
-                                            kotlinx.coroutines.delay(100)
+                                            kotlinx.coroutines.delay(50)
                                             focusRequester.requestFocus()
-                                            viewModel.shouldRestoreFocus = false
                                         }
                                     }
 
@@ -475,7 +502,12 @@ fun MediaDetailScreen(
                                             .width(156.dp)
                                             .focusRequester(focusRequester)
                                             .onFocusChanged {
-                                                if (it.isFocused) viewModel.lastFocusedId = season.seasonId.toString()
+                                                if (it.isFocused) {
+                                                    viewModel.lastFocusedId = season.seasonId.toString()
+                                                    if (viewModel.shouldRestoreFocus && viewModel.lastFocusedId == season.seasonId.toString()) {
+                                                        viewModel.shouldRestoreFocus = false
+                                                    }
+                                                }
                                             }
                                     )
                                 }
@@ -506,6 +538,7 @@ fun MediaDetailScreen(
                 }
             }
         }
+    }
     }
     } // key(mediaKey)
 }
@@ -688,20 +721,11 @@ private fun EpisodeCard(
     episode: MediaEpisode,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
     onFocus: () -> Unit = {},
-    requestInitialFocus: Boolean = false,
-    onInitialFocusRequested: () -> Unit = {}
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
-
-    if (requestInitialFocus) {
-        LaunchedEffect(Unit) {
-            kotlinx.coroutines.delay(100)
-            focusRequester.requestFocus()
-            onInitialFocusRequested()
-        }
-    }
+    val internalFocusRequester = focusRequester ?: remember { FocusRequester() }
 
     Surface(
         shape = RoundedCornerShape(10.dp),
@@ -709,7 +733,7 @@ private fun EpisodeCard(
         modifier = modifier
             .fillMaxWidth()
             .wrapContentHeight()
-            .focusRequester(focusRequester)
+            .focusRequester(internalFocusRequester)
             .onFocusChanged { 
                 isFocused = it.isFocused 
                 if (it.isFocused) onFocus()
