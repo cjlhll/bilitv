@@ -499,6 +499,7 @@ private fun BangumiTabContent(
                 if (module.items.isEmpty()) return@forEachIndexed
                 
                 if (module.title.isNotBlank()) {
+                    val isClickableHeader = !module.title.contains("猜你喜欢")
                     item(span = { GridItemSpan(maxLineSpan) }) {
                             val headerIndex = moduleIndex * 10000 + 9999
                             val focusRequester = remember { FocusRequester() }
@@ -521,6 +522,7 @@ private fun BangumiTabContent(
                                         else -> onHeaderClick()
                                     }
                                 },
+                                isFocusable = isClickableHeader,
                                 modifier = Modifier
                                     .focusRequester(focusRequester)
                                     .onFocusChanged {
