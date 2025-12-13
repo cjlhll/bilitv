@@ -94,7 +94,7 @@ class PgcListViewModel : ViewModel() {
     var seasonType by mutableStateOf(1)
         private set
 
-    var indexType by mutableStateOf(102) // 默认全部：102
+    var indexType by mutableStateOf(1) // 默认番剧：1
         private set
 
     var filters by mutableStateOf<List<PgcFilterItem>>(emptyList())
@@ -127,9 +127,24 @@ class PgcListViewModel : ViewModel() {
     private var isInitialized = false
 
     fun initWithSeasonType(seasonType: Int, indexType: Int) {
-        if (isInitialized && this.seasonType == seasonType && this.indexType == indexType) return
+        // 如果没有提供indexType，根据seasonType自动推断
+        val actualIndexType = if (indexType == 102) {
+            when (seasonType) {
+                1 -> 1   // 番剧
+                2 -> 2   // 电影
+                3 -> 5   // 电视剧
+                4 -> 3   // 纪录片
+                5 -> 7   // 综艺
+                7 -> 4   // 国创
+                else -> 102 // 全部
+            }
+        } else {
+            indexType
+        }
+        
+        if (isInitialized && this.seasonType == seasonType && this.indexType == actualIndexType) return
         this.seasonType = seasonType
-        this.indexType = indexType
+        this.indexType = actualIndexType
         isInitialized = true
         loadCondition()
     }

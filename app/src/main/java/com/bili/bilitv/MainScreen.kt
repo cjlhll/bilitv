@@ -628,7 +628,7 @@ fun MainScreen() {
                             navigateTo(NavRoute.PGC_LIST)
                         },
                         onNavigateToGuochuangList = {
-                            pgcListConfig = PgcListConfig(4)
+                            pgcListConfig = PgcListConfig(7)
                             navigateTo(NavRoute.PGC_LIST)
                         },
                         onNavigateToCinemaList = { moduleTitle ->

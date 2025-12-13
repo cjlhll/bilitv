@@ -35,11 +35,12 @@ fun PgcListScreen(
 ) {
     // 建立season_type到index_type的映射关系
     val seasonTypeToIndexType = mapOf(
-        1 to 102, // 全部
+        1 to 1,   // 番剧
         2 to 2,   // 电影
         3 to 5,   // 电视剧
         4 to 3,   // 纪录片
-        5 to 7    // 综艺
+        5 to 7,   // 综艺
+        7 to 4    // 国创
     )
     
     var currentSeasonType by remember(initialSeasonType) { mutableStateOf(initialSeasonType) }
