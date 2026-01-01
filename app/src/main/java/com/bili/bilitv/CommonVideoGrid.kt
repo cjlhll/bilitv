@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.bili.bilitv.BuildConfig
+import com.bili.bilitv.utils.rememberRestorableLazyGridState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
@@ -113,38 +114,21 @@ fun <T> CommonVideoGrid(
     scrollToTopSignal: Int = 0,
     itemContent: @Composable (item: T, modifier: Modifier) -> Unit
 ) {
-    val (initialIndex, initialOffset) = remember(stateKey, scrollToTopSignal) { 
-        stateManager.getScrollState(stateKey) 
-    }
     val initialFocusIndex = remember(stateKey, scrollToTopSignal) { 
         stateManager.getFocusedIndex(stateKey) 
     }
     val shouldRestoreFocus = stateManager.shouldRestoreFocusToGrid
 
-    // Use provided state or create a new one
-    val listState = state ?: rememberLazyGridState(
-        initialFirstVisibleItemIndex = initialIndex,
-        initialFirstVisibleItemScrollOffset = initialOffset
+    // Use provided state or create a new one with persistence
+    // Note: If state is provided, we assume the caller handles persistence logic if needed, 
+    // OR we can rely on the fact that if this is called via Overload, the Overload provides a persisted state.
+    // If called directly with null state, the hook handles persistence.
+    val listState = state ?: rememberRestorableLazyGridState(
+        stateManager = stateManager,
+        key = stateKey,
+        refreshSignal = scrollToTopSignal,
+        dataSize = items.size
     )
-
-    // If state was provided, we might need to restore position manually if it wasn't initialized with our values
-    // But typically the caller should handle initialization if they provide state.
-    // To be safe, we can rely on the caller to initialize it correctly or just ignore for now as we are the only caller.
-    // Actually, rememberLazyGridState with initial values is the standard way.
-    // If we pass a state from outside, we should probably initialize it outside.
-    
-    // Let's keep it simple: The generic one uses the passed state OR creates one.
-    
-    // ... rest of the function uses listState ...
-
-
-    // 监听滚动位置并保存到 StateManager
-    LaunchedEffect(listState, stateKey) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .collect { (index, offset) ->
-                stateManager.updateScrollState(stateKey, index, offset)
-            }
-    }
 
     // 优化的提前加载触发逻辑 - 滚动到底部时加载下一页
     if (onLoadMore != null) {
@@ -247,10 +231,15 @@ fun <T> CommonVideoGrid(
         }
     }
 
-    LaunchedEffect(scrollToTopSignal) {
-        if (scrollToTopSignal > 0) {
-            listState.scrollToItem(0)
-            stateManager.updateScrollState(stateKey, 0, 0)
+    // Explicitly handle scrollToTopSignal only if state was passed in (hook handles it otherwise)
+    // AND check to avoid duplication if the passed state is also using the hook.
+    // Ideally, the caller handles it.
+    if (state != null) {
+        LaunchedEffect(scrollToTopSignal) {
+            if (scrollToTopSignal > 0) {
+                listState.scrollToItem(0)
+                stateManager.updateScrollState(stateKey, 0, 0)
+            }
         }
     }
 
@@ -323,13 +312,13 @@ fun CommonVideoGrid(
     }
 ) {
     val context = LocalContext.current
-    val (initialIndex, initialOffset) = remember(stateKey) { 
-        stateManager.getScrollState(stateKey) 
-    }
     
-    val listState = rememberLazyGridState(
-        initialFirstVisibleItemIndex = initialIndex,
-        initialFirstVisibleItemScrollOffset = initialOffset
+    // Create state with persistence
+    val listState = rememberRestorableLazyGridState(
+        stateManager = stateManager,
+        key = stateKey,
+        refreshSignal = scrollToTopSignal,
+        dataSize = videos.size
     )
     
     // Scroll-based Image Preloading

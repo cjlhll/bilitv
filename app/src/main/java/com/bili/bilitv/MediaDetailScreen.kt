@@ -77,6 +77,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusProperties
 import okhttp3.FormBody
 import java.net.URLEncoder
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.runtime.DisposableEffect
 
 suspend fun toggleFollow(
     seasonId: Long,
@@ -214,16 +218,27 @@ fun MediaDetailScreen(
     // Focus restoration - managed by ViewModel state
     val shouldRestoreFocus = viewModel.shouldRestoreFocus
 
-    // Restore button focus if no episode focus is set
-    LaunchedEffect(shouldRestoreFocus, viewModel.lastFocusedButton) {
-        if (shouldRestoreFocus && viewModel.lastFocusedId == null && viewModel.lastFocusedButton != null) {
-            kotlinx.coroutines.delay(100)
-            when (viewModel.lastFocusedButton) {
-                "play" -> playButtonRequester.requestFocus()
-                "follow" -> followButtonRequester.requestFocus()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
+
+    // Restore button focus if no episode focus is set - triggered by Lifecycle ON_RESUME
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (viewModel.shouldRestoreFocus && viewModel.lastFocusedId == null && viewModel.lastFocusedButton != null) {
+                    coroutineScope.launch {
+                        kotlinx.coroutines.delay(100)
+                        when (viewModel.lastFocusedButton) {
+                            "play" -> playButtonRequester.requestFocus()
+                            "follow" -> followButtonRequester.requestFocus()
+                        }
+                        viewModel.shouldRestoreFocus = false
+                    }
+                }
             }
-            viewModel.shouldRestoreFocus = false
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // Auto-focus on primary episode if no other focus recorded
@@ -234,7 +249,6 @@ fun MediaDetailScreen(
         onBack()
     }
     
-    val coroutineScope = rememberCoroutineScope()
     fun handlePlay(episode: MediaEpisode) {
         viewModel.shouldRestoreFocus = true
         coroutineScope.launch {
@@ -369,7 +383,10 @@ fun MediaDetailScreen(
                                     .focusRequester(playButtonRequester)
                                     .onFocusChanged {
                                         isPlayFocused = it.isFocused
-                                        if (it.isFocused) viewModel.lastFocusedButton = "play"
+                                        if (it.isFocused) {
+                                            viewModel.lastFocusedButton = "play"
+                                            viewModel.lastFocusedId = null
+                                        }
                                     },
                                 border = if (isPlayFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.onPrimary) else null
                             ) {
@@ -428,7 +445,10 @@ fun MediaDetailScreen(
                                     .focusRequester(followButtonRequester)
                                     .onFocusChanged {
                                         isFollowFocused = it.isFocused
-                                        if (it.isFocused) viewModel.lastFocusedButton = "follow"
+                                        if (it.isFocused) {
+                                            viewModel.lastFocusedButton = "follow"
+                                            viewModel.lastFocusedId = null
+                                        }
                                     },
                                 border = if (isFollowFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null,
                                 enabled = !isFollowLoading
@@ -470,7 +490,7 @@ fun MediaDetailScreen(
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                     modifier = Modifier
                                         .focusProperties {
-                                            canFocus = !(shouldRestoreFocus && viewModel.lastFocusedId != null)
+                                            canFocus = !shouldRestoreFocus
                                         }
                                         .onFocusChanged { isSortFocused = it.isFocused },
                                     border = if (isSortFocused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null

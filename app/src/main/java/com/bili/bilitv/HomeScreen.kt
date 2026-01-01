@@ -43,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.bili.bilitv.BuildConfig
 import com.bili.bilitv.RefreshingIndicator
+import com.bili.bilitv.utils.rememberRestorableLazyGridState
+import com.bili.bilitv.utils.rememberRestorableLazyListState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -405,54 +407,21 @@ private fun BangumiTabContent(
     val modules = viewModel.bangumiTabModules
     val isLoading = viewModel.isBangumiTabLoading
     val error = viewModel.bangumiTabError
-    val (initialIndex, initialOffset) = remember(viewModel.shouldRestoreFocusToGrid) { 
-        val state = viewModel.getScrollState(TabType.BANGUMI)
-        Log.d("BiliTV_Focus", "BangumiTab: getScrollState index=${state.first} offset=${state.second} restore=${viewModel.shouldRestoreFocusToGrid}")
-        state
-    }
+    
     val initialFocusIndex = remember(viewModel.shouldRestoreFocusToGrid) { 
         val idx = viewModel.getFocusedIndex(TabType.BANGUMI)
         Log.d("BiliTV_Focus", "BangumiTab: getFocusedIndex index=$idx restore=${viewModel.shouldRestoreFocusToGrid}")
         idx
     }
-    val gridState = rememberLazyGridState(
-        initialFirstVisibleItemIndex = initialIndex,
-        initialFirstVisibleItemScrollOffset = initialOffset
+    
+    val gridState = rememberRestorableLazyGridState(
+        stateManager = viewModel,
+        key = TabType.BANGUMI,
+        refreshSignal = viewModel.refreshSignal,
+        dataSize = modules.size
     )
+    
     val shouldRestoreFocus = viewModel.shouldRestoreFocusToGrid
-
-    // 记录是否是初次组合
-    var isFirstComposition by remember { mutableStateOf(true) }
-
-    LaunchedEffect(gridState) {
-        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
-            .collect { (idx, offset) ->
-                // Log.d("BiliTV_Focus", "BangumiTab: Scroll update $idx $offset")
-                viewModel.updateScrollState(TabType.BANGUMI, idx, offset)
-            }
-    }
-
-    LaunchedEffect(viewModel.refreshSignal) {
-        if (isFirstComposition) {
-            isFirstComposition = false
-            Log.d("BiliTV_Focus", "BangumiTab: Initial composition, skipping refresh reset")
-            return@LaunchedEffect
-        }
-        Log.d("BiliTV_Focus", "BangumiTab: Refresh signal received")
-        gridState.scrollToItem(0)
-        viewModel.updateScrollState(TabType.BANGUMI, 0, 0)
-    }
-
-    LaunchedEffect(modules.size) {
-        Log.d("BiliTV_Focus", "BangumiTab: Modules loaded size=${modules.size} initialIndex=$initialIndex")
-        if (modules.isNotEmpty() && initialIndex > 0) {
-            val isVisible = gridState.layoutInfo.visibleItemsInfo.any { it.index == initialIndex }
-            if (!isVisible) {
-                Log.d("BiliTV_Focus", "BangumiTab: Restoring scroll to $initialIndex")
-                gridState.scrollToItem(initialIndex, initialOffset)
-            }
-        }
-    }
 
     LazyVerticalGrid(
         state = gridState,
@@ -614,55 +583,22 @@ private fun CinemaTabContent(
     val modules = viewModel.cinemaTabModules
     val isLoading = viewModel.isCinemaTabLoading
     val error = viewModel.cinemaTabError
-    val (initialIndex, initialOffset) = remember(viewModel.shouldRestoreFocusToGrid) { 
-        val state = viewModel.getScrollState(TabType.CINEMA)
-        Log.d("BiliTV_Focus", "CinemaTab: getScrollState index=${state.first} offset=${state.second} restore=${viewModel.shouldRestoreFocusToGrid}")
-        state
-    }
+    
     // 使用带 key 的 remember，确保在需要恢复焦点时重新获取最新的焦点位置
     val initialFocusIndex = remember(viewModel.shouldRestoreFocusToGrid) { 
         val idx = viewModel.getFocusedIndex(TabType.CINEMA) 
         Log.d("BiliTV_Focus", "CinemaTab: getFocusedIndex index=$idx restore=${viewModel.shouldRestoreFocusToGrid}")
         idx
     }
-    val gridState = rememberLazyGridState(
-        initialFirstVisibleItemIndex = initialIndex,
-        initialFirstVisibleItemScrollOffset = initialOffset
+    
+    val gridState = rememberRestorableLazyGridState(
+        stateManager = viewModel,
+        key = TabType.CINEMA,
+        refreshSignal = viewModel.refreshSignal,
+        dataSize = modules.size
     )
+    
     val shouldRestoreFocus = viewModel.shouldRestoreFocusToGrid
-
-    // 记录是否是初次组合
-    var isFirstComposition by remember { mutableStateOf(true) }
-
-    LaunchedEffect(gridState) {
-        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
-            .collect { (idx, offset) ->
-                // Log.d("BiliTV_Focus", "CinemaTab: Scroll update $idx $offset")
-                viewModel.updateScrollState(TabType.CINEMA, idx, offset)
-            }
-    }
-
-    LaunchedEffect(viewModel.refreshSignal) {
-        if (isFirstComposition) {
-            isFirstComposition = false
-            Log.d("BiliTV_Focus", "CinemaTab: Initial composition, skipping refresh reset")
-            return@LaunchedEffect
-        }
-        Log.d("BiliTV_Focus", "CinemaTab: Refresh signal received")
-        gridState.scrollToItem(0)
-        viewModel.updateScrollState(TabType.CINEMA, 0, 0)
-    }
-
-    LaunchedEffect(modules.size) {
-        Log.d("BiliTV_Focus", "CinemaTab: Modules loaded size=${modules.size} initialIndex=$initialIndex")
-        if (modules.isNotEmpty() && initialIndex > 0) {
-            val isVisible = gridState.layoutInfo.visibleItemsInfo.any { it.index == initialIndex }
-            if (!isVisible) {
-                Log.d("BiliTV_Focus", "CinemaTab: Restoring scroll to $initialIndex")
-                gridState.scrollToItem(initialIndex, initialOffset)
-            }
-        }
-    }
 
     LazyVerticalGrid(
         state = gridState,
@@ -817,56 +753,34 @@ private fun BangumiTimelineSection(
     val error = viewModel.timelineError
 
     // DateTabBarForTV states
-    val (dateTabIndex, dateTabOffset) = remember(viewModel.shouldRestoreFocusToGrid) {
-        viewModel.getScrollState(HomeViewModel.BangumiSubComponent.DateTabBar)
-    }
-    val dateTabLazyListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = dateTabIndex,
-        initialFirstVisibleItemScrollOffset = dateTabOffset
-    )
     val dateTabInitialFocusedIndex = remember(viewModel.shouldRestoreFocusToGrid) {
         viewModel.getFocusedIndex(HomeViewModel.BangumiSubComponent.DateTabBar)
     }
+    
+    val dateTabLazyListState = rememberRestorableLazyListState(
+        stateManager = viewModel,
+        key = HomeViewModel.BangumiSubComponent.DateTabBar,
+        refreshSignal = viewModel.refreshSignal
+    )
 
     // EpisodeList LazyRow states
-    val (episodeListIndex, episodeListOffset) = remember(viewModel.shouldRestoreFocusToGrid, selectedIndex) { // selectedIndex as key to reset scroll when day changes
-        viewModel.getScrollState(HomeViewModel.BangumiSubComponent.EpisodeList)
-    }
-    val episodeListLazyListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = episodeListIndex,
-        initialFirstVisibleItemScrollOffset = episodeListOffset
-    )
     val episodeListInitialFocusedIndex = remember(viewModel.shouldRestoreFocusToGrid, selectedIndex) { // selectedIndex as key to reset focus when day changes
         viewModel.getFocusedIndex(HomeViewModel.BangumiSubComponent.EpisodeList)
     }
-
-    // Observe and update scroll states for DateTabBar
-    LaunchedEffect(dateTabLazyListState) {
-        snapshotFlow { dateTabLazyListState.firstVisibleItemIndex to dateTabLazyListState.firstVisibleItemScrollOffset }
-            .collect { (idx, offset) ->
-                viewModel.updateScrollState(HomeViewModel.BangumiSubComponent.DateTabBar, idx, offset)
-            }
-    }
-
-    // Observe and update scroll states for EpisodeList
-    LaunchedEffect(episodeListLazyListState) {
-        snapshotFlow { episodeListLazyListState.firstVisibleItemIndex to episodeListLazyListState.firstVisibleItemScrollOffset }
-            .collect { (idx, offset) ->
-                viewModel.updateScrollState(HomeViewModel.BangumiSubComponent.EpisodeList, idx, offset)
-            }
-    }
     
-    // Reset scroll and focus when refresh signal or tab changes
+    val episodeListLazyListState = rememberRestorableLazyListState(
+        stateManager = viewModel,
+        key = HomeViewModel.BangumiSubComponent.EpisodeList,
+        refreshSignal = viewModel.refreshSignal
+    )
+    
+    // We only need to reset focus here as scroll is handled by rememberRestorableLazyListState's refreshSignal
     LaunchedEffect(viewModel.refreshSignal, selectedIndex) {
         if (viewModel.refreshSignal > 0) { // Only reset on refresh signal
-            // Reset DateTabBar scroll and focus
-            dateTabLazyListState.scrollToItem(0)
-            viewModel.updateScrollState(HomeViewModel.BangumiSubComponent.DateTabBar, 0, 0)
+            // Reset DateTabBar focus
             viewModel.updateFocusedIndex(HomeViewModel.BangumiSubComponent.DateTabBar, 0)
 
-            // Reset EpisodeList scroll and focus for current day
-            episodeListLazyListState.scrollToItem(0)
-            viewModel.updateScrollState(HomeViewModel.BangumiSubComponent.EpisodeList, 0, 0)
+            // Reset EpisodeList focus
             viewModel.updateFocusedIndex(HomeViewModel.BangumiSubComponent.EpisodeList, 0)
         }
     }
