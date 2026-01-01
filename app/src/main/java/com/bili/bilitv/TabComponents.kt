@@ -252,6 +252,7 @@ fun DateTabBarForTV(
 fun <T : Enum<T>> T.getTitle(): String {
     return when (this) {
         is TabType -> this.title
+        is UserTabType -> this.title
         else -> this.name
     }
 }

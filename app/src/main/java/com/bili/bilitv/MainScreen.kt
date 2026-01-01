@@ -272,6 +272,7 @@ fun MainScreen() {
     val liveRoomListViewModel: LiveRoomListViewModel = viewModel()
     val searchViewModel: SearchViewModel = viewModel()
     val mediaDetailViewModel: MediaDetailViewModel = viewModel()
+    val historyViewModel: HistoryViewModel = viewModel()
 
     var loggedInSession by remember { mutableStateOf(SessionManager.getSession()) }
     var userInfo by remember { mutableStateOf<UserInfoData?>(null) }
@@ -655,12 +656,16 @@ fun MainScreen() {
                     NavRoute.USER -> UserLoginScreen(
                         loggedInSession = loggedInSession,
                         userInfo = userInfo,
+                        historyViewModel = historyViewModel,
                         onLoginSuccess = { session ->
                             loggedInSession = session
-                            // 登录成功后，userInfo 会通过 LaunchedEffect 自动获取
                         },
                         onLogout = {
                             showLogoutDialog = true
+                        },
+                        onVideoClick = { video ->
+                            selectedMedia = video
+                            currentRoute = NavRoute.MEDIA_DETAIL
                         }
                     )
                     NavRoute.DYNAMIC -> DynamicScreen(
@@ -752,13 +757,27 @@ fun MainScreen() {
     }
 }
 
+private fun formatDuration(seconds: Long): String {
+    val totalSeconds = seconds
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val secs = totalSeconds % 60
+    return if (hours > 0) {
+        String.format("%d:%02d:%02d", hours, minutes, secs)
+    } else {
+        String.format("%02d:%02d", minutes, secs)
+    }
+}
+
 @OptIn(ExperimentalSerializationApi::class)
 @Composable
 fun UserLoginScreen(
     loggedInSession: LoggedInSession?,
     userInfo: UserInfoData?,
+    historyViewModel: HistoryViewModel,
     onLoginSuccess: (LoggedInSession) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onVideoClick: (Video) -> Unit = {}
 ) {
     val context = LocalContext.current
     var qrCodeBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -1041,7 +1060,23 @@ fun UserLoginScreen(
                         // 中间分隔
                         Spacer(modifier = Modifier.height(8.dp)) // 减少间距
                         
-                        // 下方预留空间（用于后续添加历史观看信息）
+                        // Tabs组件
+                        var selectedUserTab by remember { mutableStateOf(UserTabType.HISTORY) }
+                        
+                        CommonTabRowWithEnum(
+                            tabs = UserTabType.entries.toTypedArray(),
+                            selectedTab = selectedUserTab,
+                            onTabSelected = { selectedUserTab = it }
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        LaunchedEffect(selectedUserTab) {
+                            if (selectedUserTab == UserTabType.HISTORY) {
+                                historyViewModel.loadHistory()
+                            }
+                        }
+                        
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1050,17 +1085,79 @@ fun UserLoginScreen(
                                 containerColor = Color.Transparent
                             )
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(16.dp), // 减少卡片内部padding
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "历史观看信息（待开发）",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            when (selectedUserTab) {
+                                UserTabType.HISTORY -> {
+                                    if (historyViewModel.historyItems.isEmpty()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (historyViewModel.isLoading) {
+                                                CircularProgressIndicator()
+                                            } else if (historyViewModel.error != null) {
+                                                Text(
+                                                    text = historyViewModel.error ?: "加载失败",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.error
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = "暂无历史记录",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        val videos = historyViewModel.historyItems.map { historyItem ->
+                                            Video(
+                                                id = "history_${historyItem.history.oid}_${historyItem.history.bvid}",
+                                                aid = historyItem.history.oid,
+                                                bvid = historyItem.history.bvid,
+                                                cid = historyItem.history.cid,
+                                                title = historyItem.title.ifEmpty { historyItem.long_title },
+                                                coverUrl = historyItem.cover.ifEmpty { historyItem.covers?.firstOrNull() ?: "" },
+                                                author = historyItem.author_name,
+                                                duration = formatDuration(historyItem.duration),
+                                                durationSeconds = historyItem.duration,
+                                                pubDate = historyItem.view_at
+                                            )
+                                        }
+                                        
+                                        CommonVideoGrid(
+                                            videos = videos,
+                                            stateManager = historyViewModel,
+                                            stateKey = "history",
+                                            columns = 4,
+                                            onVideoClick = { video ->
+                                                if (video.aid > 0) {
+                                                    onVideoClick(video)
+                                                }
+                                            },
+                                            onLoadMore = {
+                                                if (historyViewModel.hasMore && !historyViewModel.isLoading) {
+                                                    historyViewModel.loadHistory()
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                                UserTabType.WATCH_LATER -> {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "稍后观看（待开发）",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

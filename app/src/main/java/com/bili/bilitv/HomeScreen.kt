@@ -107,6 +107,11 @@ enum class TabType(val title: String) {
     CINEMA("影视")
 }
 
+enum class UserTabType(val title: String) {
+    HISTORY("历史记录"),
+    WATCH_LATER("稍后观看")
+}
+
 private fun dayLabel(day: TimelineDay): String {
     if (day.isToday) return "最近更新"
     val names = listOf("一", "二", "三", "四", "五", "六", "日")

@@ -195,3 +195,69 @@ data class BangumiItemStat(
     val danmaku: Long = 0,
     val follow_view: String? = null
 )
+
+@Serializable
+data class HistoryResponse(
+    val code: Int,
+    val message: String,
+    val ttl: Int,
+    val data: HistoryData? = null
+)
+
+@Serializable
+data class HistoryData(
+    val cursor: HistoryCursor,
+    val tab: List<HistoryTab>,
+    val list: List<HistoryItem> = emptyList()
+)
+
+@Serializable
+data class HistoryCursor(
+    val max: Long,
+    val view_at: Long,
+    val business: String? = null,
+    val ps: Int
+)
+
+@Serializable
+data class HistoryTab(
+    val type: String,
+    val name: String
+)
+
+@Serializable
+data class HistoryItem(
+    val title: String,
+    val long_title: String = "",
+    val cover: String = "",
+    val covers: List<String>? = null,
+    val uri: String = "",
+    val history: HistoryDetail,
+    val videos: Int = 0,
+    val author_name: String = "",
+    val author_face: String = "",
+    val author_mid: Long = 0,
+    val view_at: Long,
+    val progress: Long = 0,
+    val badge: String = "",
+    val show_title: String = "",
+    val duration: Long = 0,
+    val new_desc: String = "",
+    val is_finish: Int = 0,
+    val is_fav: Int = 0,
+    val kid: Long = 0,
+    val tag_name: String = "",
+    val live_status: Int = 0
+)
+
+@Serializable
+data class HistoryDetail(
+    val oid: Long,
+    val epid: Long = 0,
+    val bvid: String = "",
+    val page: Int = 0,
+    val cid: Long = 0,
+    val part: String = "",
+    val business: String,
+    val dt: Int = 0
+)
