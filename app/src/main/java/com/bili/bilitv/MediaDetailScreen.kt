@@ -358,7 +358,7 @@ fun MediaDetailScreen(
                             text = detailMedia.desc.ifBlank { detailMedia.staff },
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.9f),
-                            maxLines = 4,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
 

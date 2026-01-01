@@ -286,28 +286,24 @@ fun MainScreen() {
     }
 
     fun navigateBack() {
+        if (currentRoute == NavRoute.MEDIA_DETAIL && mediaDetailBackStack.isNotEmpty()) {
+            // 如果是媒体详情页，检查是否有上一级详情页需要返回
+            // 返回到上一级详情页
+            selectedMedia = mediaDetailBackStack.removeAt(mediaDetailBackStack.size - 1)
+            // 不改变当前路由，保持在MEDIA_DETAIL，且不修改navBackStack
+            return
+        }
+
         if (navBackStack.isNotEmpty()) {
             val prev = navBackStack.removeAt(navBackStack.size - 1)
             if (currentRoute == NavRoute.MEDIA_DETAIL) {
-                // 如果是媒体详情页，检查是否有上一级详情页需要返回
-                if (mediaDetailBackStack.isNotEmpty()) {
-                    // 返回到上一级详情页
-                    selectedMedia = mediaDetailBackStack.removeAt(mediaDetailBackStack.size - 1)
-                    // 不改变当前路由，保持在MEDIA_DETAIL
-                    return
-                } else {
-                    // 没有上一级详情页，完全退出详情页
-                    selectedMedia = null
-                    mediaDetailViewModel.clearAllStates()
-                }
+                // 没有上一级详情页，完全退出详情页
+                selectedMedia = null
+                mediaDetailViewModel.clearAllStates()
             }
             currentRoute = prev
         } else if (currentRoute != NavRoute.HOME) {
-            if (currentRoute == NavRoute.MEDIA_DETAIL && mediaDetailBackStack.isNotEmpty()) {
-                // 处理直接按返回键的情况
-                selectedMedia = mediaDetailBackStack.removeAt(mediaDetailBackStack.size - 1)
-                return
-            } else if (currentRoute == NavRoute.MEDIA_DETAIL) {
+            if (currentRoute == NavRoute.MEDIA_DETAIL) {
                 // 完全退出详情页
                 selectedMedia = null
                 mediaDetailViewModel.clearAllStates()
@@ -496,8 +492,12 @@ fun MainScreen() {
                     NavRoute.MEDIA_DETAIL -> {
                         val media = selectedMedia
                         if (media == null) {
-                            LaunchedEffect(Unit) {
-                                navigateBack()
+                            // Only trigger back navigation if we are supposed to be on MEDIA_DETAIL
+                            // This prevents double-back when Crossfade animates out (where media is null but currentRoute changed)
+                            if (currentRoute == NavRoute.MEDIA_DETAIL) {
+                                LaunchedEffect(Unit) {
+                                    navigateBack()
+                                }
                             }
                         } else {
                             MediaDetailScreen(
