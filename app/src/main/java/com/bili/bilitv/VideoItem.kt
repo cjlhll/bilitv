@@ -201,6 +201,37 @@ fun VideoItem(
                             contentScale = ContentScale.Crop
                         )
                         
+                        // Badge overlay (top-right)
+                        val badge = video.badges.firstOrNull()
+                        if (badge != null && badge.text.isNotBlank()) {
+                            val bgColor = parseColorSafe(badge.bgColor, MaterialTheme.colorScheme.primary)
+                            val textColor = parseColorSafe(badge.textColor, MaterialTheme.colorScheme.onPrimary)
+                            val borderColor = parseColorSafe(badge.borderColor, bgColor)
+                            
+                            Surface(
+                                color = bgColor,
+                                contentColor = textColor,
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, borderColor),
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(4.dp)
+                                    .height(22.dp)
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                ) {
+                                    Text(
+                                        text = badge.text,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                        
                         // 底部渐变和信息展示
                         Box(
                             modifier = Modifier

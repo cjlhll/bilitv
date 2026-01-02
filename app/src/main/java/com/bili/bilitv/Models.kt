@@ -261,3 +261,66 @@ data class HistoryDetail(
     val business: String,
     val dt: Int = 0
 )
+
+@Serializable
+data class ToviewResponse(
+    val code: Int,
+    val message: String,
+    val ttl: Int,
+    val data: ToviewData? = null
+)
+
+@Serializable
+data class ToviewData(
+    val list: List<ToviewItem> = emptyList()
+)
+
+@Serializable
+data class ToviewItem(
+    val aid: Long = 0,
+    val bvid: String = "",
+    val cid: Long = 0,
+    val pic: String = "",
+    val title: String = "",
+    val author: String = "",
+    val owner: OwnerInfo? = null,
+    val duration: Long = 0,
+    val progress: Long = 0,
+    val add_at: Long = 0,
+    val page: PageInfo? = null,
+    val videos: Int = 1,
+    val description: String = "",
+    val stat: VideoStat? = null,
+    val badge: String = "",
+    val tid: Int = 0,
+    val tname: String = "",
+    val pgc_label: String = ""
+)
+
+@Serializable
+data class PageInfo(
+    val cid: Long = 0,
+    val page: Int = 1,
+    val from: String = "",
+    val part: String = ""
+)
+
+@Serializable
+data class OwnerInfo(
+    val mid: Long = 0,
+    val name: String = "",
+    val face: String = ""
+)
+
+@Serializable
+data class VideoStat(
+    val view: Long = 0,
+    val danmaku: Long = 0,
+    val reply: Long = 0,
+    val favorite: Long = 0,
+    val coin: Long = 0,
+    val share: Long = 0,
+    val now_rank: Int = 0,
+    val his_rank: Int = 0,
+    val like: Long = 0
+)

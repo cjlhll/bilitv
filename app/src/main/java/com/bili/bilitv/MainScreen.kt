@@ -3,6 +3,9 @@ package com.bili.bilitv
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -273,6 +276,7 @@ fun MainScreen() {
     val searchViewModel: SearchViewModel = viewModel()
     val mediaDetailViewModel: MediaDetailViewModel = viewModel()
     val historyViewModel: HistoryViewModel = viewModel()
+    val watchLaterViewModel: WatchLaterViewModel = viewModel()
 
     var loggedInSession by remember { mutableStateOf(SessionManager.getSession()) }
     var userInfo by remember { mutableStateOf<UserInfoData?>(null) }
@@ -657,6 +661,7 @@ fun MainScreen() {
                         loggedInSession = loggedInSession,
                         userInfo = userInfo,
                         historyViewModel = historyViewModel,
+                        watchLaterViewModel = watchLaterViewModel,
                         onLoginSuccess = { session ->
                             loggedInSession = session
                         },
@@ -769,12 +774,20 @@ private fun formatDuration(seconds: Long): String {
     }
 }
 
+private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
+private fun formatUnixTimestamp(timestamp: Long): String {
+    val date = Date(timestamp * 1000L)
+    return dateFormat.format(date)
+}
+
 @OptIn(ExperimentalSerializationApi::class)
 @Composable
 fun UserLoginScreen(
     loggedInSession: LoggedInSession?,
     userInfo: UserInfoData?,
     historyViewModel: HistoryViewModel,
+    watchLaterViewModel: WatchLaterViewModel,
     onLoginSuccess: (LoggedInSession) -> Unit,
     onLogout: () -> Unit,
     onVideoClick: (Video) -> Unit = {}
@@ -1074,6 +1087,8 @@ fun UserLoginScreen(
                         LaunchedEffect(selectedUserTab) {
                             if (selectedUserTab == UserTabType.HISTORY) {
                                 historyViewModel.loadHistory()
+                            } else if (selectedUserTab == UserTabType.WATCH_LATER) {
+                                watchLaterViewModel.loadToview()
                             }
                         }
                         
@@ -1152,16 +1167,85 @@ fun UserLoginScreen(
                                     }
                                 }
                                 UserTabType.WATCH_LATER -> {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(16.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = "稍后观看（待开发）",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    if (watchLaterViewModel.toviewItems.isEmpty()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (watchLaterViewModel.isLoading) {
+                                                CircularProgressIndicator()
+                                            } else if (watchLaterViewModel.error != null) {
+                                                Text(
+                                                    text = watchLaterViewModel.error ?: "加载失败",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.error
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = "暂无稍后观看",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        val videos = watchLaterViewModel.toviewItems.map { toviewItem ->
+                                            val durationText = formatDuration(toviewItem.duration)
+                                            val authorName = if (toviewItem.badge.isNotEmpty()) {
+                                                toviewItem.badge
+                                            } else if (!toviewItem.owner?.name.isNullOrEmpty()) {
+                                                toviewItem.owner?.name ?: ""
+                                            } else {
+                                                toviewItem.author
+                                            }
+                                            val badges = if (toviewItem.pgc_label.isNotEmpty()) {
+                                                listOf(Badge(
+                                                    text = toviewItem.pgc_label,
+                                                    bgColor = "#FF00A1D9",
+                                                    textColor = "#FFFFFFFF"
+                                                ))
+                                            } else {
+                                                emptyList()
+                                            }
+                                            val playCount = toviewItem.stat?.view?.toString() ?: ""
+                                            val danmakuCount = toviewItem.stat?.danmaku?.toString() ?: ""
+                                            val displayAuthor = if (authorName.isNotEmpty()) {
+                                                buildString {
+                                                    append(authorName)
+                                                    append(" · ${formatUnixTimestamp(toviewItem.add_at)}")
+                                                }
+                                            } else {
+                                                ""
+                                            }
+                                            Video(
+                                                id = "toview_${toviewItem.aid}",
+                                                aid = toviewItem.aid,
+                                                bvid = toviewItem.bvid,
+                                                cid = toviewItem.cid,
+                                                title = toviewItem.title,
+                                                coverUrl = toviewItem.pic,
+                                                author = displayAuthor,
+                                                playCount = playCount,
+                                                danmakuCount = danmakuCount,
+                                                duration = durationText,
+                                                durationSeconds = toviewItem.duration,
+                                                pubDate = null,
+                                                badges = badges
+                                            )
+                                        }
+                                        
+                                        CommonVideoGrid(
+                                            videos = videos,
+                                            stateManager = watchLaterViewModel,
+                                            stateKey = UserTabType.WATCH_LATER,
+                                            columns = 4,
+                                            onVideoClick = { video ->
+                                                if (video.aid > 0) {
+                                                    onVideoClick(video)
+                                                }
+                                            }
                                         )
                                     }
                                 }
