@@ -76,6 +76,12 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                                 if (BuildConfig.DEBUG) {
                                     Log.d("HistoryViewModel", "Loaded ${data.list.size} history items")
                                 }
+                                data.list.forEach { item ->
+                                    Log.d("HistoryViewModel", "历史记录: 标题=${item.title}, 作者=${item.author_name}, bvid=${item.history.bvid}, 观看时间=${item.view_at}, 进度=${item.progress}, business=${item.history.business}, oid=${item.history.oid}, epid=${item.history.epid}")
+                                    if (item.author_name.isEmpty()) {
+                                        Log.d("HistoryViewModel", "完整数据: $item")
+                                    }
+                                }
                                 _historyItems.addAll(data.list)
                                 lastMax = data.cursor.max
                                 lastViewAt = data.cursor.view_at

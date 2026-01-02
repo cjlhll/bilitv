@@ -1112,6 +1112,13 @@ fun UserLoginScreen(
                                         }
                                     } else {
                                         val videos = historyViewModel.historyItems.map { historyItem ->
+                                            val durationText = if (historyItem.duration > 0) {
+                                                val progressTime = formatDuration(historyItem.progress)
+                                                val totalTime = formatDuration(historyItem.duration)
+                                                "$progressTime/$totalTime"
+                                            } else {
+                                                formatDuration(historyItem.duration)
+                                            }
                                             Video(
                                                 id = "history_${historyItem.history.oid}_${historyItem.history.bvid}",
                                                 aid = historyItem.history.oid,
@@ -1119,8 +1126,8 @@ fun UserLoginScreen(
                                                 cid = historyItem.history.cid,
                                                 title = historyItem.title.ifEmpty { historyItem.long_title },
                                                 coverUrl = historyItem.cover.ifEmpty { historyItem.covers?.firstOrNull() ?: "" },
-                                                author = historyItem.author_name,
-                                                duration = formatDuration(historyItem.duration),
+                                                author = if (historyItem.author_name.isNotEmpty()) historyItem.author_name else historyItem.badge,
+                                                duration = durationText,
                                                 durationSeconds = historyItem.duration,
                                                 pubDate = historyItem.view_at
                                             )
