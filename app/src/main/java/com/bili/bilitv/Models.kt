@@ -324,3 +324,227 @@ data class VideoStat(
     val his_rank: Int = 0,
     val like: Long = 0
 )
+
+@Serializable
+data class FavoriteFolderResponse(
+    val code: Int,
+    val message: String,
+    val ttl: Int,
+    val data: FavoriteFolderData? = null
+)
+
+@Serializable
+data class FavoriteFolderData(
+    val count: Int,
+    val list: List<FavoriteFolder>? = null
+)
+
+@Serializable
+data class FavoriteFolder(
+    val id: Long,
+    val fid: Long,
+    val mid: Long,
+    val attr: Int,
+    val title: String,
+    val fav_state: Int,
+    val media_count: Int
+)
+
+@Serializable
+data class FavoriteFolderInfoResponse(
+    val code: Int,
+    val message: String,
+    val ttl: Int,
+    val data: FavoriteFolderInfo? = null
+)
+
+@Serializable
+data class FavoriteFolderInfo(
+    val id: Long,
+    val fid: Long,
+    val mid: Long,
+    val attr: Int,
+    val title: String,
+    val cover: String,
+    val upper: FavoriteFolderUpper,
+    val cover_type: Int,
+    val cnt_info: FavoriteFolderCntInfo,
+    val type: Int,
+    val intro: String,
+    val ctime: Long,
+    val mtime: Long,
+    val state: Int,
+    val fav_state: Int,
+    val like_state: Int,
+    val media_count: Int
+)
+
+@Serializable
+data class FavoriteFolderUpper(
+    val mid: Long,
+    val name: String,
+    val face: String,
+    val followed: Boolean,
+    val vip_type: Int,
+    val vip_statue: Int
+)
+
+@Serializable
+data class FavoriteFolderCntInfo(
+    val collect: Int,
+    val play: Int,
+    val thumb_up: Int,
+    val share: Int
+)
+
+@Serializable
+data class FavoriteMediaResponse(
+    val code: Int,
+    val message: String,
+    val ttl: Int,
+    val data: FavoriteMediaData? = null
+)
+
+@Serializable
+data class FavoriteMediaData(
+    val info: FavoriteFolderInfo,
+    val medias: List<FavoriteMedia>? = null,
+    val has_more: Boolean
+)
+
+@Serializable
+data class FavoriteMedia(
+    val id: Long,
+    val type: Int,
+    val title: String,
+    val cover: String,
+    val intro: String,
+    val page: Int,
+    val duration: Long,
+    val upper: FavoriteMediaUpper,
+    val attr: Int = 0,
+    val cnt_info: FavoriteMediaCntInfo,
+    val link: String,
+    val ctime: Long,
+    val pubtime: Long,
+    val fav_time: Long,
+    val bv_id: String,
+    val bvid: String,
+    val season: FavoriteSeason? = null,
+    val ugc: FavoriteUgc? = null,
+    val jump_link: String = "",
+    val media_list_link: String = ""
+)
+
+@Serializable
+data class FavoriteSeason(
+    val season_id: Long,
+    val section_id: Long,
+    val id: Long,
+    val cid: Long,
+    val title: String,
+    val attribute: Int,
+    val arc: FavoriteArc,
+    val page: FavoritePage
+)
+
+@Serializable
+data class FavoriteUgc(
+    val first_cid: Long
+)
+
+@Serializable
+data class FavoriteMediaUpper(
+    val mid: Long,
+    val name: String,
+    val face: String
+)
+
+@Serializable
+data class FavoriteMediaCntInfo(
+    val play: Int = 0,
+    val danmaku: Int = 0,
+    val reply: Int = 0,
+    val favorite: Int = 0,
+    val coin: Int = 0,
+    val share: Int = 0,
+    val like: Int = 0,
+    val collect: Int = 0,
+    val vt: Int = 0,
+    val play_switch: Int = 0,
+    val view_text_1: String = ""
+)
+
+@Serializable
+data class FavoriteEpisode(
+    val season_id: Long,
+    val section_id: Long,
+    val id: Long,
+    val cid: Long,
+    val title: String,
+    val attribute: Int,
+    val arc: FavoriteArc,
+    val page: FavoritePage
+)
+
+@Serializable
+data class FavoriteArc(
+    val aid: Long,
+    val videos: Int,
+    val type_id: Int,
+    val type_name: String,
+    val copyright: Int,
+    val pic: String,
+    val title: String,
+    val pubdate: Long,
+    val ctime: Long,
+    val desc: String,
+    val state: Int,
+    val access: Int,
+    val attribute: Int,
+    val dynamic: String,
+    val cid: Long,
+    val dimension: FavoriteDimension,
+    val owner: FavoriteOwner,
+    val stat: FavoriteStat
+)
+
+@Serializable
+data class FavoriteDimension(
+    val width: Int,
+    val height: Int,
+    val rotate: Int
+)
+
+@Serializable
+data class FavoriteOwner(
+    val mid: Long,
+    val name: String,
+    val face: String
+)
+
+@Serializable
+data class FavoriteStat(
+    val aid: Long,
+    val view: Int,
+    val danmaku: Int,
+    val reply: Int,
+    val favorite: Int,
+    val coin: Int,
+    val share: Int,
+    val now_rank: Int,
+    val his_rank: Int,
+    val like: Int
+)
+
+@Serializable
+data class FavoritePage(
+    val cid: Long,
+    val page: Int,
+    val from: String,
+    val part: String,
+    val duration: Long,
+    val vid: String,
+    val weblink: String,
+    val dimension: FavoriteDimension
+)
