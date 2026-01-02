@@ -782,7 +782,7 @@ fun MainScreen() {
                             )
                         }
                     }
-                    NavRoute.SETTINGS -> PlaceholderScreen(NavRoute.SETTINGS.title)
+                    NavRoute.SETTINGS -> SettingsScreen()
                     else -> PlaceholderScreen(route.title)
                 }
                 }

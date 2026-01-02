@@ -45,6 +45,9 @@ import androidx.media3.common.C
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
@@ -994,6 +997,30 @@ private fun createExoPlayer(
     // 创建支持多种格式的MediaSourceFactory
     val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
+    // 配置渲染器工厂，解决HDR偏色和解码兼容性问题
+    val renderersFactory = DefaultRenderersFactory(context).apply {
+        setEnableDecoderFallback(true)
+        
+        // 从设置中读取是否启用软件解码（对应 HDR和杜比视界播放分析.md 中的建议）
+        val sharedPref = context.getSharedPreferences("bili_prefs", Context.MODE_PRIVATE)
+        val enableSoftwareDecoder = sharedPref.getBoolean("enable_software_decoder", false)
+        
+        if (enableSoftwareDecoder) {
+            setMediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+                val allDecoders = MediaCodecUtil.getDecoderInfos(
+                    mimeType,
+                    requiresSecureDecoder,
+                    requiresTunnelingDecoder
+                )
+                val softwareDecoders = allDecoders.filter {
+                    it.name.startsWith("OMX.google.") || it.name.startsWith("c2.android.") ||
+                    it.name.contains("software", ignoreCase = true)
+                }
+                softwareDecoders.ifEmpty { allDecoders }
+            }
+        }
+    }
+
     // 配置LoadControl以优化缓冲策略
     val loadControl = DefaultLoadControl.Builder()
         .setAllocator(DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
@@ -1006,6 +1033,7 @@ private fun createExoPlayer(
         .build()
 
     val exoPlayer = ExoPlayer.Builder(context)
+        .setRenderersFactory(renderersFactory)
         .setMediaSourceFactory(mediaSourceFactory)
         .setLoadControl(loadControl)
         .build()
@@ -1074,12 +1102,17 @@ private fun createExoPlayer(
 private fun getQualityName(quality: Int): String {
     return when (quality) {
         127 -> "8K"
+        126 -> "杜比视界"
+        125 -> "HDR"
         120 -> "4K"
         116 -> "1080P60"
+        112 -> "1080P+"
         80 -> "1080P"
+        74 -> "720P60"
         64 -> "720P"
         32 -> "480P"
-        else -> "未知"
+        16 -> "360P"
+        else -> "未知($quality)"
     }
 }
 
