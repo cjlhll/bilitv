@@ -21,6 +21,8 @@ protobuf = "3.25.1"
 protobufPlugin = "0.9.4"
 danmakuFlameMaster = "0.9.25"
 brotli = "0.1.2"
+compose-tv = "1.1.0-alpha01"
+compose-tv-foundation = "1.0.0-alpha12"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -54,6 +56,8 @@ androidx-activity-compose = { group = "androidx.activity", name = "activity-comp
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "compose" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleViewModelCompose" }
+compose-tv-foundation = { module = "androidx.tv:tv-foundation", version.ref = "compose-tv-foundation" }
+compose-tv-material = { module = "androidx.tv:tv-material", version.ref = "compose-tv" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

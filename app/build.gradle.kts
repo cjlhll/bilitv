@@ -96,6 +96,8 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.coil.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.compose.tv.foundation)
+    implementation(libs.compose.tv.material)
     debugImplementation(libs.androidx.compose.ui.tooling)
     
     testImplementation(libs.junit)

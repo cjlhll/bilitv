@@ -1268,179 +1268,130 @@ fun UserLoginScreen(
                                 UserTabType.FAVORITE -> {
                                     var selectedFolder by remember { mutableStateOf<FavoriteFolder?>(null) }
                                     
-                                    if (selectedFolder == null) {
-                                        if (favoriteViewModel.favoriteFolders.isEmpty()) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .padding(16.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                if (favoriteViewModel.isLoadingFolders) {
-                                                    CircularProgressIndicator()
-                                                } else if (favoriteViewModel.error != null) {
-                                                    Text(
-                                                        text = favoriteViewModel.error ?: "加载失败",
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        color = MaterialTheme.colorScheme.error
-                                                    )
-                                                } else {
-                                                    Text(
-                                                        text = "暂无收藏夹",
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            }
-                                        } else {
-                                            LazyVerticalGrid(
-                                                columns = GridCells.Fixed(4),
-                                                modifier = Modifier.fillMaxSize(),
-                                                contentPadding = PaddingValues(8.dp),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                items(favoriteViewModel.favoriteFolders.size) { index ->
-                                                    val folder = favoriteViewModel.favoriteFolders[index]
-                                                    Card(
-                                                        onClick = { selectedFolder = folder },
-                                                        modifier = Modifier
-                                                            .aspectRatio(16f / 9f)
-                                                            .onFocusChanged { 
-                                                                if (it.isFocused) {
-                                                                    favoriteViewModel.updateFocusedIndex(UserTabType.FAVORITE, index)
-                                                                }
-                                                            },
-                                                        colors = CardDefaults.cardColors(
-                                                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                                                        )
-                                                    ) {
-                                                        Box(
-                                                            modifier = Modifier.fillMaxSize()
-                                                        ) {
-                                                            Column(
-                                                                modifier = Modifier
-                                                                    .fillMaxSize()
-                                                                    .padding(8.dp),
-                                                                verticalArrangement = Arrangement.SpaceBetween
-                                                            ) {
-                                                                Text(
-                                                                    text = folder.title,
-                                                                    style = MaterialTheme.typography.bodyMedium,
-                                                                    maxLines = 2,
-                                                                    overflow = TextOverflow.Ellipsis
-                                                                )
-                                                                Text(
-                                                                    text = "${folder.media_count}个视频",
-                                                                    style = MaterialTheme.typography.bodySmall,
-                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                                )
-                                                            }
-                                                        }
-                                                    }
-                                                }
+                                    LaunchedEffect(favoriteViewModel.favoriteFolders.size) {
+                                        if (selectedFolder == null && favoriteViewModel.favoriteFolders.isNotEmpty()) {
+                                            selectedFolder = favoriteViewModel.favoriteFolders.first()
+                                        }
+                                    }
+
+                                    if (favoriteViewModel.favoriteFolders.isEmpty()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (favoriteViewModel.isLoadingFolders) {
+                                                CircularProgressIndicator()
+                                            } else if (favoriteViewModel.error != null) {
+                                                Text(
+                                                    text = favoriteViewModel.error ?: "加载失败",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.error
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = "暂无收藏夹",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
                                             }
                                         }
                                     } else {
-                                        val folder = selectedFolder
-                                        LaunchedEffect(folder?.id) {
-                                            folder?.let { favoriteViewModel.loadFavoriteFolderContents(it.id) }
-                                        }
-                                        
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Button(
-                                                onClick = { selectedFolder = null },
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = Color.Transparent
-                                                )
-                                            ) {
-                                                Text("← 返回")
-                                            }
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = folder?.title ?: "",
-                                                style = MaterialTheme.typography.titleMedium
+                                        Column(modifier = Modifier.fillMaxSize()) {
+                                            // 收藏夹 TabRow
+                                            CommonTabRow(
+                                                tabs = favoriteViewModel.favoriteFolders.map { folder ->
+                                                    TabItem(folder.id, folder.title)
+                                                },
+                                                selectedTab = selectedFolder?.id ?: 0L,
+                                                onTabSelected = { folderId ->
+                                                    selectedFolder = favoriteViewModel.favoriteFolders.find { it.id == folderId }
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                             )
-                                        }
-                                        
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        
-                                        if (favoriteViewModel.favoriteMedias.isEmpty()) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .padding(16.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                if (favoriteViewModel.isLoadingMedias) {
-                                                    CircularProgressIndicator()
-                                                } else if (favoriteViewModel.error != null) {
-                                                    Text(
-                                                        text = favoriteViewModel.error ?: "加载失败",
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        color = MaterialTheme.colorScheme.error
-                                                    )
-                                                } else {
-                                                    Text(
-                                                        text = "暂无收藏内容",
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            }
-                                        } else {
-                                            val videos = favoriteViewModel.favoriteMedias.map { media ->
-                                                val durationText = formatDuration(media.duration)
-                                                val badges = if (media.type == 21) {
-                                                    listOf(Badge(
-                                                        text = "番剧",
-                                                        bgColor = "#FF00A1D6",
-                                                        textColor = "#FFFFFFFF"
-                                                    ))
-                                                } else {
-                                                    emptyList()
-                                                }
-                                                val playCount = media.cnt_info.play.toString()
-                                                val danmakuCount = media.cnt_info.danmaku.toString()
-                                                val authorName = media.upper.name
-                                                val pubDate = media.pubtime
-                                                
-                                                Video(
-                                                    id = "fav_${media.id}_${media.bvid}",
-                                                    aid = media.id,
-                                                    bvid = media.bvid,
-                                                    cid = media.ugc?.first_cid ?: 0L,
-                                                    title = media.title,
-                                                    coverUrl = media.cover,
-                                                    author = authorName,
-                                                    playCount = playCount,
-                                                    danmakuCount = danmakuCount,
-                                                    duration = durationText,
-                                                    durationSeconds = media.duration,
-                                                    pubDate = pubDate,
-                                                    badges = badges
-                                                )
+
+                                            Spacer(modifier = Modifier.height(8.dp))
+
+                                            val folder = selectedFolder
+                                            LaunchedEffect(folder?.id) {
+                                                folder?.let { favoriteViewModel.loadFavoriteFolderContents(it.id) }
                                             }
                                             
-                                            CommonVideoGrid(
-                                                videos = videos,
-                                                stateManager = favoriteViewModel,
-                                                stateKey = "favorite_${folder?.id ?: 0}",
-                                                columns = 4,
-                                                onVideoClick = { video ->
-                                                    if (video.aid > 0) {
-                                                        onVideoClick(video)
-                                                    }
-                                                },
-                                                onLoadMore = {
-                                                    if (favoriteViewModel.hasMoreMedias && !favoriteViewModel.isLoadingMedias) {
-                                                        folder?.let { favoriteViewModel.loadFavoriteFolderContents(it.id) }
+                                            if (favoriteViewModel.favoriteMedias.isEmpty()) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .padding(16.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    if (favoriteViewModel.isLoadingMedias) {
+                                                        CircularProgressIndicator()
+                                                    } else if (favoriteViewModel.error != null) {
+                                                        Text(
+                                                            text = favoriteViewModel.error ?: "加载失败",
+                                                            style = MaterialTheme.typography.bodyLarge,
+                                                            color = MaterialTheme.colorScheme.error
+                                                        )
+                                                    } else {
+                                                        Text(
+                                                            text = "暂无收藏内容",
+                                                            style = MaterialTheme.typography.bodyLarge,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
                                                     }
                                                 }
-                                            )
+                                            } else {
+                                                val videos = favoriteViewModel.favoriteMedias.map { media ->
+                                                    val durationText = formatDuration(media.duration)
+                                                    val badges = if (media.type == 21) {
+                                                        listOf(Badge(
+                                                            text = "番剧",
+                                                            bgColor = "#FF00A1D6",
+                                                            textColor = "#FFFFFFFF"
+                                                        ))
+                                                    } else {
+                                                        emptyList()
+                                                    }
+                                                    val playCount = media.cnt_info.play.toString()
+                                                    val danmakuCount = media.cnt_info.danmaku.toString()
+                                                    val authorName = media.upper.name
+                                                    val pubDate = media.pubtime
+                                                    
+                                                    Video(
+                                                        id = "fav_${media.id}_${media.bvid}",
+                                                        aid = media.id,
+                                                        bvid = media.bvid,
+                                                        cid = media.ugc?.first_cid ?: 0L,
+                                                        title = media.title,
+                                                        coverUrl = media.cover,
+                                                        author = authorName,
+                                                        playCount = playCount,
+                                                        danmakuCount = danmakuCount,
+                                                        duration = durationText,
+                                                        durationSeconds = media.duration,
+                                                        pubDate = pubDate,
+                                                        badges = badges
+                                                    )
+                                                }
+                                                
+                                                CommonVideoGrid(
+                                                    videos = videos,
+                                                    stateManager = favoriteViewModel,
+                                                    stateKey = "favorite_${folder?.id ?: 0}",
+                                                    columns = 4,
+                                                    onVideoClick = { video ->
+                                                        if (video.aid > 0) {
+                                                            onVideoClick(video)
+                                                        }
+                                                    },
+                                                    onLoadMore = {
+                                                        if (favoriteViewModel.hasMoreMedias && !favoriteViewModel.isLoadingMedias) {
+                                                            folder?.let { favoriteViewModel.loadFavoriteFolderContents(it.id) }
+                                                        }
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                 }
