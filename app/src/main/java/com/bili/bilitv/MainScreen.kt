@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -268,6 +269,10 @@ fun MainScreen() {
     // 直播模块的导航状态 - 提升到顶层以保持状态
     var selectedLiveArea by remember { mutableStateOf<LiveAreaItem?>(null) }
     var liveListEnterTimestamp by remember { mutableLongStateOf(0L) }
+
+    // 用户中心状态提升
+    var selectedUserTab by rememberSaveable { mutableStateOf(UserTabType.HISTORY) }
+    var selectedUserFolderId by rememberSaveable { mutableStateOf<Long?>(null) }
     
     // 使用 ViewModel 保存首页状态
     val homeViewModel: HomeViewModel = viewModel()
@@ -670,6 +675,10 @@ fun MainScreen() {
                         watchLaterViewModel = watchLaterViewModel,
                         favoriteViewModel = favoriteViewModel,
                         followViewModel = followViewModel,
+                        selectedTab = selectedUserTab,
+                        onTabSelected = { selectedUserTab = it },
+                        selectedFolderId = selectedUserFolderId,
+                        onFolderSelected = { selectedUserFolderId = it },
                         onLoginSuccess = { session ->
                             loggedInSession = session
                         },
@@ -677,8 +686,53 @@ fun MainScreen() {
                             showLogoutDialog = true
                         },
                         onVideoClick = { video ->
-                            selectedMedia = video
-                            currentRoute = NavRoute.MEDIA_DETAIL
+                            // 设置所有相关ViewModel的恢复焦点标志
+                            historyViewModel.shouldRestoreFocusToGrid = true
+                            watchLaterViewModel.shouldRestoreFocusToGrid = true
+                            favoriteViewModel.shouldRestoreFocusToGrid = true
+                            followViewModel.shouldRestoreFocusToGrid = true
+
+                            if (video.seasonId > 0) {
+                                // 如果是番剧/影视，跳转详情页
+                                selectedMedia = video
+                                navigateTo(NavRoute.MEDIA_DETAIL)
+                            } else {
+                                // 普通视频，直接全屏播放
+                                coroutineScope.launch {
+                                    val tag = "UserPlay"
+                                    val bvid = video.bvid
+                                    if (bvid.isBlank()) {
+                                        Log.e(tag, "missing bvid for ${video.title}")
+                                        return@launch
+                                    }
+                                    val initialCid = video.cid
+                                    val cid = if (initialCid != 0L) {
+                                        initialCid
+                                    } else {
+                                        VideoPlayUrlFetcher.fetchVideoDetails(bvid)?.cid ?: 0L
+                                    }
+                                    Log.i(tag, "click video title=${video.title} bvid=$bvid aid=${video.aid} cid=$cid")
+                                    if (cid == 0L) {
+                                        Log.e(tag, "cid not found for $bvid")
+                                        return@launch
+                                    }
+                                    val cookie = SessionManager.getCookieString()
+                                    val playInfo = VideoPlayUrlFetcher.fetchPlayUrl(
+                                        bvid = bvid,
+                                        cid = cid,
+                                        cookie = cookie,
+                                        aid = video.aid
+                                    )
+                                    if (playInfo != null) {
+                                        Log.i(tag, "play url ready quality=${playInfo.quality} format=${playInfo.format} duration=${playInfo.duration}")
+                                        isFullScreenPlayer = true
+                                        fullScreenPlayInfo = playInfo
+                                        fullScreenVideoTitle = video.title
+                                    } else {
+                                        Log.e(tag, "fetch play url failed for $bvid cid=$cid")
+                                    }
+                                }
+                            }
                         }
                     )
                     NavRoute.DYNAMIC -> DynamicScreen(
@@ -798,6 +852,10 @@ fun UserLoginScreen(
     watchLaterViewModel: WatchLaterViewModel,
     favoriteViewModel: FavoriteViewModel,
     followViewModel: FollowViewModel,
+    selectedTab: UserTabType,
+    onTabSelected: (UserTabType) -> Unit,
+    selectedFolderId: Long?,
+    onFolderSelected: (Long) -> Unit,
     onLoginSuccess: (LoggedInSession) -> Unit,
     onLogout: () -> Unit,
     onVideoClick: (Video) -> Unit = {}
@@ -810,6 +868,7 @@ fun UserLoginScreen(
     var isPollingActive by remember { mutableStateOf(true) } // Control polling loop
 
     val coroutineScope = rememberCoroutineScope()
+// ... (skipped some unchanged code for brevity in thought, but tool call needs context)
 
     // LaunchedEffect to trigger API call when login state changes
     LaunchedEffect(loggedInSession) {
@@ -1084,27 +1143,31 @@ fun UserLoginScreen(
                         Spacer(modifier = Modifier.height(8.dp)) // 减少间距
                         
                         // Tabs组件
-                        var selectedUserTab by remember { mutableStateOf(UserTabType.HISTORY) }
-                        
                         CommonTabRowWithEnum(
                             tabs = UserTabType.entries.toTypedArray(),
-                            selectedTab = selectedUserTab,
-                            onTabSelected = { selectedUserTab = it },
+                            selectedTab = selectedTab,
+                            onTabSelected = onTabSelected,
                             modifier = Modifier.fillMaxWidth()
                         )
                         
                         Spacer(modifier = Modifier.height(8.dp))
                         
-                        LaunchedEffect(selectedUserTab) {
-                            if (selectedUserTab == UserTabType.HISTORY) {
+                        LaunchedEffect(selectedTab) {
+                            // 切换Tab时，重置所有ViewModel的恢复焦点标志，防止列表抢占Tab的焦点
+                            historyViewModel.shouldRestoreFocusToGrid = false
+                            watchLaterViewModel.shouldRestoreFocusToGrid = false
+                            favoriteViewModel.shouldRestoreFocusToGrid = false
+                            followViewModel.shouldRestoreFocusToGrid = false
+
+                            if (selectedTab == UserTabType.HISTORY) {
                                 historyViewModel.loadHistory()
-                            } else if (selectedUserTab == UserTabType.WATCH_LATER) {
+                            } else if (selectedTab == UserTabType.WATCH_LATER) {
                                 watchLaterViewModel.loadToview()
-                            } else if (selectedUserTab == UserTabType.FAVORITE) {
+                            } else if (selectedTab == UserTabType.FAVORITE) {
                                 favoriteViewModel.loadFavoriteFolders()
-                            } else if (selectedUserTab == UserTabType.BANGUMI) {
+                            } else if (selectedTab == UserTabType.BANGUMI) {
                                 followViewModel.loadAnimeList()
-                            } else if (selectedUserTab == UserTabType.CINEMA) {
+                            } else if (selectedTab == UserTabType.CINEMA) {
                                 followViewModel.loadCinemaList()
                             }
                         }
@@ -1117,7 +1180,7 @@ fun UserLoginScreen(
                                 containerColor = Color.Transparent
                             )
                         ) {
-                            when (selectedUserTab) {
+                            when (selectedTab) {
                                 UserTabType.HISTORY -> {
                                     if (historyViewModel.historyItems.isEmpty()) {
                                         Box(
@@ -1151,6 +1214,21 @@ fun UserLoginScreen(
                                             } else {
                                                 formatDuration(historyItem.duration)
                                             }
+                                            
+                                            // 判断是否为番剧/影视
+                                            val isPgc = historyItem.history.business == "pgc"
+                                            val seasonId = if (isPgc) historyItem.history.epid else 0L
+                                            
+                                            val badges = if (isPgc) {
+                                                listOf(Badge(
+                                                    text = historyItem.badge.ifEmpty { "番剧" },
+                                                    bgColor = "#FF00A1D6",
+                                                    textColor = "#FFFFFFFF"
+                                                ))
+                                            } else {
+                                                emptyList()
+                                            }
+
                                             Video(
                                                 id = "history_${historyItem.history.oid}_${historyItem.history.bvid}",
                                                 aid = historyItem.history.oid,
@@ -1161,7 +1239,9 @@ fun UserLoginScreen(
                                                 author = if (historyItem.author_name.isNotEmpty()) historyItem.author_name else historyItem.badge,
                                                 duration = durationText,
                                                 durationSeconds = historyItem.duration,
-                                                pubDate = historyItem.view_at
+                                                pubDate = historyItem.view_at,
+                                                seasonId = seasonId,
+                                                badges = badges
                                             )
                                         }
                                         
@@ -1171,7 +1251,7 @@ fun UserLoginScreen(
                                             stateKey = "history",
                                             columns = 4,
                                             onVideoClick = { video ->
-                                                if (video.aid > 0) {
+                                                if (video.aid > 0 || video.seasonId > 0) {
                                                     onVideoClick(video)
                                                 }
                                             },
@@ -1217,10 +1297,14 @@ fun UserLoginScreen(
                                             } else {
                                                 toviewItem.author
                                             }
-                                            val badges = if (toviewItem.pgc_label.isNotEmpty()) {
+                                            
+                                            // 判断是否为PGC内容
+                                            val isPgc = toviewItem.pgc_label.isNotEmpty()
+                                            
+                                            val badges = if (isPgc) {
                                                 listOf(Badge(
                                                     text = toviewItem.pgc_label,
-                                                    bgColor = "#FF00A1D9",
+                                                    bgColor = "#FF00A1D6",
                                                     textColor = "#FFFFFFFF"
                                                 ))
                                             } else {
@@ -1249,7 +1333,9 @@ fun UserLoginScreen(
                                                 duration = durationText,
                                                 durationSeconds = toviewItem.duration,
                                                 pubDate = null,
-                                                badges = badges
+                                                badges = badges,
+                                                // 稍后观看列表通常不带season_id，如果需要跳转详情页，可能需要先获取详情
+                                                // 这里暂时保持原样，主要通过onVideoClick中的逻辑处理
                                             )
                                         }
                                         
@@ -1267,11 +1353,16 @@ fun UserLoginScreen(
                                     }
                                 }
                                 UserTabType.FAVORITE -> {
-                                    var selectedFolder by remember { mutableStateOf<FavoriteFolder?>(null) }
+                                    val selectedFolder = remember(selectedFolderId, favoriteViewModel.favoriteFolders) {
+                                        favoriteViewModel.favoriteFolders.find { it.id == selectedFolderId }
+                                            ?: favoriteViewModel.favoriteFolders.firstOrNull()
+                                    }
                                     
                                     LaunchedEffect(favoriteViewModel.favoriteFolders.size) {
-                                        if (selectedFolder == null && favoriteViewModel.favoriteFolders.isNotEmpty()) {
-                                            selectedFolder = favoriteViewModel.favoriteFolders.first()
+                                        if (favoriteViewModel.favoriteFolders.isNotEmpty()) {
+                                            if (selectedFolderId == null || favoriteViewModel.favoriteFolders.none { it.id == selectedFolderId }) {
+                                                onFolderSelected(favoriteViewModel.favoriteFolders.first().id)
+                                            }
                                         }
                                     }
 
@@ -1305,19 +1396,16 @@ fun UserLoginScreen(
                                                 tabs = favoriteViewModel.favoriteFolders.map { folder ->
                                                     TabItem(folder.id, folder.title)
                                                 },
-                                                selectedTab = selectedFolder?.id ?: 0L,
-                                                onTabSelected = { folderId ->
-                                                    selectedFolder = favoriteViewModel.favoriteFolders.find { it.id == folderId }
-                                                },
+                                                selectedTab = selectedFolderId ?: 0L,
+                                                onTabSelected = onFolderSelected,
                                                 modifier = Modifier.fillMaxWidth(),
                                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                             )
 
                                             Spacer(modifier = Modifier.height(8.dp))
 
-                                            val folder = selectedFolder
-                                            LaunchedEffect(folder?.id) {
-                                                folder?.let { favoriteViewModel.loadFavoriteFolderContents(it.id) }
+                                            LaunchedEffect(selectedFolderId) {
+                                                selectedFolderId?.let { favoriteViewModel.loadFavoriteFolderContents(it) }
                                             }
                                             
                                             if (favoriteViewModel.favoriteMedias.isEmpty()) {
@@ -1346,7 +1434,12 @@ fun UserLoginScreen(
                                             } else {
                                                 val videos = favoriteViewModel.favoriteMedias.map { media ->
                                                     val durationText = formatDuration(media.duration)
-                                                    val badges = if (media.type == 21) {
+                                                    
+                                                    // 判断是否为番剧 (type 21 为番剧)
+                                                    val isPgc = media.type == 21 || media.season != null
+                                                    val seasonId = media.season?.season_id ?: 0L
+                                                    
+                                                    val badges = if (isPgc) {
                                                         listOf(Badge(
                                                             text = "番剧",
                                                             bgColor = "#FF00A1D6",
@@ -1373,6 +1466,7 @@ fun UserLoginScreen(
                                                         duration = durationText,
                                                         durationSeconds = media.duration,
                                                         pubDate = pubDate,
+                                                        seasonId = seasonId,
                                                         badges = badges
                                                     )
                                                 }
@@ -1380,16 +1474,16 @@ fun UserLoginScreen(
                                                 CommonVideoGrid(
                                                     videos = videos,
                                                     stateManager = favoriteViewModel,
-                                                    stateKey = "favorite_${folder?.id ?: 0}",
+                                                    stateKey = "favorite_${selectedFolderId ?: 0}",
                                                     columns = 4,
                                                     onVideoClick = { video ->
-                                                        if (video.aid > 0) {
+                                                        if (video.aid > 0 || video.seasonId > 0) {
                                                             onVideoClick(video)
                                                         }
                                                     },
                                                     onLoadMore = {
                                                         if (favoriteViewModel.hasMoreMedias && !favoriteViewModel.isLoadingMedias) {
-                                                            folder?.let { favoriteViewModel.loadFavoriteFolderContents(it.id) }
+                                                            selectedFolderId?.let { favoriteViewModel.loadFavoriteFolderContents(it) }
                                                         }
                                                     }
                                                 )

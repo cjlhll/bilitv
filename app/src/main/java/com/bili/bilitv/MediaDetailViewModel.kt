@@ -264,16 +264,36 @@ class MediaDetailViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    private suspend fun fetchSeasonDetail(client: OkHttpClient, json: Json, seasonId: Long): SeasonDetailResult? {
-        val url = "https://api.bilibili.com/pgc/view/web/season?season_id=$seasonId"
-        val req = Request.Builder().url(url).get().build()
+    private suspend fun fetchSeasonDetail(client: OkHttpClient, json: Json, id: Long): SeasonDetailResult? {
+        // 首先尝试作为 season_id
+        val seasonUrl = "https://api.bilibili.com/pgc/view/web/season?season_id=$id"
+        val seasonReq = Request.Builder().url(seasonUrl).get().build()
+        val seasonResult = withContext(Dispatchers.IO) {
+            try {
+                client.newCall(seasonReq).execute().use { resp ->
+                    val body = resp.body?.string() ?: return@use null
+                    val parsed = json.decodeFromString<SeasonDetailResponse>(body)
+                    if (parsed.code == 0) parsed.result else null
+                }
+            } catch (e: Exception) {
+                null
+            }
+        }
+        
+        if (seasonResult != null) return seasonResult
+        
+        // 如果失败，尝试作为 ep_id
+        val epUrl = "https://api.bilibili.com/pgc/view/web/season?ep_id=$id"
+        val epReq = Request.Builder().url(epUrl).get().build()
         return withContext(Dispatchers.IO) {
-            client.newCall(req).execute().use { resp ->
-                val body = resp.body?.string() ?: return@use null
-                Log.d("MediaDetail", "season detail len=${body.length} snippet=${body.take(2000)}")
-                val parsed = json.decodeFromString<SeasonDetailResponse>(body)
-                if (parsed.code != 0) return@use null
-                parsed.result
+            try {
+                client.newCall(epReq).execute().use { resp ->
+                    val body = resp.body?.string() ?: return@use null
+                    val parsed = json.decodeFromString<SeasonDetailResponse>(body)
+                    if (parsed.code == 0) parsed.result else null
+                }
+            } catch (e: Exception) {
+                null
             }
         }
     }

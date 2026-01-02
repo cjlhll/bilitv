@@ -264,10 +264,10 @@ fun <T> CommonVideoGrid(
         ) { index, item ->
             val focusRequester = remember { FocusRequester() }
             
-            // 恢复焦点 - 监听shouldRestoreFocus和items列表变化
+            // 恢复焦点 - 只有在明确有记录的焦点索引时才恢复
             LaunchedEffect(shouldRestoreFocus, items.size) {
-                if (shouldRestoreFocus && items.isNotEmpty()) {
-                    if (index == initialFocusIndex || (initialFocusIndex == -1 && index == 0)) {
+                if (shouldRestoreFocus && items.isNotEmpty() && initialFocusIndex != -1) {
+                    if (index == initialFocusIndex) {
                         focusRequester.requestFocus()
                     }
                 }
