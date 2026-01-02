@@ -1089,7 +1089,8 @@ fun UserLoginScreen(
                         CommonTabRowWithEnum(
                             tabs = UserTabType.entries.toTypedArray(),
                             selectedTab = selectedUserTab,
-                            onTabSelected = { selectedUserTab = it }
+                            onTabSelected = { selectedUserTab = it },
+                            modifier = Modifier.fillMaxWidth()
                         )
                         
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1308,6 +1309,7 @@ fun UserLoginScreen(
                                                 onTabSelected = { folderId ->
                                                     selectedFolder = favoriteViewModel.favoriteFolders.find { it.id == folderId }
                                                 },
+                                                modifier = Modifier.fillMaxWidth(),
                                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                             )
 

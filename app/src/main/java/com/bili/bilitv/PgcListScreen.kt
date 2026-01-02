@@ -103,6 +103,7 @@ fun PgcListScreen(
                         currentSeasonType = seasonType
                     }
                 },
+                modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
             )
         }

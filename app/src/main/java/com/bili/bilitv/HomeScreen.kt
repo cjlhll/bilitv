@@ -265,7 +265,8 @@ fun HomeScreen(
                     } else {
                         viewModel.onTabChanged(it)
                     }
-                }
+                },
+                modifier = Modifier.fillMaxWidth()
             )
 
             if (viewModel.isRefreshing) {

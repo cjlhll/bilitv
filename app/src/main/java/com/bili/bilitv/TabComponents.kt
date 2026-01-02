@@ -104,7 +104,6 @@ fun <T> CommonTabRow(
             )
         },
         modifier = modifier
-            .fillMaxWidth()
             .padding(contentPadding)
     ) {
         tabs.forEachIndexed { index, tab ->
@@ -164,7 +163,6 @@ fun <T : Enum<T>> CommonTabRowWithEnum(
             )
         },
         modifier = modifier
-            .fillMaxWidth()
             .padding(contentPadding)
     ) {
         tabs.forEachIndexed { index, tab ->

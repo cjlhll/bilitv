@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -235,11 +236,11 @@ fun SearchResultsScreen(
             }
         )
 
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            contentAlignment = Alignment.Center
         ) {
             CommonTabRow(
                 tabs = availableTabs,
@@ -248,28 +249,33 @@ fun SearchResultsScreen(
                     val idStr = tabId.toString()
                     viewModel.switchType(idStr)
                 },
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(start = 0.dp, end = 8.dp)
+                modifier = Modifier.wrapContentWidth(),
+                contentPadding = PaddingValues(start = 0.dp, end = 0.dp)
             )
 
             if (selectedTabId == "video") {
-                val options = filterOptions.map { label ->
-                    FilterOption(label, orderMap[label] ?: "totalrank")
-                }
-
-                FilterSelectButton(
-                    label = "筛选",
-                    selectedOptionLabel = selectedFilter,
-                    options = options,
-                    onOptionSelected = { option ->
-                        selectedFilter = option.label
-                        val orderValue = option.value
-                        viewModel.updateSearchOrder(orderValue)
-                        if (query.isNotBlank()) {
-                            viewModel.searchWithOrder(query, viewModel.currentSearchType, orderValue)
-                        }
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    val options = filterOptions.map { label ->
+                        FilterOption(label, orderMap[label] ?: "totalrank")
                     }
-                )
+
+                    FilterSelectButton(
+                        label = "筛选",
+                        selectedOptionLabel = selectedFilter,
+                        options = options,
+                        onOptionSelected = { option ->
+                            selectedFilter = option.label
+                            val orderValue = option.value
+                            viewModel.updateSearchOrder(orderValue)
+                            if (query.isNotBlank()) {
+                                viewModel.searchWithOrder(query, viewModel.currentSearchType, orderValue)
+                            }
+                        }
+                    )
+                }
             }
         }
 

@@ -206,6 +206,7 @@ fun LiveAreaScreen(
                     val selectedGroupItem = areaGroups.find { it.id == groupId }
                     selectedGroupItem?.let { viewModel.selectGroup(it) }
                 },
+                modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
             )
         }
