@@ -548,3 +548,52 @@ data class FavoritePage(
     val weblink: String,
     val dimension: FavoriteDimension
 )
+
+@Serializable
+data class FollowListResponse(
+    val code: Int,
+    val message: String,
+    val data: FollowData? = null
+)
+
+@Serializable
+data class FollowData(
+    val list: List<FollowItem> = emptyList(),
+    val pn: Int,
+    val ps: Int,
+    val total: Int
+)
+
+@Serializable
+data class FollowItem(
+    val season_id: Long,
+    val media_id: Long,
+    val season_type: Int,
+    val title: String,
+    val cover: String,
+    val total_count: Int,
+    val is_finish: Int,
+    val is_started: Int,
+    val badge: String = "",
+    val badge_info: BangumiItemBadgeInfo? = null,
+    val new_ep: FollowNewEp? = null,
+    val stat: FollowStat? = null,
+    val summary: String = "",
+    val progress: String = ""
+)
+
+@Serializable
+data class FollowNewEp(
+    val id: Long,
+    val index_show: String,
+    val cover: String = "",
+    val title: String = ""
+)
+
+@Serializable
+data class FollowStat(
+    val view: Long = 0,
+    val follow: Long = 0,
+    val coin: Long = 0,
+    val danmaku: Long = 0
+)

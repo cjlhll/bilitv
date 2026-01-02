@@ -282,6 +282,7 @@ fun MainScreen() {
     val historyViewModel: HistoryViewModel = viewModel()
     val watchLaterViewModel: WatchLaterViewModel = viewModel()
     val favoriteViewModel: FavoriteViewModel = viewModel()
+    val followViewModel: FollowViewModel = viewModel()
 
     var loggedInSession by remember { mutableStateOf(SessionManager.getSession()) }
     var userInfo by remember { mutableStateOf<UserInfoData?>(null) }
@@ -668,6 +669,7 @@ fun MainScreen() {
                         historyViewModel = historyViewModel,
                         watchLaterViewModel = watchLaterViewModel,
                         favoriteViewModel = favoriteViewModel,
+                        followViewModel = followViewModel,
                         onLoginSuccess = { session ->
                             loggedInSession = session
                         },
@@ -795,6 +797,7 @@ fun UserLoginScreen(
     historyViewModel: HistoryViewModel,
     watchLaterViewModel: WatchLaterViewModel,
     favoriteViewModel: FavoriteViewModel,
+    followViewModel: FollowViewModel,
     onLoginSuccess: (LoggedInSession) -> Unit,
     onLogout: () -> Unit,
     onVideoClick: (Video) -> Unit = {}
@@ -1098,6 +1101,10 @@ fun UserLoginScreen(
                                 watchLaterViewModel.loadToview()
                             } else if (selectedUserTab == UserTabType.FAVORITE) {
                                 favoriteViewModel.loadFavoriteFolders()
+                            } else if (selectedUserTab == UserTabType.BANGUMI) {
+                                followViewModel.loadAnimeList()
+                            } else if (selectedUserTab == UserTabType.CINEMA) {
+                                followViewModel.loadCinemaList()
                             }
                         }
                         
@@ -1435,6 +1442,150 @@ fun UserLoginScreen(
                                                 }
                                             )
                                         }
+                                    }
+                                }
+                                UserTabType.BANGUMI -> {
+                                    if (followViewModel.animeList.isEmpty()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (followViewModel.isAnimeLoading) {
+                                                CircularProgressIndicator()
+                                            } else if (followViewModel.animeError != null) {
+                                                Text(
+                                                    text = followViewModel.animeError ?: "加载失败",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.error
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = "暂无追番",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        val videos = followViewModel.animeList.map { item ->
+                                            val badgeText = item.badge_info?.text ?: item.badge
+                                            val badges = if (badgeText.isNotEmpty()) {
+                                                listOf(Badge(
+                                                    text = badgeText,
+                                                    bgColor = item.badge_info?.bg_color ?: "#FFFB7299",
+                                                    textColor = "#FFFFFFFF"
+                                                ))
+                                            } else {
+                                                emptyList()
+                                            }
+                                            
+                                            Video(
+                                                id = "bangumi_${item.season_id}",
+                                                aid = 0, // 番剧通常用season_id/ep_id
+                                                bvid = "",
+                                                cid = 0,
+                                                title = item.title,
+                                                coverUrl = item.cover,
+                                                author = item.progress,
+                                                rightText = item.new_ep?.index_show,
+                                                seasonId = item.season_id,
+                                                mediaId = item.media_id,
+                                                seasonType = item.season_type,
+                                                badges = badges,
+                                                isFollow = true
+                                            )
+                                        }
+                                        
+                                        CommonVideoGrid(
+                                            videos = videos,
+                                            stateManager = followViewModel,
+                                            stateKey = UserTabType.BANGUMI,
+                                            columns = 4,
+                                            onVideoClick = { video ->
+                                                if (video.seasonId > 0) {
+                                                    onVideoClick(video)
+                                                }
+                                            },
+                                            onLoadMore = {
+                                                if (followViewModel.hasMoreAnime && !followViewModel.isAnimeLoading) {
+                                                    followViewModel.loadAnimeList()
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                                UserTabType.CINEMA -> {
+                                    if (followViewModel.cinemaList.isEmpty()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (followViewModel.isCinemaLoading) {
+                                                CircularProgressIndicator()
+                                            } else if (followViewModel.cinemaError != null) {
+                                                Text(
+                                                    text = followViewModel.cinemaError ?: "加载失败",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.error
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = "暂无追剧",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        val videos = followViewModel.cinemaList.map { item ->
+                                            val badgeText = item.badge_info?.text ?: item.badge
+                                            val badges = if (badgeText.isNotEmpty()) {
+                                                listOf(Badge(
+                                                    text = badgeText,
+                                                    bgColor = item.badge_info?.bg_color ?: "#FFFB7299",
+                                                    textColor = "#FFFFFFFF"
+                                                ))
+                                            } else {
+                                                emptyList()
+                                            }
+                                            
+                                            Video(
+                                                id = "cinema_${item.season_id}",
+                                                aid = 0,
+                                                bvid = "",
+                                                cid = 0,
+                                                title = item.title,
+                                                coverUrl = item.cover,
+                                                author = item.progress,
+                                                rightText = item.new_ep?.index_show,
+                                                seasonId = item.season_id,
+                                                mediaId = item.media_id,
+                                                seasonType = item.season_type,
+                                                badges = badges,
+                                                isFollow = true
+                                            )
+                                        }
+                                        
+                                        CommonVideoGrid(
+                                            videos = videos,
+                                            stateManager = followViewModel,
+                                            stateKey = UserTabType.CINEMA,
+                                            columns = 4,
+                                            onVideoClick = { video ->
+                                                if (video.seasonId > 0) {
+                                                    onVideoClick(video)
+                                                }
+                                            },
+                                            onLoadMore = {
+                                                if (followViewModel.hasMoreCinema && !followViewModel.isCinemaLoading) {
+                                                    followViewModel.loadCinemaList()
+                                                }
+                                            }
+                                        )
                                     }
                                 }
                             }

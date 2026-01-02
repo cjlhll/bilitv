@@ -133,6 +133,7 @@ data class Video(
     val staff: String = "",
     val episodes: List<MediaEpisode> = emptyList(),
     val bottomText: String? = null,
+    val rightText: String? = null,
     val followCount: Long = 0
 )
 
@@ -291,21 +292,39 @@ fun VideoItem(
                         .padding(horizontal = 8.dp, vertical = 6.dp) // 调整间距
                 )
 
-                Text(
-                    text = buildString {
-                        append(video.author)
-                        video.pubDate?.let {
-                            append(" · ${formatUnixTimestamp(it)}")
-                        }
-                    },
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                )
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = video.author,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    
+                    val rightContent = buildString {
+                        if (!video.rightText.isNullOrEmpty()) {
+                            append(video.rightText)
+                        } else if (video.pubDate != null) {
+                            append(formatUnixTimestamp(video.pubDate))
+                        }
+                    }
+                    
+                    if (rightContent.isNotEmpty()) {
+                        Text(
+                            text = rightContent,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                }
             }
         }
     }

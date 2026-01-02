@@ -110,7 +110,9 @@ enum class TabType(val title: String) {
 enum class UserTabType(val title: String) {
     HISTORY("历史记录"),
     WATCH_LATER("稍后观看"),
-    FAVORITE("收藏")
+    FAVORITE("收藏"),
+    BANGUMI("追番"),
+    CINEMA("追剧")
 }
 
 private fun dayLabel(day: TimelineDay): String {
